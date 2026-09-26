@@ -395,10 +395,9 @@ const SOUND_REEL = [
   { id: 'greenlight', name: 'SQUID GAME GREEN LIGHT', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'greenlight', trim: [0.04, 1.6], gain: 2.1 },
   { id: 'chaching', name: 'CHA-CHING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'chaching', trim: [0.15, 1.55], gain: 1.9 },
   { id: 'daddyshome', name: "DADDY'S HOME", when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'daddyshome', trim: [0, 6.06], gain: 0.72 },
-  // the clip is four quick dings; this is just the last one, the only one that rings out
   // Rocket League's splash goal explosion (the game's own sound, mixed down from 5.1 to stereo)
   { id: 'bigsplash', name: 'ROCKET LEAGUE BIG SPLASH', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'bigsplash', trim: [0, 3.3], gain: 1 },
-  { id: 'ding', name: 'CORRECT ANSWER DING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'ding', trim: [0.35, 0.9], gain: 1 },
+  { id: 'ding', name: 'CORRECT ANSWER DING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'ding', trim: [0.06, 1.0], gain: 1 },
   // cut at 7.2s: after that it's the TikTok end card
   { id: 'greenfn', name: 'GREEN FN', when: 'GAME-WINNING GREEN', demo: 'winner', clip: 'greenfn', trim: [0, 7.19], gain: 0.94 },
   { id: 'pipe', name: 'METAL PIPE', when: 'THE HOOP COLLAPSES', demo: 'collapse' },
@@ -650,7 +649,8 @@ class Sfx {
     g.gain.setValueAtTime(v, t); g.gain.setValueAtTime(v, t + Math.max(0, d - 0.06)); g.gain.linearRampToValueAtTime(0.0001, t + d);
     s.start(t, a, d); this.clip = s;
   }
-  stopClip() { if (this.clip) { try { this.clip.stop(); } catch (e) { /* already stopped */ } this.clip = null; } }
+  // only: stop just that clip, if it's still the one playing
+  stopClip(only) { if (this.clip && (!only || this.clip === only)) { try { this.clip.stop(); } catch (e) { /* already stopped */ } this.clip = null; } }
   loadClips() {
     for (const [key, src] of Object.entries(CLIP_SRC)) {
       try {
@@ -1813,8 +1813,11 @@ class Game {
       // a green that will win the game gets GREEN FN the moment it leaves the hand, and the camera watches it
       const win = this.winningGreen(p, b);
       if (win) this.cam.watch = { ball: b, team: p.team, hoop: this.hoopFor(p.team), t: 0, on: false, scored: 0 };
-      if (win && this.soundOn('greenfn') && this.sfx.has('greenfn')) { this.cue('greenfn'); b.winClip = true; }
+      const before = this.sfx.clip;
+      if (win && this.soundOn('greenfn') && this.sfx.has('greenfn')) this.cue('greenfn');
       else this.greenSound();
+      // remember the clip this green started, so it can be cut off if the other team takes the ball
+      b.greenClip = this.sfx.clip !== before ? this.sfx.clip : null;
     }
     else this.sfx.brick();
   }
@@ -1832,14 +1835,16 @@ class Game {
   }
   grab(p, arm, b) {
     const prev = b.holder, hp = p.head.getPosition();
+    // the other team snatched a green before it went in: its sound stops right there
+    if (b.greenClip && !prev && b.lastThrower && b.lastThrower.team !== p.team) this.sfx.stopClip(b.greenClip);
     const inFlight = !prev && b.lastThrower && b.lastThrower.team !== p.team && this.time - b.throwTime < 1.6 && b.body.getPosition().y > 1.8;
     if (prev && prev !== p) {
       const wasDunk = !!prev.dunk;
       prev.grabCD = 0.5; prev.dunk = null; prev.holding = null; this.clearMeter(prev);
       this.popup(wasDunk ? 'BLOCKED!' : 'STEAL!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 0.9); this.stat(p.team, wasDunk ? 'blocks' : 'steals'); this.sfx.steal();
-    } else if (inFlight) { if (b.winClip) this.sfx.stopClip(); this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks'); this.sfx.steal(); }
+    } else if (inFlight) { this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks'); this.sfx.steal(); }
     else this.sfx.grab();
-    b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.winClip = false;
+    b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.greenClip = null;
     p.holding = b; p.grabT = this.time;
     if (this.held[p.team] && (this.state === 'play' || this.state === 'title' || this.state === 'showcase')) {
       const h = this.hoopFor(p.team), bpos = b.body.getPosition(), nearRim = Math.hypot(bpos.x - h.cx, bpos.y - h.y) < 1.4;
@@ -1936,7 +1941,7 @@ class Game {
       this.popup('GAME WINNER!', 0, 4.6, '#ffd23f', 16, 2);
       this.scoreRec = this.recCount; this.replayLabel = 'GAME WINNER'; this.show.replayAt = this.show.t + 1.1;
     }
-    b.green = false; b.dunked = null; b.winClip = false;
+    b.green = false; b.dunked = null; b.greenClip = null;
   }
   // two buckets in a row heats you up, three sets you on fire (until the other team scores)
   onStreak(team, h) {
@@ -2147,7 +2152,7 @@ class Game {
       for (let i = 0; i < Math.min(8, sp); i++) this.addPart(f.x + rand(-0.3, 0.3), 0.05, rand(-1.5, 1.5), rand(0.3, 1.4), -1, rand(0.3, 0.6), this.cfg.court.dust, pick([1, 2]));
     }
     this.dustQ.length = 0;
-    for (const b of this.deflectQ) { if (b.winClip) { this.sfx.stopClip(); b.winClip = false; } b.ghost = false; b.green = false; }
+    for (const b of this.deflectQ) { if (b.greenClip) { this.sfx.stopClip(b.greenClip); b.greenClip = null; } b.ghost = false; b.green = false; }
     this.deflectQ.length = 0;
     // bodies slamming into each other get knocked into a rock, and a really hard hit can set someone flailing
     const seen = new Set();
