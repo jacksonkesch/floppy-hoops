@@ -605,10 +605,10 @@ class Sfx {
   playClip(e) {
     const b = this.bufs[e.clip]; if (!b) return;
     this.stopClip();
-    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), [a, z] = e.trim || [0, b.duration], d = Math.min(z, b.duration) - a, t = c.currentTime, v = e.gain || 1;
+    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), [a, z] = e.trim || [0, b.duration], d = Math.max(0.05, Math.min(z, b.duration) - Math.min(a, b.duration - 0.05)), t = c.currentTime, v = e.gain || 1;
     s.buffer = b; s.connect(g).connect(this.bus);
     g.gain.setValueAtTime(v, t); g.gain.setValueAtTime(v, t + Math.max(0, d - 0.06)); g.gain.linearRampToValueAtTime(0.0001, t + d);
-    s.start(t, a, d); this.clip = s;
+    s.start(t, Math.min(a, Math.max(0, b.duration - 0.05)), d); this.clip = s;
   }
   // only: stop just that clip, if it's still the one playing
   stopClip(only) { if (this.clip && (!only || this.clip === only)) { try { this.clip.stop(); } catch (e) { /* already stopped */ } this.clip = null; } }
@@ -900,7 +900,7 @@ class Player {
     this.dir = TEAM[team].dir; this.id = team * 3 + slot;
     const bm = game.cfg.body;
     this.d = { legLen: 1.0 * bm.leg, legW: 0.2, torsoW: 0.46, torsoH: 0.86, headR: 0.27 * bm.head, armLen: 1.02 * bm.arm, armW: 0.2 };
-    this.armsUp = false; this.celebrate = false; this.jumpCD = 0; this.grabCD = 0; this.grabT = -9; this.fallenT = 0; this.padCD = 0;
+    this.armsUp = false; this.celebrate = false; this.jumpCD = 0; this.grabCD = 0; this.grabT = -9; this.fallenT = 0; this.padCD = 0; this.upT = 0;
     this.phase = rand(0, 6.28); this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.88, 1.12);
     this.feet = 0; this.grounded = false; this.fallen = false;
     this.wob = 0; this.swaySign = 1; this.airT = 0; this.airVy = 0; this.flailT = 0; this.flailCD = 0; this.flailK = 0; this.flailPh = 0; this.flailTick = 0;
@@ -1006,7 +1006,9 @@ class Player {
       if (this.flailT <= 0) this.endFlail();
       return;
     }
-    if (this.fallen) { this.fallenT += dt; if (this.fallenT > 0.2 && lowBody) this.getUp(); } else this.fallenT = 0;
+    // down: pop back up. Stuck on your head (or against a wall) for a moment counts too.
+    if (this.fallen) { this.fallenT += dt; if ((this.fallenT > 0.2 && lowBody) || (this.fallenT > 0.7 && this.jumpCD <= 0)) this.getUp(); } else this.fallenT = 0;
+    this.upT -= dt;
     const up = this.armsUp || this.celebrate;
     const m = this.holding && g.meterOf(this), charging = !!(m && m.state === 'charging');
     // button down: the arm swings forward and up to straight overhead and stays there.
@@ -1035,8 +1037,10 @@ class Player {
       const acc = (Math.abs(th) > 0.8 ? 1.8 : 1) * BAL_KP * (tgt - th) - BAL_KD * om;
       body.applyTorque(this.I * acc - this.M * g.cfg.gravity * this.h * Math.sin(th) * 0.9, true);
     } else if (!this.fallen || !lowBody) {
-      const wt = clamp(-th * 2, -3, 3);
-      body.setAngularVelocity(om + (wt - om) * Math.min(1, 0.6 * dt));
+      // in the air: slowly right yourself. Harder just after getting up, and in low gravity (longer hang time),
+      // so nobody cartwheels over and over.
+      const wt = clamp(-th * 2, -3, 3), rate = (this.upT > 0 ? 4 : 0.6) * Math.sqrt(20 / this.game.cfg.gravity);
+      body.setAngularVelocity(om + (wt - om) * Math.min(1, rate * dt));
     }
   }
   // start (or top up) the rocking. A landing always rocks back first, then forward; anything else picks up
@@ -1085,7 +1089,7 @@ class Player {
   press() {
     this.armsUp = true;
     if (this.dunk || this.hang) return;
-    if (this.fallen) { if (this.center().y < 1.2) this.getUp(); return; }
+    if (this.fallen) { if (this.center().y < 1.2 && this.jumpCD <= 0) this.getUp(); return; }   // mashing doesn't re-spin you
     if (this.grounded && this.jumpCD <= 0) this.jump();
   }
   release() { this.armsUp = false; }
@@ -1099,8 +1103,10 @@ class Player {
   getUp() {
     const th = this.angle();
     for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.3, y: 6.5 * Math.sqrt(this.game.cfg.gravity / 20) }); }
-    this.body.setAngularVelocity(-th * 4.5);
-    this.fallenT = 0; this.jumpCD = 0.3; this.rock(0.8);
+    // turn just enough to come down on your feet (hang time is longer in low gravity)
+    const g = this.game.cfg.gravity, hang = 2 * 6.5 * Math.sqrt(g / 20) / g;
+    this.body.setAngularVelocity(-th * 1.3 / hang);
+    this.fallenT = 0; this.jumpCD = 0.45; this.upT = 0.9; this.rock(0.8);
   }
   // longRange: also allow the kangaroo from beyond normal dunk range
   canDunk(longRange) {
@@ -2677,6 +2683,24 @@ reelEl.addEventListener('click', e => {
 
 // ---------------------------------------------------------------- boot
 if (location.search.includes('debug')) { window.floppy = G; window.floppyStep = n => { for (let i = 0; i < n; i++) { G.frame(STEP); if (!G.paused && G.state !== 'replay') G.fixed(STEP); } render(G); }; }
+// ?rec: a flight recorder for tuning. Keeps the last 10 minutes: 10 small frames a second, the keys, and every
+// player's angle/spin/grounded state 20 times a second. Press ` (backtick) to flag a weird moment.
+if (location.search.includes('rec')) {
+  window.floppy = G;
+  const cv = document.getElementById('game'), sm = document.createElement('canvas'); sm.width = 320; sm.height = 180;
+  const sx = sm.getContext('2d'), R = window.floppyRec = { frames: [], state: [], keys: [], marks: [], t0: performance.now() };
+  const now = () => Math.round(performance.now() - R.t0), keep = (a, n) => { if (a.length > n) a.shift(); };
+  setInterval(() => {
+    const t = now();
+    R.state.push({ t, st: G.state, fx: G.cfg && [G.cfg.court && G.cfg.court.key, G.cfg.phys && G.cfg.phys.name, G.cfg.ball && G.cfg.ball.name, G.cfg.gravity].join('/'),
+      p: (G.players || []).map(p => { const q = p.body.getPosition(); return [+q.x.toFixed(2), +q.y.toFixed(2), +p.angle().toFixed(2), +p.body.getAngularVelocity().toFixed(1), p.grounded ? 1 : 0]; }),
+      b: (G.balls || []).map(b => { const q = b.body.getPosition(); return [+q.x.toFixed(2), +q.y.toFixed(2)]; }) });
+    keep(R.state, 12000);
+  }, 50);
+  setInterval(() => { try { sx.drawImage(cv, 0, 0, 320, 180); R.frames.push({ t: now(), url: sm.toDataURL('image/jpeg', 0.6) }); keep(R.frames, 6000); } catch (e) {} }, 100);
+  const kl = e => { if (e.code === 'Backquote' && e.type === 'keydown') { R.marks.push(now()); keep(R.marks, 500); } R.keys.push([now(), e.type === 'keydown' ? 'd' : 'u', e.code]); keep(R.keys, 15000); };
+  window.addEventListener('keydown', kl, true); window.addEventListener('keyup', kl, true);
+}
 const hot = window.claude && window.claude.hot;
 function restore(data) {
   if (!data || !Array.isArray(data.score) || data.state !== 'play') return;

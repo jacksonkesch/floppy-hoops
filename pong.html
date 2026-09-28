@@ -341,10 +341,10 @@ class Sfx {
   playClip(e) {
     const b = this.bufs[e.clip]; if (!b) return;
     this.stopClip();
-    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), [a, z] = e.trim || [0, b.duration], d = Math.min(z, b.duration) - a, t = c.currentTime, v = e.gain || 1;
+    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), [a, z] = e.trim || [0, b.duration], d = Math.max(0.05, Math.min(z, b.duration) - Math.min(a, b.duration - 0.05)), t = c.currentTime, v = e.gain || 1;
     s.buffer = b; s.connect(g).connect(this.bus);
     g.gain.setValueAtTime(v, t); g.gain.setValueAtTime(v, t + Math.max(0, d - 0.06)); g.gain.linearRampToValueAtTime(0.0001, t + d);
-    s.start(t, a, d); this.clip = s;
+    s.start(t, Math.min(a, Math.max(0, b.duration - 0.05)), d); this.clip = s;
   }
   // only: stop just that clip, if it's still the one playing
   stopClip(only) { if (this.clip && (!only || this.clip === only)) { try { this.clip.stop(); } catch (e) { /* already stopped */ } this.clip = null; } }
@@ -907,9 +907,10 @@ class Game {
   startTournament(names) {
     const list = names.slice().sort(() => Math.random() - 0.5);
     let size = 2; while (size < list.length) size *= 2;
-    while (list.length < size) list.splice(Math.floor(Math.random() * (list.length + 1)), 0, null);   // byes
-    const first = [];
-    for (let i = 0; i < size; i += 2) first.push({ a: list[i], b: list[i + 1], w: null, score: null });
+    // byes: at most one per first-round match (two byes paired together would never produce a winner)
+    const n = size / 2, byes = size - list.length, first = [];
+    for (let i = 0; i < n; i++) first.push({ a: list.shift(), b: i < byes ? null : list.shift(), w: null, score: null });
+    first.sort(() => Math.random() - 0.5);
     this.tourney = { rounds: [first], cur: null, champion: null };
     this.advanceByes();
     this.startTransition(ORANGE, () => this.showBracket());
