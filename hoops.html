@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0b0d14">
 <title>Floppy Hoops</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,6 +56,14 @@
   #reelpanel #reel-mute[hidden] { display: none; }
   #reelpanel #reel-all-play[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
   #reelpanel #reel-exit { width: 100%; }
+  #touchbar { position: fixed; left: 8px; bottom: 8px; display: none; gap: 8px; z-index: 5; }
+  body.touch #touchbar { display: flex; }
+  #touchbar button { font: 12px Silkscreen, "Courier New", monospace; color: #fff6e0; background: rgba(20, 16, 25, 0.72); border: 2px solid #fff6e0; border-radius: 6px; min-width: 44px; height: 44px; padding: 0 10px; }
+  #touchbar button[data-a="pause"] { display: none; } #touchbar[data-pause="1"] button[data-a="pause"] { display: block; }
+  #touchbar button[data-a="menu"] { display: none; } #touchbar[data-menu="1"] button[data-a="menu"] { display: block; }
+  #touchhint { position: fixed; left: 0; right: 0; bottom: 64px; display: none; justify-content: space-around; pointer-events: none; z-index: 4; font: 13px Silkscreen, "Courier New", monospace; color: #fff6e0; text-shadow: 0 2px 0 #141019; }
+  body.touch #touchhint:not(:empty) { display: flex; }
+  #touchhint span { background: rgba(20, 16, 25, 0.55); padding: 6px 10px; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -613,14 +624,14 @@ class Sfx {
   // only: stop just that clip, if it's still the one playing
   stopClip(only) { if (this.clip && (!only || this.clip === only)) { try { this.clip.stop(); } catch (e) { /* already stopped */ } this.clip = null; } }
   loadClips() {
-    for (const [key, src] of Object.entries(CLIP_SRC)) {
-      try {
-        const bin = atob(src), a = new Uint8Array(bin.length);
+    // one clip per tick, so the first tap (which turns the sound on) never freezes a slow Chromebook
+    const todo = Object.entries(CLIP_SRC), next = () => {
+      const item = todo.shift(); if (!item) return; const [key, src] = item;
+      try { const bin = atob(src), a = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
         this.ctx.decodeAudioData(a.buffer).then(b => { this.bufs[key] = b; }, () => {});
-      } catch (e) { /* bad clip data */ }
-    }
-  }
+      } catch (e) { /* bad clip data */ } setTimeout(next, 0); };
+    next(); }
 }
 
 // ---------------------------------------------------------------- court backgrounds
@@ -2769,6 +2780,50 @@ cv.addEventListener('pointerdown', e => {
   } else if (G.state === 'bracket') G.startTourneyMatch();
   else if (G.state === 'replay') G.finishReplay();
 });
+// vs the CPU the whole screen is your button; two players split it down the middle
+const TOUCH_ZONE = x => !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
+const TOUCH_HINT = () => G.vsCpu ? '<span>HOLD ANYWHERE TO JUMP, LET GO TO SHOOT</span>' : '<span>RED: HOLD THE LEFT SIDE</span><span>BLUE: HOLD THE RIGHT SIDE</span>';
+// ---------------------------------------------------------------- touch (touchscreen Chromebooks in tablet mode)
+// During a match a finger on the screen works like holding a key (TOUCH_ZONE picks which). Touch users also get
+// small FULL SCREEN / PAUSE / MENU buttons, since tablet mode has no keyboard. Mice keep the old click behavior.
+const touchKeys = new Map();   // pointerId -> key code it is holding
+const touchBar = document.createElement('div'), touchHint = document.createElement('div');
+touchBar.id = 'touchbar'; touchHint.id = 'touchhint';
+touchBar.innerHTML = '<button data-a="full" aria-label="Full screen">&#x26F6;</button><button data-a="pause" aria-label="Pause">II</button><button data-a="menu">MENU</button>';
+document.body.append(touchBar, touchHint);
+const touchOn = () => document.body.classList.add('touch');
+function touchPress(code, down) {
+  const held = [...touchKeys.values()].includes(code);
+  if (down && !held) G.humanKey(code, true);
+  if (!down && !held) G.humanKey(code, false);
+}
+cv.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') return;
+  touchOn();
+  if (G.paused || !(G.state === 'play' || G.state === 'scored' || G.state === 'over')) return;
+  const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width);
+  touchPress(code, true); touchKeys.set(e.pointerId, code);
+  if (cv.setPointerCapture) try { cv.setPointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+});
+const touchUp = e => { const code = touchKeys.get(e.pointerId); if (code === undefined) return; touchKeys.delete(e.pointerId); touchPress(code, false); };
+cv.addEventListener('pointerup', touchUp); cv.addEventListener('pointercancel', touchUp);
+touchBar.addEventListener('pointerdown', e => e.stopPropagation());
+touchBar.addEventListener('click', e => {
+  const a = e.target.closest('button') && e.target.closest('button').dataset.a;
+  if (a === 'full') {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  } else if (a === 'pause') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
+  else if (a === 'menu') { G.paused = false; G.toTitle(); }
+  cv.focus();
+});
+setInterval(() => {
+  const playing = G.state === 'play' || G.state === 'scored';
+  touchBar.dataset.menu = G.paused || G.state === 'over' ? '1' : '';
+  touchBar.dataset.pause = playing || G.paused ? '1' : '';
+  const hint = G.state === 'play' && !G.paused && G.roundT < 3.5 && G.round <= 2 ? TOUCH_HINT() : '';
+  if (touchHint.dataset.text !== hint) { touchHint.dataset.text = hint; touchHint.innerHTML = hint; }
+}, 150);
 if (document.fonts && document.fonts.load) document.fonts.load('400 16px Silkscreen').catch(() => {});
 
 let last = performance.now(), acc = 0;
@@ -2787,5 +2842,6 @@ function loop(now) {
 requestAnimationFrame(loop);
 })();
 </script>
+<script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>
