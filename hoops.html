@@ -238,14 +238,18 @@ const TOURNEY = [
 const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER VS CPU' },
   { id: '2p', label: '2 PLAYERS' },
+  { id: '4p', label: '4 PLAYERS (2 V 2)' },
   { id: 'cvc', label: 'CPU VS CPU' },
   { id: 'tour', label: 'CPU TOURNAMENT' },
   { id: 'modes', label: 'GAME MODES' },
   { id: 'reels', label: 'DUNKS + SOUNDS' },
   { id: 'switch', label: 'SWITCH GAME' },
 ];
-// 7 rows, so rows get the roomier pre-9-item spacing back
-const MENU_X = 14, MENU_W = 104, MENU_Y0 = 54, MENU_DY = 13, MENU_H = 12;
+const MENU_X = 14, MENU_W = 104, MENU_Y0 = 52, MENU_DY = 13, MENU_H = 12;
+// 4 PLAYERS: one key each, spread across the keyboard so four pairs of hands fit: red on the left, blue on the right
+// (in the same left-to-right order as the players stand on the court: [team, slot])
+const FOUR_KEYS = { KeyQ: [0, 0], KeyC: [0, 1], KeyM: [1, 1], ArrowUp: [1, 0] };
+const FOUR_LABEL = { KeyQ: 'Q', KeyC: 'C', KeyM: 'M', ArrowUp: 'UP' };
 const CPU_LEVELS = {
   easy:       { react: 0.38, aim: 0.14,  range: 6.5, aggr: 0.2,  reach: 2.0 },
   normal:     { react: 0.22, aim: 0.08,  range: 8.5, aggr: 0.4,  reach: 2.4 },
@@ -1633,7 +1637,9 @@ class ImpossibleCPU extends CPU {
     if ((this.lookT = (this.lookT || 0) - STEP) <= 0) {
       this.lookT = 0.05;
       // a pass to a teammate first; a lob to yourself only when you're alone or no pass has opened up for a while
-      const pass = mates.length ? this.planOop(h, mates, rivals) : null;
+      let pass = mates.length ? this.planOop(h, mates, rivals) : null;
+      // DOWNTOWN: a long, high lob from anywhere on the floor to a finisher already by the rim
+      if (mates.length && (!pass || !pass.open)) { const long = this.planLongOop(h, mates, rivals); if (long && (long.open || !pass)) pass = long; }
       const self = !pass || !pass.open ? this.planOop(h, [h], rivals) : null;
       const plan = pass && pass.open ? pass : self && self.open && (!mates.length || this.waitT > 1.4) ? self
         : pressed || this.waitT > 2.6 ? pass || self : null;
@@ -1642,8 +1648,9 @@ class ImpossibleCPU extends CPU {
     // (a press this close would turn into a plain dunk, not an oop: don't hop the handler in there)
     if (h.canDunk() || h.canDunk(true)) return;
     // move up: finishers out where a jump carries them to the rim, the handler back far enough to throw over the top
+    // (the handler doesn't need to come up: it can throw it from downtown)
     const spots = mates.length
-      ? [{ p: h, x: hoop.cx - dir * 5.4, w: 0.8 }, ...mates.map((p, i) => ({ p, x: hoop.cx - dir * (i ? 4 : 2.6), w: i ? 0.6 : 1.3 }))]
+      ? [{ p: h, x: hoop.cx - dir * Math.max(5.4, Math.min(a(h), 8.5)), w: 0.5 }, ...mates.map((p, i) => ({ p, x: hoop.cx - dir * (i ? 3.4 : 1.9), w: i ? 0.6 : 1.4 }))]
       : [{ p: h, x: hoop.cx - dir * 3.6, w: 1 }];
     this.move(spots, 0.35);
   }
@@ -1684,14 +1691,56 @@ class ImpossibleCPU extends CPU {
     }
     return best;
   }
+  // a DOWNTOWN lob: a long, high pass that comes down just above a finisher standing in dunk range. They can't
+  // jump yet (the players rock, so a jump that far ahead is a guess): they watch it come and go up into it when
+  // a jump from how they're leaning right then meets it (see runOop)
+  planLongOop(h, mates, rivals) {
+    const g = this.g, b = h.holding; if (!b) return null;
+    const hoop = g.hoopFor(this.team), grav = g.cfg.gravity * b.body.getGravityScale(), from = b.body.getPosition();
+    let best = null;
+    for (const f of mates) {
+      if (f.fallen || !f.grounded) continue;
+      const ahead = (hoop.cx - f.x) * f.dir;
+      if (ahead < 0.6 || ahead > DUNK_RANGE - 0.3) continue;
+      // straight up from where they stand, the hand at the top of the jump
+      const v = g.cfg.jumpV, jv = { x: 0, y: v }, up = v * 0.91 / g.cfg.gravity, A = this.arm(f, 0.03 + up, 0, jv);
+      const P = { x: A.sx + (A.hx - A.sx) * 0.85, y: A.sy + (A.hy - A.sy) * 0.85 };
+      if (Math.abs(P.x - from.x) < 3) continue;   // (up close, the short lob does it better)
+      for (const T of [0.95, 1.2, 1.45, 1.7]) {
+        const vel = { x: (P.x - from.x) / T, y: (P.y - from.y + 0.5 * grav * T * T) / T };
+        if (Math.hypot(vel.x, vel.y) > 19 || vel.y < 2) continue;
+        const path = this.flight(from, vel, T + 0.02, false);
+        if (path.some(q => Math.abs(q.x - hoop.side * BOARD_X) < 0.2 && q.y > hoop.y - 0.3 && q.y < hoop.y + 1.4)) continue;
+        if (path.some(q => Math.abs(q.x - hoop.cx) < RIM_HALF + 0.2 && Math.abs(q.y - hoop.y) < 0.3)) continue;
+        if (path.some(q => q.y > VY1 - 0.4)) continue;   // (under the roof)
+        const touch = this.firstTouch(path, rivals, b.r + 0.22, 0.1);
+        const score = (touch ? touch : 9) - Math.abs(T - 1.3) * 0.3;   // (a high, hanging lob looks best and gives the most chances to time the jump)
+        if (!best || score > best.score) best = { f, d: 0, tc: T, vel, score, open: !touch, self: false, long: true, P };
+      }
+    }
+    return best;
+  }
+  // would a jump pressed right now put the hand on this ball near the top, while still in dunk range?
+  longCatch(f, b) {
+    const g = this.g, hoop = g.hoopFor(this.team), path = this.ballFlight(b);
+    const jv = this.jumpVel(f), up = jv.y * 0.91 / g.cfg.gravity;
+    for (const k of [0.7, 0.85, 1, 1.15, 1.3]) {
+      const tc = 0.03 + up * k, q = path.find(o => o.t >= tc); if (!q) return false;
+      const A = this.arm(f, tc, 0, jv), cx = A.sx - f.dir * 0.05, cy = A.sy - 0.42, ahead = (hoop.cx - cx) * f.dir;
+      if (ahead < 0.45 || ahead > DUNK_RANGE - 0.3 || cy > hoop.y + 1.0) continue;
+      const P = { x: A.sx + (A.hx - A.sx) * 0.8, y: A.sy + (A.hy - A.sy) * 0.8 };
+      if (Math.hypot(q.x - P.x, q.y - P.y) < 0.3) return true;
+    }
+    return false;
+  }
   // the earliest any of them could get a hand on this flight, jumping whenever they like (0: never)
-  firstTouch(path, rivals, r) {
+  firstTouch(path, rivals, r, step = 0.06) {
     let first = 0;
     const T = path.length ? path[path.length - 1].t : 0;
     for (const o of rivals) {
       if (o.fallen || o.hang || o.dunk) continue;
       if (!o.grounded) { const t = this.meet(o, path, 0, r); if (t && (!first || t < first)) first = t; continue; }
-      for (let dd = Math.max(0, o.jumpCD); dd < T; dd += 0.06) {
+      for (let dd = Math.max(0, o.jumpCD); dd < T; dd += step) {
         const t = this.meet(o, path, dd, r);
         if (t) { if (!first || t < first) first = t; break; }
       }
@@ -1704,8 +1753,9 @@ class ImpossibleCPU extends CPU {
     if (!b) return;
     g.clearMeter(h); g.releaseBall(h);
     b.body.setLinearVelocity(plan.vel); b.body.setAngularVelocity(-plan.f.dir * 5); b.ghost = false; b.green = false;
-    g.sfx.shot(); const hp = h.head.getPosition(); g.popup(plan.self ? 'SELF LOB!' : 'LOB!', hp.x, hp.y + 0.9, '#fff6e0', 8, 0.8);
-    this.oop = { finisher: plan.f, self: plan.self, ball: b, pressAt: this.t + plan.d - STEP, catchT: plan.tc, t: 0, phase: 'lob' };
+    const downtown = Math.abs(g.hoopFor(this.team).cx - h.x) > HOOP_CX;   // thrown from their own half
+    g.sfx.shot(); const hp = h.head.getPosition(); g.popup(plan.self ? 'SELF LOB!' : downtown ? 'DOWNTOWN LOB!' : 'LOB!', hp.x, hp.y + 0.9, downtown ? '#ffd23f' : '#fff6e0', 8, 0.9);
+    this.oop = { finisher: plan.f, self: plan.self, ball: b, pressAt: plan.long ? Infinity : this.t + plan.d - STEP, catchT: plan.tc, t: 0, phase: 'lob', long: !!plan.long };
     this.set(false); this.waitT = 0;
   }
   // the lob is up: jump on time, keep the key held through the catch (so it turns into the slam), then let go
@@ -1715,11 +1765,19 @@ class ImpossibleCPU extends CPU {
     const gone = !mine.includes(f) || (b.holder && b.holder.team !== this.team) || O.t > O.catchT + 1.2;
     if (gone || (b.holder && b.holder === f && !f.dunk && f.grounded)) { this.oop = null; this.set(false); return false; }
     if (O.phase === 'lob') {
-      if (this.t >= O.pressAt) { this.set(true); O.phase = 'up'; O.upT = O.t; }
+      if (O.long) {
+        // a downtown lob: go up the moment a jump from this lean meets it up by the rim
+        if (f.grounded && f.jumpCD <= 0 && !b.holder && this.longCatch(f, b)) { this.set(true); O.phase = 'up'; O.upT = O.t; }
+      } else if (this.t >= O.pressAt) { this.set(true); O.phase = 'up'; O.upT = O.t; }
       return true;
     }
-    // up: hold on until the catch, or until they're back on the floor without it
-    if (f.grounded && O.t - O.upT > 0.3) { this.oop = null; this.set(false); return false; }
+    // up: hold on until the catch, or until they're back on the floor without it (a downtown lob still coming:
+    // go again)
+    if (f.grounded && O.t - O.upT > 0.3) {
+      this.set(false);
+      if (O.long && !b.holder && O.t < O.catchT + 0.4) { O.phase = 'lob'; return true; }
+      this.oop = null; return false;
+    }
     return true;
   }
 }
@@ -1739,7 +1797,7 @@ function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
-      mode: s.mode === 'cpu' ? 'cpu' : s.mode === 'cvc' ? 'cvc' : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
+      mode: s.mode === 'cpu' ? 'cpu' : s.mode === 'cvc' ? 'cvc' : s.mode === '4p' ? '4p' : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       target: [3, 5, 7, 11].includes(s.target) ? s.target : s.target === 10 ? 11 : 5, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
@@ -1894,13 +1952,14 @@ class Game {
   // ------------------------------------------------ flow
   newGame(opts = {}) {
     const s = this.settings, mode = opts.mode || s.mode;
-    this.score = [0, 0]; this.round = 1; this.target = opts.target || s.target; this.vsCpu = mode === 'cpu'; this.cvc = mode === 'cvc'; this.winBy2 = s.winBy2 !== 'off';
+    this.score = [0, 0]; this.round = 1; this.target = opts.target || s.target; this.vsCpu = mode === 'cpu'; this.cvc = mode === 'cvc'; this.four = mode === '4p'; this.winBy2 = s.winBy2 !== 'off';
     this.stats = newStats(); this.replay = null; this.pendingReplay = false; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
-    this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND, s.teamSize);
+    this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND, this.four ? 2 : s.teamSize);
     // ALLEY-OOP MODE needs the smart brain on both sides, so it overrides the picked CVC levels
     this.cpus = this.vsCpu ? [makeCPU(this, 1, opts.level || s.level)] :
       this.cvc ? (s.cvcOop === 'on' ? [0, 1].map(t => makeCPU(this, t, 'impossible', { oop: true })) : [makeCPU(this, 0, s.cvcRed), makeCPU(this, 1, s.cvcBlue)]) : [];
     this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false;
+    for (const p of this.players) p.keyHeld = false;
     this.state = 'play'; this.stateT = 0; this.paused = false;
   }
   startGame() {
@@ -1913,7 +1972,7 @@ class Game {
     this.paused = false; this.trans = null; this.state = 'title'; this.stateT = 0; this.tourney = null;
     this.replay = null; this.pendingReplay = false; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
     this.newRoster(); this.setupRound(this.randomRound(ALL_MODES), pick([2, 2, 3]));
-    this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')]; this.vsCpu = false; this.cvc = false;
+    this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')]; this.vsCpu = false; this.cvc = false; this.four = false;
     this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false; this.titleRollAt = 0;
   }
   rollTitle() {
@@ -1924,7 +1983,7 @@ class Game {
   menuPick() {
     const id = MENU_ITEMS[this.menuSel].id;
     this.sfx.init();
-    if (id === 'cpu' || id === '2p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
+    if (id === 'cpu' || id === '2p' || id === '4p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
     else if (id === 'tour') this.startTournament();
     else if (id === 'modes') openMenu();
     else if (id === 'reels') this.startShowcase('dunk');
@@ -1936,7 +1995,7 @@ class Game {
     this.startTransition(ORANGE, () => this.showBracket());
   }
   showBracket() {
-    this.state = 'bracket'; this.stateT = 0; this.cpus = []; this.paused = false; this.vsCpu = false; this.cvc = false;
+    this.state = 'bracket'; this.stateT = 0; this.cpus = []; this.paused = false; this.vsCpu = false; this.cvc = false; this.four = false;
     this.newRoster(); this.setupRound(CLASSIC_ROUND, this.settings.teamSize);
   }
   startTourneyMatch() {
@@ -1958,7 +2017,7 @@ class Game {
   }
   // ------------------------------------------------ dunk and sound reels: watch any one on loop, or all of them in a row
   startShowcase(kind = 'dunk') {
-    this.paused = false; this.trans = null; this.cpus = []; this.vsCpu = false; this.cvc = false; this.tourney = null;
+    this.paused = false; this.trans = null; this.cpus = []; this.vsCpu = false; this.cvc = false; this.four = false; this.tourney = null;
     this.score = [0, 0]; this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false;
     this.state = 'showcase'; this.stateT = 0; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
     this.show = { kind, i: -1, t: 0, step: 0, mode: 'all' };
@@ -2118,34 +2177,48 @@ class Game {
       if (this.paused || (this.state !== 'play' && this.state !== 'scored')) return;
       this.keysDown.add(code);
     } else this.keysDown.delete(code);
-    if (this.vsCpu) {
-      const now = this.keysDown.size > 0;
+    if (this.four) { const k = FOUR_KEYS[code]; if (k) this.evq.push({ team: k[0], slot: k[1], down }); }
+    else if (this.vsCpu) {
+      const now = [...this.keysDown].some(c => c === 'KeyW' || c === 'ArrowUp');
       if (now !== this.humanHeld) { this.humanHeld = now; this.evq.push({ team: 0, down: now }); }
-    } else this.evq.push({ team: code === 'KeyW' ? 0 : 1, down });
+    } else if (code === 'KeyW' || code === 'ArrowUp') this.evq.push({ team: code === 'KeyW' ? 0 : 1, down });
   }
   releaseAll() { for (const code of [...this.keysDown]) this.humanKey(code, false); }
   handleEvent(ev) {
+    // 4 PLAYERS: a key drives just its own player
+    if (ev.slot !== undefined) {
+      const p = this.players.find(q => q.team === ev.team && q.slot === ev.slot); if (!p) return;
+      p.keyHeld = ev.down;
+      if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.playerPress(p, this.state !== 'scored'); }
+      else this.playerRelease(p);
+      return;
+    }
     this.held[ev.team] = ev.down;
     if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.teamPress(ev.team, this.state !== 'scored'); }
     else this.teamRelease(ev.team);
   }
   // ALLEY-OOP MODE: the only way to score is catching a lob in the air and slamming it
   oopOnly() { return this.cvc && this.settings.cvcOop === 'on' && this.state !== 'showcase'; }
+  // is this player's key down? (one key per team, or in 4 PLAYERS one key each)
+  keyDown(p) { return this.four ? !!p.keyHeld : this.held[p.team]; }
   teamPress(t, canShoot) {
-    if (canShoot && !this.oopOnly()) for (const p of this.players) if (p.team === t && p.holding && !p.dunk && !p.hang) {
-      if (p.canDunk() || (p.grounded && p.canDunk(true) && Math.random() < 0.35)) p.startDunk(); else this.startMeter(p);
-    }
-    for (const p of this.players) if (p.team === t) p.press();
+    for (const p of this.players) if (p.team === t) this.playerPress(p, canShoot, true);
     this.sfx.jump();
   }
-  teamRelease(t) {
-    for (const p of this.players) if (p.team === t) p.release();
-    for (const m of this.meters.slice()) {
-      if (m.state !== 'charging' || m.player.team !== t) continue;
-      const p = m.player;
-      if (!p.grounded && this.state !== 'scored' && p.canDunk() && !this.oopOnly()) { this.clearMeter(p); p.startDunk(); }
-      else this.shoot(p);
+  playerPress(p, canShoot, quiet) {
+    if (canShoot && !this.oopOnly() && p.holding && !p.dunk && !p.hang) {
+      if (p.canDunk() || (p.grounded && p.canDunk(true) && Math.random() < 0.35)) p.startDunk(); else this.startMeter(p);
     }
+    p.press();
+    if (!quiet) this.sfx.jump();
+  }
+  teamRelease(t) { for (const p of this.players) if (p.team === t) this.playerRelease(p); }
+  playerRelease(p) {
+    p.release();
+    const m = this.meters.find(q => q.state === 'charging' && q.player === p);
+    if (!m) return;
+    if (!p.grounded && this.state !== 'scored' && p.canDunk() && !this.oopOnly()) { this.clearMeter(p); p.startDunk(); }
+    else this.shoot(p);
   }
 
   // ------------------------------------------------ shooting
@@ -2243,7 +2316,7 @@ class Game {
     else this.sfx.grab();
     b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.greenClip = null;
     p.holding = b; p.grabT = this.time;
-    if (this.held[p.team] && (this.state === 'play' || this.state === 'title' || this.state === 'showcase')) {
+    if (this.keyDown(p) && (this.state === 'play' || this.state === 'title' || this.state === 'showcase')) {
       const h = this.hoopFor(p.team), bpos = b.body.getPosition(), nearRim = Math.hypot(bpos.x - h.cx, bpos.y - h.y) < 1.4;
       const rebound = !prev && b.rimT > b.throwTime && this.time - b.rimT < 1.5;
       const oop = !prev && !rebound && b.lastThrower && b.lastThrower !== p && b.lastThrower.team === p.team && this.time - b.throwTime < 2;
@@ -2842,6 +2915,14 @@ function drawHUD(G) {
 }
 // text that lives on the court (DUNK / LET GO! over heads, popups), so it moves with the camera
 function drawWorldText(G) {
+  // 4 PLAYERS: whose key is whose, over each head at the start of the first rounds
+  if (G.four && G.state === 'play' && G.round <= 2 && G.roundT < 3.5) {
+    for (const [code, [t, s]] of Object.entries(FOUR_KEYS)) {
+      const p = G.players.find(q => q.team === t && q.slot === s); if (!p) continue;
+      const hp = p.head.getPosition(), bob = Math.sin(G.realTime * 6 + s) * 1.5;
+      txt(FOUR_LABEL[code], SX(hp.x), SY(hp.y + p.d.headR + 0.7) + bob * S, 16, TEAM[t].light, { bold: true });
+    }
+  }
   if (G.state === 'play') {
     for (const h of G.players) {
       if (!h.holding || h.dunk || h.hang) continue;
@@ -2907,7 +2988,7 @@ function drawBracket(G) {
     txt(`${o.level.toUpperCase()}  /  TO ${o.target}`, AX(240), AY(y + 19), 8, '#7d88a8', { align: 'right', ow: 0.7 });
   });
   if (Math.sin(G.realTime * 5) > -0.3) txt('PRESS W OR UP ARROW TO PLAY', AX(160), AY(150), 8, ORANGE);
-  txt('Q FOR MAIN MENU', AX(160), AY(162), 8, '#b9c3dd', { ow: 0.7 });
+  txt(G.four ? 'ESC FOR MAIN MENU' : 'Q FOR MAIN MENU', AX(160), AY(162), 8, '#b9c3dd', { ow: 0.7 });
 }
 function drawTrophy(x, y) {
   const gold = '#ffd23f', dark = '#c79a1a';
@@ -2936,7 +3017,7 @@ function drawOver(G) {
   if (G.stateT > 1.2) {
     const next = !tr ? 'W OR UP ARROW FOR A REMATCH' : tr.result === 'champion' ? 'W OR UP ARROW FOR THE MAIN MENU' : tr.result === 'won' ? `W OR UP ARROW: ON TO ${tr.stage === TOURNEY.length - 1 ? 'THE FINAL' : `MATCH ${tr.stage + 1}`}` : 'W OR UP ARROW TO TRY AGAIN';
     if (Math.sin(G.realTime * 5) > -0.3) txt(next, AX(160), AY(142), 8, ORANGE);
-    txt('Q FOR MAIN MENU', AX(160), AY(154), 8, '#b9c3dd', { ow: 0.7 });
+    txt(G.four ? 'ESC FOR MAIN MENU' : 'Q FOR MAIN MENU', AX(160), AY(154), 8, '#b9c3dd', { ow: 0.7 });
   }
 }
 function drawPause() {
@@ -3142,12 +3223,14 @@ try {
 } catch (e) { /* live reload is optional */ }
 resize();
 window.addEventListener('resize', resize);
-const KEYS = new Set(['KeyW', 'ArrowUp']);
+const KEYS = new Set(['KeyW', 'ArrowUp', ...Object.keys(FOUR_KEYS)]);
+// Q, C and M are player keys only in a 4 PLAYERS match (everywhere else Q is the menu and M mutes)
+const playKey = code => code === 'KeyW' || code === 'ArrowUp' || (G.four && code in FOUR_KEYS);
 window.addEventListener('keydown', e => {
   if (G.menuOpen) { if (e.code === 'Escape') closeMenu(); return; }
   const code = e.code;
   if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'Space') e.preventDefault();
-  if (code === 'KeyM') { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); if (G.state === 'showcase') syncReel(); return; }
+  if (code === 'KeyM' && !(G.four && (G.state === 'play' || G.state === 'scored' || G.state === 'over'))) { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); if (G.state === 'showcase') syncReel(); return; }
   if (G.state === 'title') {
     if (e.repeat) return;
     G.sfx.init();
@@ -3167,11 +3250,13 @@ window.addEventListener('keydown', e => {
   }
   if (G.state === 'replay') {
     if ((code === 'Escape' || code === 'KeyQ') && G.replay && G.replay.back === 'showcase') G.toTitle();
-    else if (!e.repeat && (KEYS.has(code) || code === 'Enter' || code === 'Space')) G.finishReplay();
+    else if (!e.repeat && (playKey(code) || code === 'Enter' || code === 'Space')) G.finishReplay();
     return;
   }
-  if (G.state === 'bracket') { if (!e.repeat && (KEYS.has(code) || code === 'Enter')) G.startTourneyMatch(); else if (code === 'Escape' || code === 'KeyQ') G.toTitle(); return; }
-  if (KEYS.has(code)) { if (!e.repeat) G.humanKey(code, true); }
+  if (G.state === 'bracket') { if (!e.repeat && (playKey(code) || code === 'Enter')) G.startTourneyMatch(); else if (code === 'Escape' || code === 'KeyQ') G.toTitle(); return; }
+  // the main menu: Q when paused or on the end screen (in a 4 PLAYERS match Q is a player's key there, so Esc)
+  if ((code === 'KeyQ' && (G.paused || (G.state === 'over' && !G.four))) || (code === 'Escape' && G.state === 'over')) { G.toTitle(); return; }
+  if (playKey(code)) { if (!e.repeat) G.humanKey(code, true); }
   else if (code === 'Enter') { if (G.state === 'over') G.overContinue(); }
   else if (code === 'KeyP' || code === 'Escape') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
   else if (code === 'KeyQ') { if (G.paused || G.state === 'over') G.toTitle(); }
@@ -3198,8 +3283,8 @@ cv.addEventListener('pointerdown', e => {
   else if (G.state === 'replay') G.finishReplay();
 });
 // vs the CPU the whole screen is your button; two players split it down the middle
-const TOUCH_ZONE = x => !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
-const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>HOLD ANYWHERE TO JUMP, LET GO TO SHOOT</span>' : '<span>RED: HOLD THE LEFT SIDE</span><span>BLUE: HOLD THE RIGHT SIDE</span>';
+const TOUCH_ZONE = x => G.four ? ['KeyQ', 'KeyC', 'KeyM', 'ArrowUp'][Math.min(3, Math.floor(x * 4))] : !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
+const TOUCH_HINT = () => G.cvc ? '' : G.four ? '<span>RED 1</span><span>RED 2</span><span>BLUE 1</span><span>BLUE 2</span>' : G.vsCpu ? '<span>HOLD ANYWHERE TO JUMP, LET GO TO SHOOT</span>' : '<span>RED: HOLD THE LEFT SIDE</span><span>BLUE: HOLD THE RIGHT SIDE</span>';
 // ---------------------------------------------------------------- touch (touchscreen Chromebooks in tablet mode)
 // During a match a finger on the screen works like holding a key (TOUCH_ZONE picks which). Touch users also get
 // small FULL SCREEN / PAUSE / MENU buttons, since tablet mode has no keyboard. Mice keep the old click behavior.
