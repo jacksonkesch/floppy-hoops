@@ -1448,9 +1448,9 @@ class ImpossibleCPU extends CPU {
     if (m && this.oopMode) g.clearMeter(m.player);   // ALLEY-OOP MODE: no shots, so a hop with the ball is just a hop
     else if (m) { this.releaseMeter(m); return; }
     if (mine.some(p => p.dunk || p.hang)) {
-      // caught its own lob and went up with it: that's an alley-oop to yourself
-      if (this.oop && this.oop.self && this.oop.finisher.dunk) { const h = this.oop.finisher.head.getPosition(); g.popup('SELF ALLEY-OOP!', h.x, h.y + 1.2, '#ffd23f', 8, 1.2); }
-      this.oop = null;
+      if (this.oopMode) this.oop = null;
+      else if (this.oop && this.oop.self && this.oop.finisher.dunk) { const h = this.oop.finisher.head.getPosition(); g.popup('SELF ALLEY-OOP!', h.x, h.y + 1.2, '#ffd23f', 8, 1.2); this.oop = null; }
+      else this.oop = null;
       return;
     }
     if (this.oop && this.runOop(mine)) return;
@@ -1491,11 +1491,7 @@ class ImpossibleCPU extends CPU {
     const attack = !theirs && ballX !== null && (ballX - 0) * mine[0].dir > -1.2;
     // their shot is up: one player stays home to goaltend it, the other leaks out for the outlet lob
     const shotUp = free.find(b => !b.waiting && b.lastThrower && b.lastThrower.team !== this.team && g.time - b.throwTime < 1.8);
-    if (this.oopMode && mine.length > 1 && !attack) {
-      out.push({ p: take(oopSpot), x: oopSpot, w: 1.3 });
-      if (ballX !== null && left.length) out.push({ p: take(ballX), x: ballX, w: 1.2 });
-      if (left.length) out.push({ p: take(rimSpot), x: rimSpot, w: 1 });
-    } else if (shotUp) {
+    if (shotUp) {
       out.push({ p: take(rimSpot), x: rimSpot, w: 1.6 });
       const leak = hoop.cx - mine[0].dir * 4.2;
       if (left.length) out.push({ p: take(leak), x: leak, w: 1 });
@@ -1537,7 +1533,6 @@ class ImpossibleCPU extends CPU {
   // their ball handler: get a hand up right as a shot comes out, or rip it when they're standing next to us
   pressure(o, mine) {
     const g = this.g, mo = g.meters.find(q => q.state === 'charging' && q.player === o);
-    if (mo && this.oopMode) return false;   // (no blocking the lob in ALLEY-OOP MODE either)
     if (mo) {
       // they're loading a shot: the ball rides up in their hand until the meter hits green, then flies at our
       // rim. Jump whoever can get an arm on it anywhere along that path, ideally right as it leaves the hand.
@@ -1573,7 +1568,6 @@ class ImpossibleCPU extends CPU {
     for (const b of free) {
       const recent = b.lastThrower && g.time - b.throwTime < 2, theirs = recent && b.lastThrower.team !== this.team;
       if (recent && b.green && !theirs) continue;
-      if (this.oopMode && theirs) continue;   // ALLEY-OOP MODE is a show: let their lobs and shots come down
       const path = this.ballFlight(b);
       for (const p of mine) {
         if (p.fallen || !p.grounded || p.jumpCD > 0) continue;
@@ -1624,102 +1618,108 @@ class ImpossibleCPU extends CPU {
     // they're about to take it: go up now rather than get stripped
     if (close || this.waitT > 0.9) this.set(true);
   }
-  // ALLEY-OOP MODE with the ball: no shots, ever. Hop the team up the floor (the meter is off, so that's safe)
-  // until the finisher is by the rim, then throw the lob. Alone in 1 v 1, lob it to yourself and go get it.
+  // ALLEY-OOP MODE with the ball: no shots, ever (the meter is cleared on every press, so a hop with the ball is
+  // just a hop). Get a finisher out a couple of metres from the rim, then throw the lob to exactly where their
+  // hand will be at the top of a jump pressed a moment later, and go up and meet it. Nobody gets help from the
+  // game: the catch is a real catch, and their defense can block or steal any lob it can get a hand on. So wait
+  // for a lob none of them can reach, and only throw into traffic when out of time or about to get stripped.
   oopOffense(h, mine, rivals) {
     const g = this.g, hoop = g.hoopFor(this.team), a = p => (hoop.cx - p.x) * p.dir, dir = h.dir;
     this.waitT += STEP;
-    const mates = mine.filter(p => p !== h && !p.fallen), fin = mates.length ? mates.reduce((x, p) => a(p) < a(x) ? p : x) : h;
-    const lean = p => { const jv = this.jumpVel(p); return jv.x * p.dir * 2 * jv.y / g.cfg.gravity * 0.91; };
-    const pressed = rivals.some(o => !o.fallen && Math.abs(o.center().x - h.x) < 1.1);   // about to get stripped
-    const ready = fin === h
-      ? a(h) < 5.2 && (h.grounded || a(h) < 2.4)                                          // alone: close enough to chase it down
-      : a(fin) < 3 || (a(fin) < 6 && fin.grounded && lean(fin) > 1.2);                    // a teammate near the rim, or leaning at it
-    if (ready || pressed || this.waitT > 3) { this.lob(h, fin); return; }
-    // a press this close would turn into a dunk (not an oop), so throw it instead
-    if (h.canDunk() || h.canDunk(true)) { this.lob(h, fin); return; }
     if (this.down) return;
-    // move up: the finisher heads for the front of the rim, the handler hangs back to throw it
-    const spots = fin === h ? [{ p: h, x: hoop.cx - dir * 3.8, w: 1 }]
-      : [{ p: fin, x: hoop.cx - dir * 1.2, w: 1.5 }, { p: h, x: hoop.cx - dir * 5, w: 0.8 }, ...mates.filter(p => p !== fin).map(p => ({ p, x: hoop.cx - dir * 3, w: 0.4 }))];
+    const mates = mine.filter(p => p !== h && !p.fallen);
+    const pressed = rivals.some(o => !o.fallen && Math.abs(o.center().x - h.x) < 1.2);   // about to get stripped
+    // look for a lob every few frames (each look tries every finisher and catch height)
+    if ((this.lookT = (this.lookT || 0) - STEP) <= 0) {
+      this.lookT = 0.05;
+      // a pass to a teammate first; a lob to yourself only when you're alone or no pass has opened up for a while
+      const pass = mates.length ? this.planOop(h, mates, rivals) : null;
+      const self = !pass || !pass.open ? this.planOop(h, [h], rivals) : null;
+      const plan = pass && pass.open ? pass : self && self.open && (!mates.length || this.waitT > 1.4) ? self
+        : pressed || this.waitT > 2.6 ? pass || self : null;
+      if (plan) { this.lob(h, plan); return; }
+    }
+    // (a press this close would turn into a plain dunk, not an oop: don't hop the handler in there)
+    if (h.canDunk() || h.canDunk(true)) return;
+    // move up: finishers out where a jump carries them to the rim, the handler back far enough to throw over the top
+    const spots = mates.length
+      ? [{ p: h, x: hoop.cx - dir * 5.4, w: 0.8 }, ...mates.map((p, i) => ({ p, x: hoop.cx - dir * (i ? 4 : 2.6), w: i ? 0.6 : 1.3 }))]
+      : [{ p: h, x: hoop.cx - dir * 3.6, w: 1 }];
     this.move(spots, 0.35);
   }
-  // the lob: a floater to just in front of the rim, with enough hang time for the finisher to run it down
-  lob(h, fin) {
-    const g = this.g, b = h.holding, hoop = g.hoopFor(this.team);
+  // every lob worth throwing right now: for each finisher, a jump pressed d seconds after the throw, caught
+  // near the top with the hand out, in dunk range. Rated by whether any of them can get a hand on it first.
+  planOop(h, cands, rivals) {
+    const g = this.g, b = h.holding; if (!b) return null;
+    const hoop = g.hoopFor(this.team), grav = g.cfg.gravity * b.body.getGravityScale(), from = b.body.getPosition();
+    let best = null;
+    for (const f of cands) {
+      if (f.fallen || !f.grounded) continue;
+      const self = f === h, om = f.body.getAngularVelocity();
+      // the jump goes off almost at once: the players rock, so a jump planned further ahead goes somewhere else.
+      // (so the lob waits for a moment when the lean sends them the right way)
+      // (throwing it to yourself: the game won't let you grab your own throw for 0.45 s, so catch it on the way down)
+      for (const d of [0.03]) {
+        if (f.jumpCD > d) continue;
+        const jv = this.jumpVel(f, f.angle() + om * d), up = jv.y * 0.91 / g.cfg.gravity;
+        for (const k of [0.7, 0.85, 1, 1.15, 1.3]) {
+          const tc = d + 0.03 + up * k;
+          if (self && tc < 0.5) continue;
+          const A = this.arm(f, tc, d, jv), cx = A.sx - f.dir * 0.05, cy = A.sy - 0.42, ahead = (hoop.cx - cx) * f.dir;
+          if (ahead < 0.5 || ahead > DUNK_RANGE - 0.4 || cy > hoop.y + 1.0) continue;   // has to be a dunk from there (with room to spare)
+          const P = { x: A.sx + (A.hx - A.sx) * 0.8, y: A.sy + (A.hy - A.sy) * 0.8 };
+          const vel = { x: (P.x - from.x) / tc, y: (P.y - from.y + 0.5 * grav * tc * tc) / tc };
+          if (Math.hypot(vel.x, vel.y) > 13) continue;
+          const path = this.flight(from, vel, tc + 0.02, false);
+          // (the lob mustn't clip the backboard on the way in)
+          if (path.some(q => Math.abs(q.x - hoop.side * BOARD_X) < 0.2 && q.y > hoop.y - 0.3 && q.y < hoop.y + 1.4)) continue;
+          // (or bang off the rim before it gets to the hand)
+          if (path.some(q => Math.abs(q.x - hoop.cx) < RIM_HALF + 0.2 && Math.abs(q.y - hoop.y) < 0.3)) continue;
+          const touch = this.firstTouch(path, rivals, b.r + 0.22);
+          // no touch beats any touch, then a later touch; a teammate beats yourself; the further they fly, the better
+          const score = (touch ? touch : 9) - (self && cands.length > 1 ? 1.5 : 0) + Math.abs(jv.x) * 0.05;
+          if (!best || score > best.score) best = { f, d, tc, vel, score, open: !touch, self, P, hand: { x: A.hx, y: A.hy } };
+        }
+      }
+    }
+    return best;
+  }
+  // the earliest any of them could get a hand on this flight, jumping whenever they like (0: never)
+  firstTouch(path, rivals, r) {
+    let first = 0;
+    const T = path.length ? path[path.length - 1].t : 0;
+    for (const o of rivals) {
+      if (o.fallen || o.hang || o.dunk) continue;
+      if (!o.grounded) { const t = this.meet(o, path, 0, r); if (t && (!first || t < first)) first = t; continue; }
+      for (let dd = Math.max(0, o.jumpCD); dd < T; dd += 0.06) {
+        const t = this.meet(o, path, dd, r);
+        if (t) { if (!first || t < first) first = t; break; }
+      }
+    }
+    return first;
+  }
+  // throw it, then press the jump right on time
+  lob(h, plan) {
+    const g = this.g, b = h.holding;
     if (!b) return;
     g.clearMeter(h); g.releaseBall(h);
-    const p = b.body.getPosition(), grav = g.cfg.gravity * b.body.getGravityScale(), far = Math.max(0, (hoop.cx - fin.x) * fin.dir - 1.1);
-    const T = fin === h ? clamp(0.8 + far * 0.12, 0.8, 1.4) : clamp(0.6 + far * 0.17, 0.7, 1.6);
-    const tx = hoop.cx - fin.dir * 1.1, ty = hoop.y + 0.6;
-    b.body.setLinearVelocity({ x: (tx - p.x) / T, y: (ty - p.y + 0.5 * grav * T * T) / T });
-    b.body.setAngularVelocity(-fin.dir * 5); b.ghost = false; b.green = false;
-    b.oopLob = { team: this.team, until: g.time + T + 0.35 };   // (the other side can't touch it on the way)
-    g.sfx.shot(); const hp = h.head.getPosition(); g.popup('LOB!', hp.x, hp.y + 0.9, '#fff6e0', 8, 0.8);
-    this.oop = { finisher: fin, phase: 'air', t: 0, self: fin === h, aimed: true };
+    b.body.setLinearVelocity(plan.vel); b.body.setAngularVelocity(-plan.f.dir * 5); b.ghost = false; b.green = false;
+    g.sfx.shot(); const hp = h.head.getPosition(); g.popup(plan.self ? 'SELF LOB!' : 'LOB!', hp.x, hp.y + 0.9, '#fff6e0', 8, 0.8);
+    this.oop = { finisher: plan.f, self: plan.self, ball: b, pressAt: this.t + plan.d - STEP, catchT: plan.tc, t: 0, phase: 'lob' };
     this.set(false); this.waitT = 0;
   }
-  // the pass is in the air: jump the finisher into it
+  // the lob is up: jump on time, keep the key held through the catch (so it turns into the slam), then let go
   runOop(mine) {
-    const O = this.oop, g = this.g;
+    const O = this.oop, g = this.g, f = O.finisher, b = O.ball;
     O.t += STEP;
-    if (O.phase === 'shot') return false;   // the meter is still running (handled above)
-    const b = g.balls.find(q => q.lastThrower && q.lastThrower.team === this.team && !q.holder);
-    if (!b || O.t > 1.8 || !mine.includes(O.finisher)) { this.oop = null; this.set(false); return false; }
-    const hoop = g.hoopFor(this.team), f = O.finisher;
-    // ALLEY-OOP MODE, passing to a teammate: the lob is a real pass, a floater to just in front of the rim with
-    // enough hang time for them to run it down (a miss now bounces out instead of dropping in)
-    if (this.oopMode && !O.self && !O.aimed && !b.holder && b.lastThrower && b.lastThrower !== f) {
-      O.aimed = true;
-      const p = b.body.getPosition(), grav = g.cfg.gravity * b.body.getGravityScale(), far = (hoop.cx - f.x) * f.dir;
-      const tx = hoop.cx - f.dir * 1.1, ty = hoop.y + 0.6, T = clamp(0.6 + Math.max(0, far - 1.1) * 0.17, 0.85, 1.6);
-      b.body.setLinearVelocity({ x: (tx - p.x) / T, y: (ty - p.y + 0.5 * grav * T * T) / T });
-      b.ghost = false; b.green = false;
-    }
-    if (O.phase === 'air') {
-      // only a catch up by the rim, close enough to slam (catching our own green anywhere else would waste it)
-      const nearRim = q => q.y > 2.7 && (hoop.cx - q.x) * f.dir > -0.4 && (hoop.cx - q.x) * f.dir < DUNK_RANGE - 0.3;
-      const path = this.ballFlight(b);
-      if (this.meet(f, path, 0, b.r + 0.3, nearRim)) { this.set(true); O.phase = 'rise'; O.riseT = O.t; return true; }
-      if (this.down) { this.set(false); return true; }
-      // ALLEY-OOP MODE: hop at the rim with the arm up while the lob is still coming (each hop is a try at the
-      // catch; land empty-handed and it goes again)
-      if (this.oopMode && f.grounded && f.jumpCD <= 0 && path.some(q => q.y > 2.6 && (hoop.cx - q.x) * f.dir > -0.6)) {
-        const a = (hoop.cx - f.x) * f.dir, jv = this.jumpVel(f), land = a - jv.x * f.dir * 2 * jv.y / g.cfg.gravity * 0.91;
-        // (a hop that gains ground on the rim, or from close in, any hop that keeps it in dunk range)
-        if ((a > 0.6 && land > -0.5 && land < a - 0.4) || (a < 2.8 && land > -0.8 && land < 3.2)) { this.set(true); O.phase = 'rise'; O.riseT = O.t; }
-      }
-      // already in the air as the pass comes by: throw the arm up for it
-      if (this.oopMode && !f.grounded && !this.down) {
-        const q = b.body.getPosition(), hd = f.head.getPosition();
-        if (Math.hypot(q.x - hd.x, q.y - hd.y) < 1.8 && q.y > 2.6) { this.set(true); O.phase = 'rise'; O.riseT = O.t; }
-      }
+    const gone = !mine.includes(f) || (b.holder && b.holder.team !== this.team) || O.t > O.catchT + 1.2;
+    if (gone || (b.holder && b.holder === f && !f.dunk && f.grounded)) { this.oop = null; this.set(false); return false; }
+    if (O.phase === 'lob') {
+      if (this.t >= O.pressAt) { this.set(true); O.phase = 'up'; O.upT = O.t; }
       return true;
     }
-    // ALLEY-OOP MODE is a show: a finisher up by the rim with the lob within about a metre of the hand gets it
-    // (ragdoll arms are too floppy to hit these reliably, and the whole point of the mode is the slam)
-    // (caught out to about 4 m, it flies the rest of the way to the rim)
-    const out = (hoop.cx - f.center().x) * f.dir;
-    if (this.oopMode && f.holding === b && !f.dunk && !f.grounded && out > -0.5 && out < 4.2) {
-      g.clearMeter(f);
-      f.startDunk(out <= 0.35 ? null : g.pickDunk(f, Math.min(out, DUNK_RANGE - 0.1)) || DUNK_BY_ID.superman || null);
-      if (f.dunk) { const h = f.head.getPosition(); g.popup(O.self ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', h.x, h.y + 1.2, '#ffd23f', 8, 1.2); }
-      return true;
-    }
-    if (this.oopMode && !f.grounded && !f.fallen && !b.holder && out > -0.5 && out < 4.2 && f.center().y < hoop.y + 1.2 && g.time - b.throwTime > 0.3) {
-      const hp = f.handPos(0), q = b.body.getPosition();
-      if (Math.hypot(q.x - hp.x, q.y - hp.y) < 1.1 && q.y > 2.6) {
-        g.grab(f, 0, b);
-        if (f.holding === b && !f.dunk) {
-          g.clearMeter(f);
-          f.startDunk(out <= 0.35 ? null : g.pickDunk(f, Math.min(out, DUNK_RANGE - 0.1)) || DUNK_BY_ID.superman || null);
-          if (f.dunk && !O.self) { const h = f.head.getPosition(); g.popup('ALLEY-OOP!', h.x, h.y + 1.2, '#ffd23f', 8, 1.2); }
-        }
-        return true;
-      }
-    }
-    // rising: keep the key held until the catch turns into a dunk; landed without it, get ready to go again
-    if (f.grounded && O.t - O.riseT > 0.3) { this.set(false); if (this.oopMode) O.phase = 'air'; else this.oop = null; }
+    // up: hold on until the catch, or until they're back on the floor without it
+    if (f.grounded && O.t - O.upT > 0.3) { this.oop = null; this.set(false); return false; }
     return true;
   }
 }
@@ -2129,8 +2129,10 @@ class Game {
     if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.teamPress(ev.team, this.state !== 'scored'); }
     else this.teamRelease(ev.team);
   }
+  // ALLEY-OOP MODE: the only way to score is catching a lob in the air and slamming it
+  oopOnly() { return this.cvc && this.settings.cvcOop === 'on' && this.state !== 'showcase'; }
   teamPress(t, canShoot) {
-    if (canShoot) for (const p of this.players) if (p.team === t && p.holding && !p.dunk && !p.hang) {
+    if (canShoot && !this.oopOnly()) for (const p of this.players) if (p.team === t && p.holding && !p.dunk && !p.hang) {
       if (p.canDunk() || (p.grounded && p.canDunk(true) && Math.random() < 0.35)) p.startDunk(); else this.startMeter(p);
     }
     for (const p of this.players) if (p.team === t) p.press();
@@ -2141,7 +2143,7 @@ class Game {
     for (const m of this.meters.slice()) {
       if (m.state !== 'charging' || m.player.team !== t) continue;
       const p = m.player;
-      if (!p.grounded && this.state !== 'scored' && p.canDunk()) { this.clearMeter(p); p.startDunk(); }
+      if (!p.grounded && this.state !== 'scored' && p.canDunk() && !this.oopOnly()) { this.clearMeter(p); p.startDunk(); }
       else this.shoot(p);
     }
   }
@@ -2224,7 +2226,6 @@ class Game {
   }
   canGrab(p, b, steal) {
     if (p.dunk || p.hang || p.grabCD > 0 || p.holding || this.state === 'transition' || this.state === 'replay') return false;
-    if (b.oopLob && p.team !== b.oopLob.team && this.time < b.oopLob.until) return false;   // an ALLEY-OOP MODE lob is theirs to finish
     if (steal) return true;
     if (b.holder || b.waiting) return false;
     return !(b.lastThrower === p && this.time - b.throwTime < 0.45);
@@ -2240,13 +2241,19 @@ class Game {
       this.popup(wasDunk ? 'BLOCKED!' : 'STEAL!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 0.9); this.stat(p.team, wasDunk ? 'blocks' : 'steals'); this.sfx.steal();
     } else if (inFlight) { this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks'); this.sfx.steal(); }
     else this.sfx.grab();
-    b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.greenClip = null; b.oopLob = null;
+    b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.greenClip = null;
     p.holding = b; p.grabT = this.time;
     if (this.held[p.team] && (this.state === 'play' || this.state === 'title' || this.state === 'showcase')) {
       const h = this.hoopFor(p.team), bpos = b.body.getPosition(), nearRim = Math.hypot(bpos.x - h.cx, bpos.y - h.y) < 1.4;
       const rebound = !prev && b.rimT > b.throwTime && this.time - b.rimT < 1.5;
       const oop = !prev && !rebound && b.lastThrower && b.lastThrower !== p && b.lastThrower.team === p.team && this.time - b.throwTime < 2;
-      if (!p.grounded && this.forceDunk) p.startDunk();
+      if (this.oopOnly()) {
+        // a lob caught in the air is a slam from anywhere a kangaroo reaches, even if it grazed the rim on the way;
+        // anything else (a putback, a steal, a catch on the way down) is just a catch
+        const lob = !prev && b.lastThrower && b.lastThrower.team === p.team && this.time - b.throwTime < (rebound ? 1.2 : 2);
+        if (!p.grounded && lob && p.canDunk(true)) { p.startDunk(); if (p.dunk) this.popup(b.lastThrower === p ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', hp.x, hp.y + 1.2, '#ffd23f', 8, 1.2); }
+      }
+      else if (!p.grounded && this.forceDunk) p.startDunk();
       else if (!p.grounded && rebound && nearRim && (this.dunkOn('tip') || p.canDunk())) p.startDunk(this.pickDunk(p, (h.cx - p.x) * p.dir, true));
       else if (!p.grounded && this.dunkOn('oop') && p.canDunk()) { p.startDunk(); if (oop && p.dunk) this.popup('ALLEY-OOP!', hp.x, hp.y + 1.2, '#ffd23f', 8, 1.2); }
       else this.startMeter(p);
@@ -2293,8 +2300,8 @@ class Game {
     if (!bu) return;
     const o = bu === A ? B : A, b = bu.ball;
     if (o.kind === 'part') {
-      if (o.player === b.lastThrower && this.time - b.throwTime < 0.2) { c.setEnabled(false); return; }
-      if (b.oopLob && o.player.team !== b.oopLob.team && this.time < b.oopLob.until) { c.setEnabled(false); return; }   // ALLEY-OOP MODE lob
+      // a throw leaves the hand cleanly: it passes through the thrower for as long as they can't catch it back
+      if (o.player === b.lastThrower && this.time - b.throwTime < 0.45) { c.setEnabled(false); return; }
       c.setRestitution(Math.min(b.rest, 0.3));
     } else if (o.kind === 'rim') { if (b.ghost) c.setEnabled(false); else c.setRestitution(Math.min(b.rest, 0.5)); }
     else if (o.kind === 'board') { if (b.ghost) c.setEnabled(false); else c.setRestitution(Math.min(b.rest, 0.6)); }
@@ -2522,6 +2529,7 @@ class Game {
       for (const h of this.hoops) {
         const lo = Math.min(h.frontX, h.backX) + 0.04, hi = Math.max(h.frontX, h.backX) - 0.04;
         if (b.prevY - h.prevY >= 0 && p.y - h.y < 0 && p.x > lo && p.x < hi && v.y - (h.y - h.prevY) / dt < 0 && this.state !== 'transition') {
+          if (this.oopOnly() && !b.dunked) continue;   // ALLEY-OOP MODE: only slams count; anything else just drops through
           const saver = !b.dunked && this.players.find(o => o.team !== h.attackTeam && this.canGrab(o, b) && Math.hypot(o.handPos(0).x - p.x, o.handPos(0).y - p.y) < b.r + 0.42);
           if (saver) { this.grab(saver, 0, b); break; }
           this.onScore(h, b);
