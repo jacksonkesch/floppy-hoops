@@ -378,8 +378,8 @@ function paintArena(ringX) {
 
 // ---------------------------------------------------------------- boxer
 // Like the hoops player: torso and legs are one rigid body that rocks on its feet, with a floppy neck.
-// Two arms, each an upper arm and a forearm with a big glove. Press: lunge forward and throw both arms
-// out (the back one a beat later). Let go: the arms flop back into a loose guard.
+// One arm: an upper arm and a forearm with a big glove. Press: lunge forward and hold the arm straight out.
+// Let go: it comes back up in front of the face as a guard. Two head punches in a row put the other boxer down.
 class Pose {
   constructor(x, y, a) { this.p = { x, y }; this.a = a; }
   getPosition() { return this.p; }
@@ -392,7 +392,7 @@ class Boxer {
     this.d = { legLen: 0.95 * c.leg, legW: 0.22, torsoW: 0.5, torsoH: 0.8, headR: 0.28 * c.head, upLen: 0.5 * c.arm, foreLen: 0.46 * c.arm, armW: 0.17, gloveR: 0.2 * c.glove };
     this.held = false; this.pressT = -9; this.relT = -9; this.jumpCD = 0; this.stun = 0; this.dmg = 0; this.ko = false; this.celebrate = false;
     this.fallenT = 0; this.feet = 0; this.grounded = false; this.fallen = false; this.airT = 0; this.upT = 0;
-    this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.9, 1.1); this.hitCD = [0, 0]; this.lastHitT = -9; this.dizzy = 0; this.stunK = 1;
+    this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.9, 1.1); this.hitCD = [0]; this.lastHitT = -9; this.headHits = 0; this.lastHeadT = -9; this.dizzy = 0; this.stunK = 1;
     this.build(x); this.makeSprites();
     if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
   }
@@ -419,7 +419,7 @@ class Boxer {
     this.uppers = []; this.fores = []; this.shoulders = []; this.elbows = [];
     const shY = hipY + this.shLocal.y, elY = shY - d.upLen;
     this.gloveLocal = { x: 0, y: -d.foreLen - d.gloveR * 0.45 };
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 1; i++) {   // one arm
       const up = w.createBody({ type: 'dynamic', position: { x, y: shY }, angularDamping: 0.5 });
       up.createFixture(new pl.Box(d.armW / 2, d.upLen / 2, { x: 0, y: -d.upLen / 2 }, 0), fd({ part: 'arm', arm: i }, 5));
       const fo = w.createBody({ type: 'dynamic', position: { x, y: elY }, angularDamping: 0.5, bullet: true });
@@ -503,25 +503,23 @@ class Boxer {
     }
   }
   armsUpdate() {
-    const g = this.game, dir = this.dir, since = g.time - this.pressT;
-    for (let i = 0; i < 2; i++) {
+    const g = this.game, dir = this.dir;
+    for (let i = 0; i < 1; i++) {
       const sh = this.shoulders[i], el = this.elbows[i];
       if (this.ko) { sh.setMaxMotorTorque(2); sh.setMotorSpeed(0); el.setMaxMotorTorque(1); el.setMotorSpeed(0); continue; }
       const weak = this.stun > 0 ? 0.25 : 1;
       if (this.celebrate) {
-        const wave = Math.sin(g.time * 9 + i * 2) * 0.35;
+        const wave = Math.sin(g.time * 9) * 0.35;
         this.drive(sh, dir * (2.9 + wave), 14, 14, 150); this.drive(el, dir * 0.3, 10, 10, 40);
-      } else if (this.held && since > (i === 1 ? 0.07 : 0)) {
-        // punch: arm straight out at head height. Held too long, the arms get heavy and sag.
-        const tire = smooth((since - 0.55) / 0.5);
-        const shT = dir * lerp(i === 0 ? 1.82 : 1.62, 0.9, tire);
-        this.drive(sh, shT, 34, 20, lerp(320, 90, tire) * weak);
-        this.drive(el, dir * lerp(0.05, 1.2, tire), 26, 22, 110 * weak);
+      } else if (this.held) {
+        // punch: the arm goes fully straight out at head height and stays out while the key is down
+        this.drive(sh, dir * 1.82, 34, 20, 320 * weak);
+        this.drive(el, dir * 0.05, 26, 22, 110 * weak);
       } else {
-        // guard: loose, gloves up by the chin, bouncing a little
-        const bob = Math.sin(g.time * 6 + i * 1.7 + this.swayPh) * 0.12;
-        this.drive(sh, dir * ((i === 0 ? 0.6 : 0.45) + bob), 10, 9, 70 * weak);
-        this.drive(el, dir * (i === 0 ? 2.1 : 2.25), 10, 10, 30 * weak);
+        // guard: the glove comes back up in front of the face, bouncing a little
+        const bob = Math.sin(g.time * 6 + this.swayPh) * 0.1;
+        this.drive(sh, dir * (0.95 + bob), 10, 9, 70 * weak);
+        this.drive(el, dir * 2.15, 10, 10, 40 * weak);
       }
     }
   }
@@ -554,10 +552,9 @@ class Boxer {
     this.ko = true; this.held = false; this.neck.setFrequency(0.8);
   }
   draw(r) {
-    const s = this.spr, flip = this.dir < 0, back = 1, front = 0;
+    const s = this.spr, flip = this.dir < 0, front = 0;
     const glove = (i, spr) => { const p = this.glovePos(i); r.part(spr, new Pose(p.x, p.y, this.fores[i].getAngle()), flip); };
-    // back arm, back leg, front leg, torso, head, front arm
-    r.part(s.upB, this.uppers[back], flip); r.part(s.foreB, this.fores[back], flip); glove(back, s.gloveB);
+    // back leg, front leg, torso, head, arm
     r.local(s.legB, this.body, this.legX[1], 0, flip);
     r.local(s.leg, this.body, this.legX[0], 0, flip);
     r.local(s.torso, this.body, this.tc.x, this.tc.y, flip);
@@ -828,6 +825,13 @@ class Game {
       vic.head.setLinearVelocity({ x: hv.x + dir * (2 + 7 * P) * k, y: hv.y + (0.6 + 2 * P) * k });
       const sk = lerp(0.85, 0.06, clamp(P / 1.2, 0, 1)); vic.stunK = vic.stun > 0 ? Math.min(vic.stunK, sk) : sk; vic.stun = Math.max(vic.stun, 0.25 + 0.6 * P); vic.dizzy = Math.max(vic.dizzy, 0.6 + 1.6 * P);
       vic.dmg += P;
+      // two punches to the head in a row put them on the floor
+      vic.headHits = this.time - vic.lastHeadT < 3.5 ? vic.headHits + 1 : 1; vic.lastHeadT = this.time;
+      if (vic.headHits >= 2) {
+        vic.headHits = 0; vic.stun = Math.max(vic.stun, 1.5); vic.stunK = 0.02; vic.dizzy = Math.max(vic.dizzy, 2.2);
+        vic.body.setAngularVelocity(-dir * (5 + 3 * P));
+        this.popup('DOWN!', h.x + dir * 0.3, h.y + 1.0, '#ff4b4b', 22, 0.9);
+      }
     } else vic.dmg += P * 0.4;
     const bv = vic.body.getLinearVelocity();
     vic.body.setLinearVelocity({ x: bv.x + dir * (0.6 + 2.6 * P) * k, y: bv.y + 0.4 * P * k });
