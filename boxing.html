@@ -166,6 +166,8 @@ const MENU_ITEMS = [
   { id: 'switch', label: 'SWITCH GAME' },
 ];
 const MENU_X = 14, MENU_W = 104, MENU_Y0 = 60, MENU_DY = 15, MENU_H = 12;
+// big 1P (green) and 2P (blue) buttons side by side, the other entries as a list under them
+const menuRect = i => i === 0 ? { x: 14, y: 56, w: 50, h: 36 } : i === 1 ? { x: 68, y: 56, w: 50, h: 36 } : { x: MENU_X, y: 98 + (i - 2) * 14, w: MENU_W, h: 12 };
 const OVER_BTNS = [0, 1].map(i => ({ x: 70 + i * 100, y: 140, w: 80, h: 20 }));
 const POW_WORDS = ['POW!', 'BAM!', 'WHAM!', 'BONK!', 'THWACK!', 'BOOM!', 'SMACK!'];
 // Meme clips (mp3s, base64 in clips.js, shared with the other games). One plays on each knockout;
@@ -348,11 +350,16 @@ class Sfx {
 
 // ---------------------------------------------------------------- arena background
 const arenaCache = {};
-function paintArena(ringX) {
-  const key = ringX.toFixed(2); if (arenaCache[key]) return arenaCache[key];
+const ARENAS = ['ring', 'beach', 'snow', 'crates'];
+const hallArena = a => a === 'ring' || a === 'crates';
+function paintArena(ringX, arena = 'ring') {
+  const key = arena + ringX.toFixed(2); if (arenaCache[key]) return arenaCache[key];
   const [c, g] = mk(ART_W, ART_H), rnd = rng(7331);
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+  const hall = hallArena(arena);
+  if (!hall) { paintOutdoor(g, R, rnd, arena, ringX); arenaCache[key] = c; return c; }
   // dark hall, fading up into the rafters
+  if (hall) {
   for (let y = 0; y < ART_H; y++) R(0, y, ART_W, 1, mix('#070810', '#1c2140', clamp(y / 120, 0, 1)));
   // rafters and a hanging lighting rig
   R(0, 12, ART_W, 2, '#23283f'); for (let x = 6; x < ART_W; x += 18) R(x, 12, 1, 6, '#23283f');
@@ -368,6 +375,7 @@ function paintArena(ringX) {
   // hall floor out past the ring
   R(0, 160, ART_W, 20, '#2b2230'); for (let x = 3; x < ART_W; x += 11) R(x, 160 + ((rnd() * 18) | 0), 5, 1, '#33293a');
   R(0, 160, ART_W, 1, '#3d3244');
+  }
   // the ring: apron skirt, then the canvas on top
   const edge = ringX + 0.95, x0 = ax(-edge), x1 = ax(edge);
   R(x0 - 1, 139, x1 - x0 + 2, 22, INK);
@@ -381,6 +389,60 @@ function paintArena(ringX) {
   g.beginPath(); g.moveTo(120, 14); g.lineTo(200, 14); g.lineTo(x1 + 10, 140); g.lineTo(x0 - 10, 140); g.closePath(); g.fill();
   arenaCache[key] = c;
   return c;
+}
+
+// beach and snowy village: same court size and edge as the ring, different scenery
+function paintOutdoor(g, R, rnd, arena, ringX) {
+  const snow = arena === 'snow', edge = ringX + 0.95, x0 = Math.round(ax(-edge)), x1 = Math.round(ax(edge)), w = x1 - x0;
+  const sky = snow ? ['#8fa6c6', '#e2ebf6'] : ['#6fc6ff', '#d9f3ff'];
+  for (let y = 0; y < 125; y++) R(0, y, ART_W, 1, mix(sky[0], sky[1], clamp(y / 110, 0, 1)));
+  if (!snow) {
+    R(244, 20, 18, 18, '#ffe45e'); R(246, 18, 14, 22, '#ffe45e'); R(242, 22, 22, 14, '#ffe45e');
+    for (const [cx, cy, cw] of [[40, 24, 34], [120, 40, 26], [180, 18, 30], [290, 52, 22]]) { R(cx, cy, cw, 5, '#ffffff'); R(cx + 5, cy - 4, cw - 12, 5, '#ffffff'); R(cx + 2, cy + 5, cw - 6, 2, '#cfe6f5'); }
+    R(0, 92, ART_W, 36, '#2a8fd0'); R(0, 92, ART_W, 2, '#5cb4ec');
+    for (let i = 0; i < 70; i++) R(rnd() * ART_W, 96 + rnd() * 28, 5 + rnd() * 6, 1, '#7dc8f2');
+    R(0, 124, ART_W, 4, '#ffffff'); R(0, 128, ART_W, 52, '#e8cf8a');
+    for (let i = 0; i < 160; i++) R(rnd() * ART_W, 130 + rnd() * 50, 2, 1, rnd() < 0.5 ? '#d4b872' : '#f4e0a6');
+    // umbrella
+    R(256, 104, 2, 36, '#8a6a3c'); R(256, 104, 1, 36, '#b08a52');
+    for (let r = 0; r < 8; r++) { const hw = 6 + r * 3; for (let x = -hw; x < hw; x++) R(257 + x, 96 + r, 1, 1, ((x + 40) >> 2) % 2 ? '#ffffff' : '#e8343b'); }
+    // beach chair
+    for (let i = 0; i < 11; i++) R(58 + i * 0.7, 113 + i, 4, 1, i % 2 ? '#ffffff' : '#2e6be6');
+    for (let i = 0; i < 4; i++) R(64 + i * 4, 124, 4, 3, i % 2 ? '#ffffff' : '#2e6be6'); R(62, 127, 2, 12, '#8a6a3c'); R(78, 127, 2, 12, '#8a6a3c');
+    // far shore and a sail
+    R(150, 86, 2, 8, '#ffffff'); for (let i = 0; i < 7; i++) R(152, 87 + i, 5 - (i >> 1), 1, '#fff6e0');
+  } else {
+    for (const [hx, hh, hc] of [[0, 30, '#d4e0f0'], [90, 40, '#c4d4ea'], [200, 34, '#d4e0f0'], [270, 44, '#c4d4ea']]) for (let x = 0; x < 120; x++) R(hx + x, 124 - Math.round(hh * Math.sin(Math.PI * x / 120)), 1, Math.round(hh * Math.sin(Math.PI * x / 120)), hc);
+    // village houses with snowy roofs, pines
+    for (const [hx, hw, hh] of [[20, 34, 22], [96, 28, 18], [214, 36, 24], [270, 30, 20]]) {
+      R(hx, 124 - hh, hw, hh, '#8a5a3a'); R(hx, 124 - hh, hw, 1, '#a8744c'); R(hx + 6, 124 - hh + 6, 6, 6, '#ffd86a'); R(hx + hw - 12, 124 - hh + 6, 6, 6, '#ffd86a');
+      for (let r = 0; r < 8; r++) { R(hx - 3 + r, 124 - hh - 1 - r, hw + 6 - 2 * r, 1, r ? '#f4f8ff' : '#b9c9e0'); }
+    }
+    for (const tx of [10, 70, 150, 190, 250, 308]) for (let r = 0; r < 4; r++) { R(tx - 2 - r * 3, 100 + r * 8, 5 + r * 6, 8, '#2f5a3e'); R(tx - 2 - r * 3, 100 + r * 8, 5 + r * 6, 2, '#eef4fb'); }
+    // snow floor
+    R(0, 124, ART_W, 56, '#eef4fb'); for (let i = 0; i < 160; i++) R(rnd() * ART_W, 128 + rnd() * 52, 3, 1, rnd() < 0.5 ? '#cfdcee' : '#ffffff');
+    // wooden fence across the back
+    R(0, 124, ART_W, 2, '#6a4528'); R(0, 133, ART_W, 2, '#6a4528'); R(0, 124, ART_W, 1, '#8a5e38');
+    for (let x = 4; x < ART_W; x += 14) { R(x, 120, 5, 20, INK); R(x + 1, 121, 3, 18, '#9a6a40'); R(x, 120, 5, 2, '#f4f8ff'); }
+    R(0, 124, ART_W, 2, '#8a5e38'); R(0, 133, ART_W, 2, '#8a5e38');
+  }
+  // the court: raised platform with the same edge as the ring apron
+  R(x0 - 1, 139, w + 2, 22, INK);
+  R(x0, 145, w, 15, snow ? '#9fb2cf' : '#c9a65a'); R(x0, 158, w, 2, snow ? '#7f95b8' : '#a8863e');
+  R(x0, 140, w, 5, snow ? '#fbfdff' : '#f4e2a8'); R(x0, 140, w, 1, '#ffffff'); R(x0, 144, w, 1, snow ? '#c9d8ec' : '#d2b878');
+  R(0, 161, ART_W, 19, snow ? '#dfe9f6' : '#d6b970'); R(0, 161, ART_W, 1, snow ? '#b9c9e0' : '#b8975a');
+  R(x0 - 1, 139, 1, 22, INK); R(x1, 139, 1, 22, INK); R(x0 - 1, 139, w + 2, 1, INK); R(x0 - 1, 160, w + 2, 1, INK);
+}
+const CRATE_PX = 12;
+let crateSpr = null;
+function crateSprite() {
+  if (crateSpr) return crateSpr;
+  const [c, g] = mk(CRATE_PX, CRATE_PX);
+  g.fillStyle = INK; g.fillRect(0, 0, 12, 12); g.fillStyle = '#b57a3c'; g.fillRect(1, 1, 10, 10);
+  g.fillStyle = '#d29a58'; g.fillRect(1, 1, 10, 1); g.fillRect(1, 1, 1, 10);
+  g.fillStyle = '#7a4a22'; g.fillRect(1, 10, 10, 1); g.fillRect(10, 1, 1, 10); g.fillRect(3, 3, 6, 6); g.fillStyle = '#9a6430'; g.fillRect(4, 4, 4, 4);
+  g.fillStyle = '#7a4a22'; for (let i = 0; i < 6; i++) { g.fillRect(3 + i, 3 + i, 1, 1); g.fillRect(8 - i, 3 + i, 1, 1); }
+  return crateSpr = c;
 }
 
 // ---------------------------------------------------------------- boxer
@@ -683,10 +745,26 @@ class Game {
     this.parts.length = 0; this.pops.length = 0; this.hitQ.length = 0; this.koQ.length = 0; this.ropeQ.length = 0;
     this.roundT = 0; this.roundHits = 0; this.belled = false; this.koInfo = null; this.tired = 0; this.tiredShown = false; this.ropeShake = [0, 0];
     this.cam.z = 1; this.cam.x = 0; this.cam.y = 3.5;
-    this.bg = paintArena(rx);
+    const prevArena = this.arena;
+    this.arena = this.forceArena || pick(ARENAS.filter(a => a !== prevArena));
+    this.bg = paintArena(rx, this.arena);
+    this.crates = [];
+    if (this.arena === 'crates') this.makeCrates(w, rx);
     this.bannerItems = modeIds.map(id => MODE_BY_ID[id].name);
     this.bannerLines = packLines(this.bannerItems, 30);
     this.makeCrowd();
+  }
+  // stacks of 2-4 wooden crates the boxers can knock about (they only touch the world and bodies/gloves, never arms)
+  makeCrates(w, rx) {
+    const xs = rx > 4 ? [-1.3, 1.3] : [0];
+    for (const x0 of xs) {
+      const n = 2 + ((Math.random() * 3) | 0), sz = 0.6;
+      for (let i = 0; i < n; i++) {
+        const b = w.createBody({ type: 'dynamic', position: { x: x0 + rand(-0.02, 0.02), y: sz / 2 + i * (sz + 0.004) + 0.002 }, angularDamping: 0.6, linearDamping: 0.05 });
+        b.createFixture(new pl.Box(sz / 2, sz / 2), { density: 5, friction: 0.7, restitution: 0.02, filterCategoryBits: CAT_WORLD, filterMaskBits: CAT_WORLD | CAT_BODY | CAT_GLOVE, userData: { kind: 'crate' } });
+        this.crates.push(b);
+      }
+    }
   }
   // one mode most rounds, two now and then; never the same mix twice in a row
   randomModes(ids) {
@@ -1031,17 +1109,17 @@ function drawLow(G) {
   g.drawImage(G.bg, 0, 0);
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
   // the crowd jumps up on big hits; camera flashes go off
-  const ex = G.excite;
-  for (const q of G.crowd) {
+  const ex = G.excite, hall = hallArena(G.arena);
+  for (const q of hall ? G.crowd : []) {
     const hop = ex > 0.05 && Math.sin(t * 12 + q.ph) > 0.3 - ex ? Math.round(ex * 2) : 0;
     const y = q.yb - hop;
     R(q.x, y - 4, 4, 4, q.shirt); R(q.x + 1, y - 7, 3, 3, q.skin);
     if (hop > 1) { R(q.x - 1, y - 8, 1, 3, q.skin); R(q.x + 4, y - 8, 1, 3, q.skin); }
   }
-  if (ex > 0.3 && !REDUCED) for (let i = 0; i < 3; i++) if (Math.random() < ex * 0.3) { const x = (Math.random() * ART_W) | 0, y = 44 + ((Math.random() * 64) | 0); R(x - 1, y, 3, 1, '#ffffff'); R(x, y - 1, 1, 3, '#ffffff'); }
+  if (hall && ex > 0.3 && !REDUCED) for (let i = 0; i < 3; i++) if (Math.random() < ex * 0.3) { const x = (Math.random() * ART_W) | 0, y = 44 + ((Math.random() * 64) | 0); R(x - 1, y, 3, 1, '#ffffff'); R(x, y - 1, 1, 3, '#ffffff'); }
   // back ropes between the corner posts, wobbling when somebody bounces off them
   const post = G.post, xl = ax(-post), xr = ax(post);
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; hall && k < 3; k++) {
     const yb = ay(ROPE_H[k]);
     for (let x = Math.round(xl); x <= Math.round(xr); x++) {
       const u = (x - xl) / (xr - xl), wob = (G.ropeShake[0] * (1 - u) + G.ropeShake[1] * u) * Math.sin(u * Math.PI) * Math.sin(t * 30 + k) * 2.2;
@@ -1049,7 +1127,9 @@ function drawLow(G) {
     }
   }
   // back corner posts
-  for (const s of [-1, 1]) { const x = ax(s * post); R(x - 2, ay(ROPE_TOP + 0.25), 4, ay(0) - ay(ROPE_TOP + 0.25), '#5b6178'); R(x - 2, ay(ROPE_TOP + 0.25), 1, ay(0) - ay(ROPE_TOP + 0.25), '#7a8199'); }
+  if (!hall) for (const s of [-1, 1]) { const x = ax(s * post), snow = G.arena === 'snow'; R(x - 2, 120, 5, 21, INK); R(x - 1, 121, 3, 19, snow ? '#9a6a40' : '#8a6a3c'); R(x - 2, 120, 5, 2, snow ? '#f4f8ff' : '#e8343b'); }
+  if (G.arena === 'snow' && !REDUCED) for (let i = 0; i < 50; i++) { const fx = (i * 67 + Math.sin(t * 0.8 + i) * 6) % ART_W, fy = (i * 37 + t * (14 + (i % 4) * 5)) % 150; R((fx + ART_W) % ART_W, fy, 1 + (i % 3 === 0), 1 + (i % 3 === 0), '#ffffff'); }
+  for (const s of hall ? [-1, 1] : []) { const x = ax(s * post); R(x - 2, ay(ROPE_TOP + 0.25), 4, ay(0) - ay(ROPE_TOP + 0.25), '#5b6178'); R(x - 2, ay(ROPE_TOP + 0.25), 1, ay(0) - ay(ROPE_TOP + 0.25), '#7a8199'); }
   // shadows
   for (const b of G.boxers) {
     const x = b.x, h = Math.max(0, b.footY()), k = clamp(1 - h / 4, 0.25, 1), ww = Math.round(18 * k);
@@ -1058,6 +1138,7 @@ function drawLow(G) {
 }
 // front corner posts with pads and the front ropes' ends, drawn over the boxers
 function drawFront(G) {
+  if (!hallArena(G.arena)) return;
   const post = G.post + 0.35;
   for (const s of [-1, 1]) {
     const x = ax(s * post), top = ay(ROPE_TOP + 0.3), T = TEAM[s < 0 ? 0 : 1];
@@ -1068,41 +1149,56 @@ function drawFront(G) {
     for (let k = 0; k < 3; k++) { const y = ay(ROPE_H[k]); for (let i = 1; i <= 8; i++) artRect(x - s * (2 + i) , y + Math.round(Math.sin(i / 8 * Math.PI) * sh * 2 * Math.sin(G.time * 30 + k)), 1, 1, ROPE_COLS[k]); }
   }
 }
+// score boxes in the bottom corners: red on the left, blue on the right
 function drawScoreboard(G) {
   for (let t = 0; t < 2; t++) {
-    const T = TEAM[t], x = t === 0 ? 129 : 165, pop = G.scorePop[t];
-    artRect(x - 1, 3, 28, 21, INK); artRect(x, 4, 26, 19, T.jersey); artRect(x, 21, 26, 2, T.dark);
-    txt(String(G.score[t]), AX(x + 13), AY(13.5 - pop * 2), 16 + pop * 6, '#ffffff', { bold: true });
-    const name = G.teamName(t), long = name.length > 5;
-    txt(name, AX(long ? (t === 0 ? x + 26 : x) : x + 13), AY(30), 8, T.light, { ow: 0.8, align: long ? (t === 0 ? 'right' : 'left') : 'center' });
+    const T = TEAM[t], x = t === 0 ? 6 : 288, y = 150, pop = G.scorePop[t];
+    artRect(x - 1, y - 1, 28, 25, INK); artRect(x, y, 26, 23, T.jersey); artRect(x, y + 21, 26, 2, T.dark);
+    txt(String(G.score[t]), AX(x + 13), AY(y + 11 - pop * 2), 16 + pop * 6, '#ffffff', { bold: true });
     // round pips: one per knockout needed
-    for (let i = 0; i < G.target; i++) { const px = t === 0 ? x - 6 - i * 5 : x + 29 + i * 5; artRect(px, 10, 4, 4, INK); artRect(px + 1, 11, 2, 2, i < G.score[t] ? '#ffd23f' : '#3a3f55'); }
+    for (let i = 0; i < G.target; i++) { const px = t === 0 ? x + 32 + i * 5 : x - 8 - i * 5; artRect(px, y + 8, 4, 4, INK); artRect(px + 1, y + 9, 2, 2, i < G.score[t] ? '#ffd23f' : '#3a3f55'); }
+    if (G.vsCpu || G.cvc) { const nm = G.teamName(t); txt(nm, AX(t === 0 ? x : x + 26), AY(y - 6), 8, T.light, { ow: 0.8, align: t === 0 ? 'left' : 'right' }); }
   }
-  txt('-', AX(160), AY(13), 8, CREAM);
+}
+const PAUSE_BTN = { x: 296, y: 4, w: 20, h: 20 };
+function drawPauseIcon(G) {
+  if (G.state === 'title' || G.state === 'over') return;
+  const b = PAUSE_BTN;
+  artRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2, INK); artRect(b.x, b.y, b.w, b.h, '#262b3d');
+  artRect(b.x + 6, b.y + 5, 3, 10, CREAM); artRect(b.x + 11, b.y + 5, 3, 10, CREAM);
+}
+// the star that flashes pink / red / white on the boxer who was hit
+function drawHitStar(G) {
+  const K = G.koInfo; if (!K || K.dbl || K.t > 1.25) return;
+  const b = G.boxers[K.loser], hp = b.head.getPosition(), cp = b.center();
+  const cols = ['#ff7ac8', '#ff2a3c', '#ffffff'], col = cols[Math.floor(K.t / 0.1) % 3];
+  const cx = SX((hp.x + cp.x) / 2), cy = SY((hp.y + cp.y) / 2 + 0.1), R1 = 0.75 * PPM * S * (K.t < 0.1 ? 0.6 : 1), R0 = R1 * 0.4, n = 8;
+  const path = () => { ctx.beginPath(); for (let i = 0; i < n * 2; i++) { const a = i * Math.PI / n - Math.PI / 2, r = i % 2 ? R0 : R1; ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } ctx.closePath(); };
+  path(); ctx.fillStyle = INK; ctx.lineWidth = Math.max(2, 3 * S); ctx.strokeStyle = INK; ctx.stroke(); ctx.fill();
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(0.8, 0.8); ctx.translate(-cx, -cy); path(); ctx.fillStyle = col; ctx.fill(); ctx.restore();
 }
 function drawHUD(G) {
   if (G.state === 'title') return;
   drawScoreboard(G);
+  // the round's random modes, joined with ' + ', stay up top for the whole round
+  if (G.bannerItems.length) txt(G.bannerItems.join(' + '), AX(160), AY(9), 8, '#ffffff', { ow: 0.8 });
+  drawPauseIcon(G);
   if (G.state === 'play' && G.roundT < 2.8) {
     ctx.globalAlpha = clamp((2.8 - G.roundT) / 0.5, 0, 1);
     txt(`ROUND ${G.round}`, AX(160), AY(48), 16, CREAM, { bold: true });
     if (G.round === 1) txt(`FIRST TO ${G.target} KNOCKOUTS`, AX(160), AY(62), 8, '#b9c3dd');
-    else G.bannerLines.forEach((l, i) => txt(l, AX(160), AY(62 + i * 10), 8, ORANGE));
     ctx.globalAlpha = 1;
   }
   if (G.state === 'play' && G.tired > 0 && Math.sin(G.realTime * 5) > -0.2) txt('WOBBLY LEGS', AX(160), AY(40), 8, '#ffd23f', { ow: 0.7 });
   const K = G.koInfo;
   if (K && (G.state === 'ko' || (G.state === 'transition' && G.stateT < 0.5))) drawKOBox(G, K);
 }
-// the K.O.! box: slams in big, then settles
+// the KO! pop text: slams in big in the scoring team's colour, then settles
 function drawKOBox(G, K) {
   const t = K.t, s = t < 0.15 ? lerp(2.2, 1, t / 0.15) : 1, T = K.winner >= 0 ? TEAM[K.winner] : null;
-  const cx = AX(160), cy = AY(66), u = S * s, w = 96, h = 34;
-  ctx.fillStyle = INK; ctx.fillRect(cx - (w / 2 + 2) * u, cy - (h / 2 + 2) * u, (w + 4) * u, (h + 4) * u);
-  ctx.fillStyle = '#ffd23f'; ctx.fillRect(cx - w / 2 * u, cy - h / 2 * u, w * u, h * u);
-  ctx.fillStyle = '#e0a21a'; ctx.fillRect(cx - w / 2 * u, cy + (h / 2 - 4) * u, w * u, 4 * u);
-  const word = K.dbl ? 'DOUBLE K.O.!' : K.how === 'out' ? 'RING OUT!' : 'K.O.!';
-  txt(word, cx, cy - 2 * u, (word.length > 6 ? 16 : 24) * s, '#ff4b4b', { bold: true, ow: 1.2 });
+  const cx = AX(160), cy = AY(58), col = T ? T.light : CREAM, deep = T ? T.dark : '#6b5f49';
+  const word = K.dbl ? 'DOUBLE KO!' : K.how === 'out' ? 'RING OUT!' : 'KO!', size = (word.length > 4 ? 24 : 40) * s;
+  txt(word, cx, cy + 4 * S, size, deep, { bold: true, ow: 1.6 }); txt(word, cx, cy, size, col, { bold: true, ow: 1.6 });
   if (t > 0.3) {
     const label = K.dbl ? 'NO POINT' : G.vsCpu ? (K.winner === 0 ? 'YOU WIN THE ROUND' : 'CPU WINS THE ROUND') : `${G.teamName(K.winner)} WINS THE ROUND`;
     const bw = Math.max(90, label.length * 5 + 10);
@@ -1155,15 +1251,17 @@ function drawTitle(G) {
   wobblyWord('FLOPPY', 65, 22, 16, ORANGE, '#7a2d0c', t);
   wobblyWord('BOXING', 65, 41, 16, CREAM, '#6b5f49', t);
   MENU_ITEMS.forEach((it, i) => {
-    const y = MENU_Y0 + i * MENU_DY, sel = i === G.menuSel;
-    artRect(MENU_X - 1, y - 1, MENU_W + 2, MENU_H + 2, INK);
-    artRect(MENU_X, y, MENU_W, MENU_H, sel ? ORANGE : '#262b3d');
-    if (sel) {
-      artRect(MENU_X, y + MENU_H - 2, MENU_W, 2, '#c4621a');
-      const nudge = Math.round(Math.sin(t * 8));
-      for (let k = 0; k < 3; k++) { artRect(MENU_X + 3 + nudge, y + 3 + k, 1 + k, 1, INK); artRect(MENU_X + 3 + nudge, y + 7 - k, 1 + k, 1, INK); }
+    const r = menuRect(i), sel = i === G.menuSel, big = i < 2, base = i === 0 ? '#2fae57' : i === 1 ? '#2f6bd8' : '#262b3d', hi = i === 0 ? GREEN : i === 1 ? '#5b95ff' : ORANGE;
+    artRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2, sel ? CREAM : INK);
+    artRect(r.x, r.y, r.w, r.h, sel ? hi : base);
+    artRect(r.x, r.y + r.h - 3, r.w, 3, i === 0 ? '#1c7a3a' : i === 1 ? '#1b3d86' : sel ? '#c4621a' : '#1b1f30');
+    if (big) {
+      txt(i === 0 ? '1P' : '2P', AX(r.x + r.w / 2), AY(r.y + 14), 24, sel ? INK : '#ffffff', sel ? { outline: hi, ow: 0.01, bold: true } : { bold: true, ow: 1.2 });
+      txt(i === 0 ? 'VS CPU' : 'VS FRIEND', AX(r.x + r.w / 2), AY(r.y + 28), 8, sel ? INK : CREAM, sel ? { outline: hi, ow: 0.01 } : { ow: 0.7 });
+    } else {
+      if (sel) { const nudge = Math.round(Math.sin(t * 8)); for (let k = 0; k < 3; k++) { artRect(r.x + 3 + nudge, r.y + 3 + k, 1 + k, 1, INK); artRect(r.x + 3 + nudge, r.y + 7 - k, 1 + k, 1, INK); } }
+      txt(it.label, AX(r.x + r.w / 2 + 2), AY(r.y + r.h / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
     }
-    txt(it.label, AX(MENU_X + MENU_W / 2 + 2), AY(y + MENU_H / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
   txt('ONE KEY: PRESS TO PUNCH', AX(65), AY(146), 8, '#b9c3dd', { ow: 0.6 });
   txt('ARROWS OR W/S + ENTER', AX(65), AY(162), 8, '#7d88a8', { ow: 0.6 });
@@ -1225,10 +1323,12 @@ function render(G) {
   ctx.drawImage(lowC, OX + SHX, OY + SHY, ART_W * S, ART_H * S);
   // the knocked-out boxer is drawn first, so the winner stands over them
   const order = G.boxers.slice().sort((a, b) => (b.ko ? 1 : 0) - (a.ko ? 1 : 0));
+  for (const cb of G.crates) { const p = cb.getPosition(), sp = crateSprite(); ctx.save(); ctx.translate(SX(p.x), SY(p.y)); ctx.rotate(-cb.getAngle()); ctx.drawImage(sp, -6 * S, -6 * S, 12 * S, 12 * S); ctx.restore(); }
   for (const b of order) b.draw(RENDER);
   drawFront(G);
   for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
   ctx.globalAlpha = 1;
+  drawHitStar(G);
   drawWorldText(G);
   if (zoom) ctx.restore();
   drawHUD(G);
@@ -1236,9 +1336,9 @@ function render(G) {
   if (G.state === 'over') drawOver(G);
   if (G.paused) drawPause();
   if (G.state === 'title') { drawTrans(G); drawTitle(G); } else drawTrans(G);
-  const sy = G.state === 'title' ? 8 : 172;
-  if (G.sfx.muted) txt('SOUND OFF  (M)', AX(316), AY(sy), 8, '#7d88a8', { align: 'right', ow: 0.6 });
-  else if (!G.sfx.running && Math.sin(G.realTime * 4) > -0.4) txt('CLICK FOR SOUND', AX(316), AY(sy), 8, ORANGE, { align: 'right', ow: 0.6 });
+  const tl = G.state !== 'title', sy = tl ? 22 : 8, sx = tl ? 4 : 316, sal = tl ? 'left' : 'right';
+  if (G.sfx.muted) txt('SOUND OFF  (M)', AX(sx), AY(sy), 8, '#7d88a8', { align: sal, ow: 0.6 });
+  else if (!G.sfx.running && Math.sin(G.realTime * 4) > -0.4) txt('CLICK FOR SOUND', AX(sx), AY(sy), 8, ORANGE, { align: sal, ow: 0.6 });
   ctx.restore();
 }
 
@@ -1315,7 +1415,7 @@ window.addEventListener('keyup', e => { if (KEYS.has(e.code)) { e.preventDefault
 window.addEventListener('blur', () => { G.releaseAll(); if (G.state === 'play' || G.state === 'ko') G.paused = true; });
 function artPoint(e) { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) * DPR - OX) / S, y: ((e.clientY - r.top) * DPR - OY) / S }; }
 function menuHit(p) {
-  for (let i = 0; i < MENU_ITEMS.length; i++) { const y = MENU_Y0 + i * MENU_DY; if (p.x >= MENU_X && p.x <= MENU_X + MENU_W && p.y >= y && p.y <= y + MENU_H) return i; }
+  for (let i = 0; i < MENU_ITEMS.length; i++) { const r = menuRect(i); if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return i; }
   return -1;
 }
 const overHit = p => OVER_BTNS.findIndex(r => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2);
@@ -1332,6 +1432,10 @@ cv.addEventListener('pointerdown', e => {
     const i = menuHit(artPoint(e));
     if (i >= 0) { G.menuSel = i; G.menuPick(); }
   } else if (G.state === 'over') { const i = overHit(artPoint(e)); if (i >= 0) { G.overSel = i; G.overPick(i); } }
+  else if (G.state === 'play' || G.state === 'ko' || G.paused) {
+    const p = artPoint(e), b = PAUSE_BTN;
+    if (p.x >= b.x - 2 && p.x <= b.x + b.w + 2 && p.y >= b.y - 2 && p.y <= b.y + b.h + 2) { G.paused = !G.paused; if (G.paused) G.releaseAll(); }
+  }
 });
 // vs the CPU the whole screen is your button; two players each hold their own half
 const TOUCH_ZONE = x => !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
