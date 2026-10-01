@@ -82,6 +82,7 @@ const BAL_KP = 30, BAL_KD = 3.2, SWAY_A = 0.2, SWAY_W = 3.3;
 const ROPE_TOP = 1.85, ROPE_H = [0.62, 1.22, 1.85], APRON_Y = -1.05;
 const BELL_T = 0.8;          // the bell rings this long into a round; keys do nothing before it
 const TIRED_T = 22;          // after this long in a round, legs start going wobbly (no endless rounds)
+const PUNCH_T = 0.28;     // how long the arm stays out after a press (the key can stay down)
 const HIT_MIN = 4;         // slowest glove speed (m/s, toward the other boxer) that counts as a punch
 const INK = '#141019', CREAM = '#fff6e0', ORANGE = '#ff8a2a', GREEN = '#43f07a';
 const TEAM = [
@@ -114,7 +115,9 @@ const MODES = [
   { id: 'giantgloves', cat: 'GLOVES', name: 'GIANT GLOVES' },
   { id: 'tinygloves', cat: 'GLOVES', name: 'TINY GLOVES' },
   { id: 'bighead', cat: 'BOXERS', name: 'BIG HEADS' },
-  { id: 'longarm', cat: 'BOXERS', name: 'LONG ARMS' },
+  { id: 'longarm', cat: 'BOXERS', name: 'LONG ARM' },
+  { id: 'shortarm', cat: 'BOXERS', name: 'SHORT ARM' },
+  { id: 'smallhead', cat: 'BOXERS', name: 'SMALL HEAD' },
   { id: 'heavy', cat: 'BOXERS', name: 'HEAVY BOXERS' },
   { id: 'longleg', cat: 'BOXERS', name: 'LONG LEGS' },
   { id: 'noodle', cat: 'BOXERS', name: 'NOODLE NECKS' },
@@ -123,6 +126,7 @@ const MODES = [
   { id: 'smallring', cat: 'RING', name: 'SMALL RING' },
   { id: 'lowgrav', cat: 'PHYSICS', name: 'LOW GRAVITY' },
   { id: 'superpunch', cat: 'PHYSICS', name: 'SUPER PUNCHES' },
+  { id: 'rocket', cat: 'PHYSICS', name: 'ROCKET PUNCH' },
 ];
 const MODE_CATS = ['GLOVES', 'BOXERS', 'RING', 'PHYSICS'];
 const MODE_BY_ID = Object.fromEntries(MODES.map(m => [m.id, m]));
@@ -131,7 +135,9 @@ const MODE_FX = {
   giantgloves: { glove: 1.75, gloveDen: 0.8 },
   tinygloves:  { glove: 0.55, punch: 1.2 },
   bighead:     { head: 1.65 },
+  smallhead:   { head: 0.6 },
   longarm:     { arm: 1.4 },
+  shortarm:    { arm: 0.7 },
   heavy:       { mass: 1.8, hop: 0.8, knock: 0.72 },
   longleg:     { leg: 1.45 },
   noodle:      { neck: 0.38 },
@@ -140,6 +146,7 @@ const MODE_FX = {
   smallring:   { ring: 0.68 },
   lowgrav:     { grav: 0.4 },
   superpunch:  { punch: 1.75 },
+  rocket:      { punch: 1.6, rocket: 1 },
 };
 const CPU_LEVELS = {
   // react: seconds between looks. mash: chance of just swinging whatever the distance. near/far: the head-to-head
@@ -503,7 +510,7 @@ class Boxer {
     }
   }
   armsUpdate() {
-    const g = this.game, dir = this.dir;
+    const g = this.game, dir = this.dir, c = g.cfg;
     for (let i = 0; i < 1; i++) {
       const sh = this.shoulders[i], el = this.elbows[i];
       if (this.ko) { sh.setMaxMotorTorque(2); sh.setMotorSpeed(0); el.setMaxMotorTorque(1); el.setMotorSpeed(0); continue; }
@@ -511,10 +518,13 @@ class Boxer {
       if (this.celebrate) {
         const wave = Math.sin(g.time * 9) * 0.35;
         this.drive(sh, dir * (2.9 + wave), 14, 14, 150); this.drive(el, dir * 0.3, 10, 10, 40);
-      } else if (this.held) {
-        // punch: the arm goes fully straight out at head height and stays out while the key is down
-        this.drive(sh, dir * 1.82, 34, 20, 320 * weak);
-        this.drive(el, dir * 0.05, 26, 22, 110 * weak);
+      } else if (this.held && g.time - this.pressT < PUNCH_T) {
+        // punch (as in the real game): the arm snaps fully straight out at head height, then comes back to the guard
+        // even if the key stays down. Press again to throw the next one.
+        const rk = c.rocket ? 1.5 : 1;
+        this.drive(sh, dir * 1.82, 34 * rk, 20 * rk, 320 * weak);
+        this.drive(el, dir * 0.05, 26 * rk, 22 * rk, 110 * weak);
+        if (c.rocket && !g.isShadow) { const p = this.glovePos(0); g.addPart(p.x, p.y, -dir * rand(1, 4), rand(-1, 1.5), 9, rand(0.2, 0.45), pick(['#ffb02a', '#ff5a1f', '#ffe9a8']), pick([1, 2])); }
       } else {
         // guard: the glove comes back up in front of the face, bouncing a little
         const bob = Math.sin(g.time * 6 + this.swayPh) * 0.1;
@@ -647,12 +657,12 @@ class Game {
   }
   newRoster() { this.roster = [makeLook(), makeLook()]; }
   setupRound(modeIds) {
-    const fx = { glove: 1, gloveDen: 1, punch: 1, head: 1, arm: 1, mass: 1, hop: 1, knock: 1, leg: 1, neck: 1, fric: 1, rope: 1, ropeBounce: 0, ring: 1, grav: 1 };
-    for (const id of modeIds) for (const [k, v] of Object.entries(MODE_FX[id] || {})) fx[k] = k === 'ropeBounce' ? v : fx[k] * v;
+    const fx = { rocket: 0, glove: 1, gloveDen: 1, punch: 1, head: 1, arm: 1, mass: 1, hop: 1, knock: 1, leg: 1, neck: 1, fric: 1, rope: 1, ropeBounce: 0, ring: 1, grav: 1 };
+    for (const id of modeIds) for (const [k, v] of Object.entries(MODE_FX[id] || {})) fx[k] = k === 'ropeBounce' || k === 'rocket' ? v : fx[k] * v;
     const gravity = 20 * fx.grav;
     this.modeIds = modeIds;
     this.cfg = { gravity, glove: fx.glove, gloveDen: fx.gloveDen, punch: fx.punch, head: fx.head, arm: fx.arm, mass: fx.mass, hop: fx.hop, knock: fx.knock,
-      leg: fx.leg, neck: fx.neck, fric: fx.fric, ropeK: 90 * fx.rope, ropeBounce: fx.ropeBounce, ringX: 5.5 * fx.ring };
+      leg: fx.leg, neck: fx.neck, rocket: fx.rocket, fric: fx.fric, ropeK: 90 * fx.rope, ropeBounce: fx.ropeBounce, ringX: 5.5 * fx.ring };
     const rx = this.cfg.ringX, post = rx + 0.55, edge = rx + 0.95;
     this.post = post; this.edge = edge;
     const w = this.world = new pl.World({ gravity: { x: 0, y: -gravity } });
@@ -825,14 +835,9 @@ class Game {
       vic.head.setLinearVelocity({ x: hv.x + dir * (2 + 7 * P) * k, y: hv.y + (0.6 + 2 * P) * k });
       const sk = lerp(0.85, 0.06, clamp(P / 1.2, 0, 1)); vic.stunK = vic.stun > 0 ? Math.min(vic.stunK, sk) : sk; vic.stun = Math.max(vic.stun, 0.25 + 0.6 * P); vic.dizzy = Math.max(vic.dizzy, 0.6 + 1.6 * P);
       vic.dmg += P;
-      // two punches to the head in a row put them on the floor
-      vic.headHits = this.time - vic.lastHeadT < 3.5 ? vic.headHits + 1 : 1; vic.lastHeadT = this.time;
-      if (vic.headHits >= 2) {
-        vic.headHits = 0; vic.stun = Math.max(vic.stun, 1.5); vic.stunK = 0.02; vic.dizzy = Math.max(vic.dizzy, 2.2);
-        vic.body.setAngularVelocity(-dir * (5 + 3 * P));
-        this.popup('DOWN!', h.x + dir * 0.3, h.y + 1.0, '#ff4b4b', 22, 0.9);
-      }
-    } else vic.dmg += P * 0.4;
+      // one clean hit is a knockout (as in the real game)
+      this.koQ.push([vic, 'hit']);
+    } else { vic.dmg += P * 0.4; if (P > 0.12) this.koQ.push([vic, 'hit']); }
     const bv = vic.body.getLinearVelocity();
     vic.body.setLinearVelocity({ x: bv.x + dir * (0.6 + 2.6 * P) * k, y: bv.y + 0.4 * P * k });
     vic.body.setAngularVelocity(vic.body.getAngularVelocity() - dir * (0.4 + 3 * P) * k);
