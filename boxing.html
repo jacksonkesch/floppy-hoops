@@ -78,7 +78,7 @@ const STEP = 1 / 60;
 const GAME_SPEED = 0.95;
 // bodies and heads bump each other; arms pass through everything but the floor; gloves hit bodies, heads and gloves
 const CAT_WORLD = 1, CAT_BODY = 2, CAT_ARM = 4, CAT_GLOVE = 8;
-const BAL_KP = 30, BAL_KD = 3.2, SWAY_A = 0.2, SWAY_W = 3.3;
+const BAL_KP = 30, BAL_KD = 3.2, SWAY_A = 0.5, SWAY_W = 3.3;
 const ROPE_TOP = 1.85, ROPE_H = [0.62, 1.22, 1.85], APRON_Y = -1.05;
 const BELL_T = 0.8;          // the bell rings this long into a round; keys do nothing before it
 const TIRED_T = 22;          // after this long in a round, legs start going wobbly (no endless rounds)
@@ -609,7 +609,7 @@ class Boxer {
   // a hop forward along your lean: leaning in (on the forward bob) sends you further
   lunge() {
     const c = this.game.cfg, dir = this.dir, lf = this.leanFwd(), v = Math.sqrt(c.gravity / 20);
-    const vx = dir * (2.4 + 6 * lf) * c.hop, vy = 3.4 * c.hop * v;
+    const vx = dir * (2.4 + 6 * lf) * c.hop, vy = 6.2 * c.hop * v;
     for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.25 + vx, y: vy }); }
     this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.5 - dir * 1.2);
     this.jumpCD = 0.32;
