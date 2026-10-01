@@ -102,10 +102,13 @@ const STEP = 1 / 60;
 const GAME_SPEED = 0.95;
 // bodies and heads bump each other; arms pass through everything but the floor; gloves hit bodies, heads and gloves
 const CAT_WORLD = 1, CAT_BODY = 2, CAT_ARM = 4, CAT_GLOVE = 8;
-const BAL_KP = 30, BAL_KD = 3.2, SWAY_A = 0.5, SWAY_W = 3.3;
+const BAL_KP = 40, BAL_KD = 5, SWAY_A = 0.3, SWAY_W = 3.3;
+// solid feel: heavier descent after the hop apex, a planted landing (a stiffer stance for a moment), a steadier neck
+const NECK_DR = 0.3, FALL_G = 8, LAND_T = 0.14, LAND_K = 1.6, LAND_DRAG = 0.6, HOP_SPIN = 0.7, AIR_RATE = 8, LAND_ANG = 0.4;
 const ROPE_TOP = 1.85, ROPE_H = [0.62, 1.22, 1.85], APRON_Y = -1.05;
 const BELL_T = 0.8;          // the bell rings this long into a round; keys do nothing before it
 const TIRED_T = 22;          // after this long in a round, legs start going wobbly (no endless rounds)
+const FLIP_T = 0.15, FLIP_DX = 0.4;   // the other boxer clearly on the other side for this long = turn round (and the punch/guard keys swap)
 const PUNCH_T = 0.28;     // how long the arm stays out after a punch press (the key can stay down)
 const HP_MAX = 100;
 // ---- SKILL: haymaker meter, guard / perfect block, combos + super, dodge + counter
@@ -117,7 +120,7 @@ const JAB_REC = 0.1;         // recovery after a jab before the next one can sta
 const PBLOCK_T = 0.15;       // guard pressed this recently before a punch lands = PERFECT BLOCK
 const GUARD_RED = 0.6;       // damage (and knockback) a held guard takes off
 const COMBO_T = 1.2, COMBO_STEP = 0.15;
-const HOP_BASE = 2.4, HOP_LEAN = 6;   // hop speed toward the other boxer: base + lean-in bonus
+const HOP_BASE = 2.4, HOP_LEAN = 9.5;   // hop speed toward the other boxer: base + lean-in bonus
 const SUPER_DMG = 35;
 const DOWN_HP = 15, KD_DMG = 8;   // a fall is only a knockout when health is this low; otherwise a KNOCKDOWN that costs a little health and they get back up
 const DMG_K = 1.2;           // all punch damage scales with this (so the health bar, not a fall, usually ends a round)
@@ -359,8 +362,8 @@ class Sfx {
     s.connect(f).connect(g).connect(this.master); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.03);
   }
   whoosh() { this.hiss(0.14, 0.07, 'bandpass', 500, 1700, 1.3); }
-  punch(i) { this.tone('sine', 190, 55, 0.14, 0.7 * i); this.hiss(0.09, 0.5 * i, 'lowpass', 2200, 400); this.hiss(0.025, 0.25 * i, 'highpass', 3000); }
-  body(i) { this.tone('sine', 120, 50, 0.12, 0.5 * i); this.hiss(0.08, 0.25 * i, 'lowpass', 900, 250); }
+  punch(i) { this.tone('sine', 190, 55, 0.14, 0.7 * i); this.tone('square', 900, 260, 0.03, 0.16 * i); this.tone('sine', 75, 35, 0.2, 0.55 * i, 0.01); this.hiss(0.09, 0.5 * i, 'lowpass', 2200, 400); this.hiss(0.025, 0.3 * i, 'highpass', 3000); }   // crack on top, thump underneath
+  body(i) { this.tone('sine', 120, 45, 0.16, 0.55 * i); this.tone('triangle', 200, 90, 0.05, 0.2 * i); this.hiss(0.08, 0.3 * i, 'lowpass', 800, 200); }   // duller, lower, a gut thump
   clash() { this.tone('triangle', 300, 220, 0.06, 0.12); this.hiss(0.04, 0.12, 'bandpass', 1500); }
   thud(i) { this.tone('sine', 95, 40, 0.18, 0.6 * i); this.hiss(0.12, 0.3 * i, 'lowpass', 700, 150); }
   hop() { this.tone('square', 190, 260, 0.05, 0.025); }
@@ -368,7 +371,7 @@ class Sfx {
   superGo() { this.tone('sawtooth', 90, 700, 0.5, 0.14); this.hiss(0.5, 0.3, 'bandpass', 400, 3000, 0.8); this.tone('square', 330, 990, 0.3, 0.05, 0.1); }
   dodge() { this.hiss(0.14, 0.12, 'bandpass', 1800, 500, 1.4); this.tone('triangle', 700, 300, 0.1, 0.06); }
   pblock() { this.tone('triangle', 880, 1320, 0.2, 0.18); this.tone('sine', 1760, 1760, 0.3, 0.08, 0.03); this.hiss(0.05, 0.2, 'highpass', 4000); }
-  block() { this.tone('triangle', 220, 120, 0.09, 0.2); this.hiss(0.06, 0.2, 'lowpass', 1200, 400); }
+  block() { this.tone('triangle', 260, 140, 0.08, 0.22); this.tone('sine', 140, 70, 0.1, 0.3); this.hiss(0.05, 0.28, 'bandpass', 1800, 900); }   // a padded slap, not a crack
   rope(i) { this.tone('sine', 140, 300, 0.18, 0.18 * i); this.tone('triangle', 70, 150, 0.18, 0.1 * i); }
   bell(n = 2) {
     if (!this.ok) return;
@@ -516,11 +519,11 @@ class Boxer {
     this.hp = HP_MAX; this.hpChunk = HP_MAX; this.chunkD = 0; this.hurtT = 0;
     this.held = false; this.pressT = -9; this.relT = -9; this.jumpCD = 0; this.stun = 0; this.dmg = 0; this.ko = false; this.celebrate = false;
     this.fallenT = 0; this.feet = 0; this.grounded = false; this.fallen = false; this.airT = 0; this.upT = 0;
-    this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.9, 1.1); this.hitCD = [0]; this.lastHitT = -9; this.headHits = 0; this.lastHeadT = -9; this.dizzy = 0; this.stunK = 1;
+    this.swayA = SWAY_A; this.hopLean = HOP_LEAN; this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.9, 1.1); this.hitCD = [0]; this.lastHitT = -9; this.headHits = 0; this.lastHeadT = -9; this.dizzy = 0; this.stunK = 1;
     // skills
     this.punchUntil = 0; this.jabReady = 0; this.buf = -9; this.atk = null; this.hayUntil = 0; this.charging = false; this.chargeT = 0; this.meter = 0; this.hw = 0.1; this.stumbleAt = 0;
     this.guardHeld = false; this.guardPressT = -9; this.gstam = 1; this.invUntil = 0; this.dodgeCD = 0; this.counterUntil = 0; this.lastJumpT = -9; this.boost = 0;
-    this.comboN = 0; this.comboT = -9; this.sup = 0; this.superFly = null; this.ghosts = []; this.ghostT = 0; this.lastJumpPress = -9; this.lastPunchPress = -9; this.dodgePopT = -9; this.kdT = -9; this.behindT = 0; this.gloveGhost = 0; this.gloveContactT = 0; this.gloveBehindT = 0;
+    this.comboN = 0; this.comboT = -9; this.sup = 0; this.superFly = null; this.ghosts = []; this.ghostT = 0; this.lastJumpPress = -9; this.lastPunchPress = -9; this.dodgePopT = -9; this.kdT = -9; this.behindT = 0; this.landT = -9; this.gloveGhost = 0; this.gloveContactT = 0; this.gloveBehindT = 0;
     this.build(x); this.makeSprites();
     if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
   }
@@ -543,7 +546,7 @@ class Boxer {
     this.head = w.createBody({ type: 'dynamic', position: { x, y: neckY + d.headR * 0.8 }, angularDamping: 1 });
     this.head.createFixture(new pl.Circle(d.headR), fd({ part: 'head' }, 9 * dm));
     this.neckHz = 2.4 * c.neck;
-    this.neck = w.createJoint(new pl.WeldJoint({ frequencyHz: this.neckHz, dampingRatio: 0.14 }, body, this.head, { x, y: neckY }));
+    this.neck = w.createJoint(new pl.WeldJoint({ frequencyHz: this.neckHz, dampingRatio: NECK_DR }, body, this.head, { x, y: neckY }));
     this.uppers = []; this.fores = []; this.shoulders = []; this.elbows = [];
     const shY = hipY + this.shLocal.y, elY = shY - d.upLen;
     this.gloveLocal = { x: 0, y: -d.foreLen - d.gloveR * 0.45 };
@@ -606,7 +609,21 @@ class Boxer {
     this.fallen = Math.abs(th) > 1.05;
     const onFeet = this.feet > 0 || this.footY() < 0.1;
     this.grounded = onFeet && Math.abs(th) < 1.0;
-    if (!onFeet) this.airT += dt; else this.airT = 0;
+    if (!onFeet) {
+      this.airT += dt;
+      // after the apex of a hop the fall is a bit heavier than the rise: less floaty
+      if (FALL_G && !this.superFly && !this.ko && body.getLinearVelocity().y < 0.3) for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x, y: lv.y - FALL_G * dt }); }
+    } else {
+      if (this.airT > 0.12 && !this.ko && !this.superFly) {
+        // landing: the feet plant (sideways slide dies off, the stance stiffens for a moment) with a puff of dust
+        const lv0 = body.getLinearVelocity();
+        this.landT = g.time;
+        if (this.stun <= 0 && Math.abs(this.angle()) < 1.0) body.setAngularVelocity(body.getAngularVelocity() * LAND_ANG);
+        if (this.stun <= 0 && LAND_DRAG < 1) for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * LAND_DRAG, y: lv.y }); }
+        if (lv0.y < -2.5 && !REDUCED && !g.isShadow) { const fp = this.footPoint(0); for (let i = 0; i < 3; i++) g.addPart(fp.x, 0.05, rand(-1.5, 1.5), rand(0.2, 0.8), 5, rand(0.15, 0.3), '#cfc6b4', 1); }
+      }
+      this.airT = 0;
+    }
     // balanced on a corner post or the ropes for ages: give them a shove back into the ring (and out of it if they hang on)
     if (this.airT > 1.6 && !this.ko && !this.fallen && g.roundT > BELL_T) {
       const side = Math.sign(this.x) || 1, ring = g.cfg.ringX;
@@ -628,12 +645,13 @@ class Boxer {
     if (onFeet && Math.abs(th) < 1.45) {
       // an underdamped spring toward a target that bobs back and forth like a boxer on their toes, leaning
       // a touch toward the other boxer. The legs get weaker as the hits add up.
-      const tgt = SWAY_A * Math.sin(g.time * this.swayW + this.swayPh) - dir * 0.07;
-      const acc = (Math.abs(th) > 0.8 ? 1.6 : 1) * BAL_KP * (tgt - th) - BAL_KD * om;
+      const tgt = this.swayA * Math.sin(g.time * this.swayW + this.swayPh) - dir * 0.07;
+      const stiff = this.stun <= 0 && g.time - this.landT < LAND_T ? LAND_K : 1;   // just landed and not stunned: planted
+      const acc = (Math.abs(th) > 0.8 ? 1.6 : 1) * stiff * BAL_KP * (tgt - th) - stiff * BAL_KD * om;
       body.applyTorque((this.I * acc - this.M * c.gravity * this.h * Math.sin(th) * 0.92) * bal, true);
     } else if (!this.fallen && this.stun <= 0) {
       // in the air: slowly right yourself (faster just after getting up)
-      const wt = clamp(-th * 2, -3, 3), rate = (this.upT > 0 ? 4 : 2.2) * Math.sqrt(20 / c.gravity) * bal;
+      const wt = clamp(-th * 2, -3, 3), rate = (this.upT > 0 ? 4 : AIR_RATE) * Math.sqrt(20 / c.gravity) * bal;
       body.setAngularVelocity(om + (wt - om) * Math.min(1, rate * dt));
     }
   }
@@ -665,7 +683,7 @@ class Boxer {
         if (c.rocket && !g.isShadow) { const p = this.glovePos(0); g.addPart(p.x, p.y, -dir * rand(1, 4), rand(-1, 1.5), 9, rand(0.2, 0.45), pick(['#ffb02a', '#ff5a1f', '#ffe9a8']), pick([1, 2])); }
       } else if (this.guarding()) {
         // guard held: both gloves (well, the glove) tight in front of the face
-        this.drive(sh, dir * 1.3, 14, 10, 110 * weak); this.drive(el, dir * 2.45, 12, 10, 60 * weak);
+        this.drive(sh, dir * 1.3, 18, 12, 190 * weak); this.drive(el, dir * 2.45, 16, 12, 100 * weak);
       } else {
         // guard: the glove comes back up in front of the face, bouncing a little
         const bob = Math.sin(g.time * 6 + this.swayPh) * 0.1;
@@ -790,8 +808,9 @@ class Boxer {
     }
     // the other boxer has hopped over you and is behind you: after a moment you spin round to face them again
     const op = g.boxers[1 - this.team];
-    if (live && op && !op.ko && !this.fallen && this.stun <= 0 && !this.superFly && (op.x - this.x) * dir < -0.8) this.behindT += dt; else this.behindT = 0;
-    if (this.behindT > 0.7) { this.behindT = 0; this.flip(); }
+    // (the punch/guard keys follow this.dir, so the turn waits for any punch / haymaker hold to finish)
+    if (live && op && !op.ko && !this.fallen && this.stun <= 0 && !this.superFly && (op.x - this.x) * dir < -FLIP_DX) this.behindT += dt; else this.behindT = 0;
+    if (this.behindT > FLIP_T && !this.charging && !this.held && t >= this.punchUntil && t >= this.hayUntil) { this.behindT = 0; this.flip(); }
     if (this.superFly) this.superStep(dt);
     // afterimages while dodging
     if (t < this.invUntil + 0.1) {
@@ -845,9 +864,9 @@ class Boxer {
   // a hop forward along your lean: leaning in (on the forward bob) sends you further
   lunge() {
     const c = this.game.cfg, dir = this.dir, lf = this.leanFwd(), v = Math.sqrt(c.gravity / 20);
-    const vx = dir * (HOP_BASE + HOP_LEAN * lf) * c.hop, vy = 6.2 * c.hop * v;
+    const vx = dir * (HOP_BASE + this.hopLean * lf) * c.hop, vy = 6.2 * c.hop * v;
     for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.25 + vx, y: vy }); }
-    this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.5 - dir * 1.2);
+    this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.5 - dir * HOP_SPIN);
     this.jumpCD = 0.32; this.lastJumpT = this.game.time;
   }
   getUp() {
@@ -1005,7 +1024,7 @@ class CPU {
     this.waitT += L.react;
     const pat = L.patience * (hd <= L.far + 1.2 ? 0.5 : 1) * rand(0.7, 1.3);
     // leaning in sends the hop further: wait for a lean that gets the glove there
-    const hopD = (HOP_BASE + HOP_LEAN * me.leanFwd()) * g.cfg.hop * 0.6, lateOK = this.waitT > pat + 0.5;
+    const hopD = (HOP_BASE + me.hopLean * me.leanFwd()) * g.cfg.hop * 0.6, lateOK = this.waitT > pat + 0.5;
     if (this.waitT > pat && (!L.lean || (hopD + R * 0.9 >= hd - 0.2 && me.leanFwd() >= L.lean) || lateOK)) { this.waitT = 0; this.tap('jump', 0.1); }
   }
 }
@@ -1049,9 +1068,9 @@ class Game {
     this.time = 0; this.realTime = 0; this.state = 'title'; this.stateT = 0; this.paused = false; this.menuOpen = false;
     this.menuSel = 0; this.overSel = 0;
     this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = this.settings.target; this.vsCpu = false; this.cvc = false; this.levels = null;
-    this.overT = 0; this.stats = newStats(); this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.evq = []; this.keysDown = new Set(); this.hs = {};
+    this.overT = 0; this.stats = newStats(); this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.evq = []; this.keysDown = new Set(); this.keyAct = {}; this.hs = {};
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
-    this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0; this.tired = 0;
+    this.shakeA = 0; this.punchZ = 0; this.flash = 0; this.trans = null; this.excite = 0; this.tired = 0;
     this.cam = { z: 1, x: 0, y: 3.5 };
     this.parts = []; this.pops = []; this.hitQ = []; this.koQ = []; this.ropeQ = [];
     this.ropeShake = [0, 0]; this.koInfo = null; this.rounds = [];
@@ -1148,7 +1167,7 @@ class Game {
     const lv = opts.levels || (this.cvc ? [s.cvcRed, s.cvcBlue] : null);
     this.levels = this.vsCpu ? [null, opts.level || s.level] : this.cvc ? lv : null;
     this.cpus = this.vsCpu ? [new CPU(this, 1, this.levels[1])] : this.cvc ? [new CPU(this, 0, lv[0]), new CPU(this, 1, lv[1])] : [];
-    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.keysDown.clear(); this.humanHeld = false;
+    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.keysDown.clear(); this.keyAct = {}; this.humanHeld = false;
   }
   startGame() { this.startTransition(ORANGE, () => this.newGame()); }
   nextRound() {
@@ -1156,7 +1175,7 @@ class Game {
     this.setupRound(this.randomModes(this.settings.modes));
     this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false];
     for (const c of this.cpus) c.down = false;
-    for (const code of [...this.keysDown]) this.keysDown.delete(code);
+    for (const code of [...this.keysDown]) this.keysDown.delete(code); this.keyAct = {};
     this.humanHeld = false;
   }
   toTitle() {
@@ -1164,7 +1183,7 @@ class Game {
     this.paused = false; this.trans = null; this.state = 'title'; this.stateT = 0; this.score = [0, 0]; this.round = 1;
     this.newRoster(); this.setupRound(this.randomModes(MODES.map(m => m.id)));
     this.cpus = [new CPU(this, 0, 'hard'), new CPU(this, 1, pick(['normal', 'hard']))]; this.vsCpu = false; this.cvc = false; this.levels = null;
-    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.keysDown.clear(); this.humanHeld = false;
+    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.keysDown.clear(); this.keyAct = {}; this.humanHeld = false;
   }
   rollTitle() {
     this.startTransition(pick([TEAM[0].jersey, TEAM[1].jersey, ORANGE]), () => { this.newRoster(); this.round++; this.setupRound(this.randomModes(MODES.map(m => m.id))); }, true);
@@ -1205,15 +1224,20 @@ class Game {
     if (down) this.sfx.init();
     if (this.cvc) return;   // CPU VS CPU is for watching
     const m = KEYMAP[code]; if (!m) return;
+    // vs the CPU either pair drives the human (team 0); in 2P each key drives its own team
+    const team = this.vsCpu ? 0 : m.team;
     if (down) {
       if (this.paused || (this.state !== 'play' && this.state !== 'ko')) return;
-      this.keysDown.add(code);
-    } else this.keysDown.delete(code);
-    // vs the CPU either pair drives the human (team 0); in 2P each key drives its own team
-    const team = this.vsCpu ? 0 : m.team, id = team + m.key;
-    const now = [...this.keysDown].some(c => KEYMAP[c].key === m.key && (this.vsCpu || KEYMAP[c].team === team));
-    if (now !== !!this.hs[id]) { this.hs[id] = now; this.evq.push({ team, key: m.key, down: now }); }
+      if (this.keysDown.has(code)) return;
+      this.keysDown.add(code); this.keyAct[code] = this.actOf(code, team);   // decided now, kept until this key comes up: a turn mid-hold never re-labels it
+    } else { if (!this.keysDown.has(code)) return; this.keysDown.delete(code); }
+    const act = this.keyAct[code] || this.actOf(code, team); if (!down) delete this.keyAct[code];
+    const id = team + act;
+    const now = [...this.keysDown].some(c => this.keyAct[c] === act && (this.vsCpu || KEYMAP[c].team === team));
+    if (now !== !!this.hs[id]) { this.hs[id] = now; this.evq.push({ team, key: act, down: now }); }
   }
+  // what a physical key does for this boxer right now: the side key toward the other boxer punches, the one away guards
+  actOf(code, team) { const m = KEYMAP[code], b = this.boxers[team]; return m.key !== 'side' ? m.key : (b && m.dx !== b.dir ? 'guard' : 'punch'); }
   releaseAll() { for (const code of [...this.keysDown]) this.humanKey(code, false); }
   handleEvent(ev) {
     const b = this.boxers[ev.team]; if (!b) return;
@@ -1328,6 +1352,7 @@ class Game {
     const n = Math.round(4 + Pk * 10);
     for (let i = 0; i < n; i++) this.addPart(h.x, h.y, dir * rand(0, 4) + rand(-1.5, 1.5), rand(-1, 3), 9, rand(0.25, 0.5), pick(['#ffffff', '#ffd23f', '#ffe9a8']), pick([1, 2]));
     const py = h.y + 0.7;
+    if (!blk) { this.hitStop(Pk, kind === 'hay'); this.addShake(1 + Pk * 2.5); }
     if (kind === 'hay' && !blk) {
       this.addShake(10); this.slowmo(0.3, 0.2); this.excite = 1; this.flash = Math.max(this.flash, REDUCED ? 0 : 0.12);
       for (let i = 0; i < 16; i++) this.addPart(h.x, h.y, dir * rand(0, 6) + rand(-2, 2), rand(-1, 4), 8, rand(0.3, 0.6), pick([GREEN, '#ffffff', '#b6ffd0']), pick([2, 3]));
@@ -1377,7 +1402,7 @@ class Game {
     if (live) { st.superHits++; st[head ? 'head' : 'body']++; st.big++; st.best = Math.max(st.best, Math.round(dmg)); st.combo = Math.max(st.combo, att.comboN); }
     this.sfx.punch(1); this.sfx.ko();
     this.popup('SUPER!', pos.x, pos.y + 1.1, ORANGE, 24, 1.1);
-    this.addShake(14); this.slowmo(0.22, 0.4); this.excite = 1; if (!REDUCED) this.flash = Math.max(this.flash, 0.3);
+    this.addShake(14); this.slowmo(0.22, 0.4); this.punchZ = Math.max(this.punchZ, REDUCED ? 0 : 0.16); this.excite = 1; if (!REDUCED) this.flash = Math.max(this.flash, 0.3);
     for (let i = 0; i < 30; i++) this.addPart(pos.x, pos.y, dir * rand(0, 8) + rand(-3, 3), rand(-2, 6), 6, rand(0.3, 0.8), pick(['#ffb02a', '#ff5a1f', '#ffe9a8', '#ffffff']), pick([2, 3]));
   }
   // ------------------------------------------------ knockouts
@@ -1509,7 +1534,9 @@ class Game {
     }
     if (this.state === 'title' && !this.trans && ((this.koInfo && this.koInfo.t > 2.2) || this.roundT > 40)) this.rollTitle();
   }
-  slowmo(scale, dur) { this.tsTarget = scale; this.tsT = dur; }
+  slowmo(scale, dur) { if (this.tsT > 0) { this.tsTarget = Math.min(this.tsTarget, scale); this.tsT = Math.max(this.tsT, dur); } else { this.tsTarget = scale; this.tsT = dur; } }
+  // hit-stop: a few frames of near-freeze (real time) on every landed punch, longer for big ones, and a small camera punch-in
+  hitStop(P, big) { if (this.tutorial) return; this.slowmo(big ? 0.06 : 0.1, big ? 0.085 : 0.035 + 0.02 * clamp(P, 0, 1.5)); this.punchZ = Math.max(this.punchZ, REDUCED ? 0 : big ? 0.11 : 0.025 + 0.04 * clamp(P, 0, 1.5)); }
   addShake(a) { this.shakeA = Math.max(this.shakeA, REDUCED ? a * 0.25 : a); }
   addPart(x, y, vx, vy, g, life, col, sz, kind) { if (this.parts.length < 500) this.parts.push({ x, y, vx, vy, g, life, max: life, col, sz, kind }); }
   popup(text, x, y, col, size, dur) { const lim = Math.max(0, 7.6 - text.length * size * 0.9 / 40); this.pops.push({ text, x: clamp(x, -lim, lim), y: clamp(y, 1.0, 6.2), col, size, dur, t: 0 }); }
@@ -1537,6 +1564,7 @@ class Game {
     }
     this.shakeA = Math.max(0, this.shakeA - rdt * 22);
     this.flash = Math.max(0, this.flash - rdt * 1.6);
+    this.punchZ = Math.max(0, this.punchZ - rdt * 0.5);
     this.updateCam(rdt);
   }
 }
@@ -1736,7 +1764,7 @@ function drawWorldText(G) {
     G.boxers.forEach((b, t) => {
       if (G.vsCpu && t === 1) return;
       const hp = b.head.getPosition(), bob = Math.sin(G.realTime * 6 + t) * 1.5, y = SY(hp.y + b.d.headR + 0.75) + bob * S, x = SX(hp.x);
-      const k = t === 0 ? ['W JUMP', 'D PUNCH', 'A GUARD'] : ['UP JUMP', 'LEFT PUNCH', 'RIGHT GUARD'];
+      const f = b.dir > 0, k = t === 0 ? ['W JUMP', f ? 'D PUNCH' : 'A PUNCH', f ? 'A GUARD' : 'D GUARD'] : ['UP JUMP', f ? 'RIGHT PUNCH' : 'LEFT PUNCH', f ? 'LEFT GUARD' : 'RIGHT GUARD'];
       k.forEach((l, i) => txt(l, x + (t === 0 ? -0.3 : 0.3) * PPM * S, y - (2 - i) * 9 * S, 8, TEAM[t].light, { bold: true, ow: 0.8, align: t === 0 ? 'right' : 'left' }));
     });
   }
@@ -1797,8 +1825,8 @@ function drawTitle(G) {
     }
   });
   txt('W / UP = JUMP', AX(65), AY(143), 8, '#b9c3dd', { ow: 0.6 });
-  txt('D / LEFT = PUNCH', AX(65), AY(151), 8, '#b9c3dd', { ow: 0.6 });
-  txt('A / RIGHT = GUARD', AX(65), AY(159), 8, '#b9c3dd', { ow: 0.6 });
+  txt('KEY TOWARD FOE = PUNCH', AX(65), AY(151), 8, '#b9c3dd', { ow: 0.6 });
+  txt('KEY AWAY = GUARD (A/D, L/R)', AX(65), AY(159), 8, '#b9c3dd', { ow: 0.6 });
   txt('ARROWS OR W/S + ENTER', AX(65), AY(168), 8, '#7d88a8', { ow: 0.6 });
   // a tip that changes every few seconds
   const TIPS = [['HOLD PUNCH, LET GO', 'IN GREEN = HAYMAKER'], ['TAP GUARD AT THE LAST', 'MOMENT = PERFECT BLOCK'], ['LAND AND TAKE HITS TO', 'FILL THE SUPER BAR'], ['FULL BAR: JUMP + PUNCH', '= SUPER UPPERCUT'], ['TAP GUARD WHILE HOPPING', '= DODGE, THEN COUNTER']];
@@ -1853,9 +1881,9 @@ function render(G) {
   ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, cv.width, cv.height);
   const sa = G.shakeA * S; SHX = sa ? rand(-sa, sa) : 0; SHY = sa ? rand(-sa, sa) : 0;
   ctx.save(); ctx.beginPath(); ctx.rect(OX, OY, ART_W * S, ART_H * S); ctx.clip();
-  const C = G.cam, zoom = C.z > 1.001;
+  const C = G.cam, zoom = C.z + G.punchZ > 1.001;
   if (zoom) {
-    const Z = C.z, px = clamp(ax(C.x), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(C.y), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
+    const Z = C.z + G.punchZ, px = clamp(ax(C.x), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(C.y), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
     ctx.save(); ctx.translate(OX + ART_W * S / 2, OY + ART_H * S / 2); ctx.scale(Z, Z); ctx.translate(-(OX + px * S), -(OY + py * S));
   }
   drawLow(G);
@@ -1930,7 +1958,7 @@ const TUT_PRE = 1.2, SILENT_SFX = new Proxy({}, { get: () => () => {} });
 // Each demo is a little generator "script": it presses the keys the way a player would and waits (a number of seconds, or until a
 // condition is true) between presses. It reads the same reach / incoming-punch numbers the CPU boxers use, so the move lands every loop.
 const TUT_LIST = [
-  { id: 'controls', name: 'CONTROLS', lines: ['THREE BUTTONS EACH. RED: A GUARD, W JUMP, D PUNCH.', 'BLUE: RIGHT GUARD, UP JUMP, LEFT PUNCH.'], len: 6.6, xs: [-2.6, 2.6], both: 'BLUE PLAYER', me: 'RED PLAYER',
+  { id: 'controls', name: 'CONTROLS', lines: ['RED: W JUMP, A + D. BLUE: UP JUMP, LEFT + RIGHT.', 'TOWARD FOE = PUNCH, AWAY = GUARD; SWAPS WHEN YOU CROSS.'], len: 6.6, xs: [-2.6, 2.6], both: 'BLUE PLAYER', me: 'RED PLAYER',
     *script(c) { yield 0.6; c.tap(0, 'jump'); yield 0.7; c.tap(1, 'jump'); yield 1.0; c.tap(0, 'punch'); yield 0.6; c.tap(1, 'punch'); yield 0.9; c.tap(0, 'guard', 0.5); yield 0.7; c.tap(1, 'guard', 0.5); },
     ok: () => true },
   { id: 'jump', name: 'JUMP', lines: ['TAP JUMP TO HOP TOWARD THE OTHER BOXER.', 'YOU CAN ONLY PUNCH WHEN YOU ARE CLOSE.'], len: 3.6, xs: [-2.2, 2.2],
@@ -1950,8 +1978,11 @@ const TUT_LIST = [
     *script(c) {
       yield 0.5; yield c.until(() => c.reach(1).ok); c.tap(1, 'punch');
       yield c.until(() => { const n = c.incoming(0); return n !== null && n <= 0.16; }, 1.5); c.tap(0, 'jump', 0.05); yield 0.04; c.tap(0, 'guard', 0.15);
-      yield 0.3; c.tap(1, 'jump');                       // the dummy hops in after its missed punch, so the counter has somewhere to land
-      yield 0.75; c.tap(0, 'jump'); yield 0.1; c.tap(0, 'punch');   // back on your feet: hop in and hit it while the counter is still live
+      yield 0.3; yield c.until(() => c.me(0).grounded, 0.8); c.tap(1, 'jump'); c.tap(0, 'jump'); yield 0.1;   // the dummy hops in after its missed punch, so the counter has somewhere to land
+      for (let i = 0; i < 7; i++) {   // the counter window is short: punch the moment the dummy is in reach, hop in when it is not
+        const me = c.me(0); if (me.counterUntil <= me.game.time) break;
+        if (c.reach(0).ok) { c.tap(0, 'punch'); yield 0.3; } else { if (me.grounded) c.tap(0, 'jump'); yield 0.12; }
+      }   // back on your feet: hop in and hit it while the counter is still live
     }, ok: T => T.stats[0].dodges >= 1 && T.stats[0].counters >= 1 },
   { id: 'combo', name: 'COMBO', lines: ['LAND PUNCHES IN A ROW BEFORE THE COMBO TIMER RUNS OUT.', 'EVERY HIT IN THE CHAIN HITS HARDER.'], len: 4, xs: [3.4, 4.6],
     *script(c) { yield 0.4; for (let i = 0; i < 4; i++) { yield c.until(() => c.reach(0).ok, 0.8); c.tap(0, 'punch'); yield 0.3; } }, ok: T => T.stats[0].combo >= 3 },
@@ -1965,7 +1996,7 @@ function tutReset() {
   T.state = 'play'; T.stateT = 0; T.koInfo = null; T.score = [0, 0]; T.stats = newStats(); T.trans = null;
   T.held = [false, false]; T.heldJ = [false, false]; T.heldG = [false, false]; T.evq.length = 0; T.hs = {}; T.keysDown.clear();
   T.timeScale = 1; T.tsT = 0; T.tsTarget = 1; T.shakeA = 0; T.flash = 0; T.excite = 0; T.tired = 0;
-  T.boxers.forEach((b, i) => { b.swayPh = i * 2.1; b.swayW = SWAY_W; });   // the same sway every loop, so every loop plays out the same
+  T.boxers.forEach((b, i) => { b.swayPh = i * 2.1; b.swayW = SWAY_W; b.swayA = 0.5; b.hopLean = 6; });   // the demos were timed with the livelier sway   // the same sway every loop, so every loop plays out the same
   if (d.sup) T.boxers[0].sup = 100;
   T.time = 0; T.roundT = BELL_T + 0.001; T.belled = true;   // no bell, no FIGHT!: the demo is live at once
   // let the boxers settle on their feet (silently, unseen) so every loop starts from the same calm stance
@@ -2097,7 +2128,8 @@ if (location.search.includes('debug')) window.floppyTut = { open: () => openTuto
 if (location.search.includes('debug')) { window.floppy = G; window.floppyLevels = CPU_LEVELS; window.floppyStep = n => { for (let i = 0; i < n; i++) { G.frame(STEP); if (!G.paused) G.fixed(STEP); } render(G); }; }
 resize();
 window.addEventListener('resize', resize);
-const KEYMAP = { KeyW: { team: 0, key: 'jump' }, KeyD: { team: 0, key: 'punch' }, KeyA: { team: 0, key: 'guard' }, ArrowUp: { team: 1, key: 'jump' }, ArrowLeft: { team: 1, key: 'punch' }, ArrowRight: { team: 1, key: 'guard' } };
+// the side keys are physical (left/right); whether one punches or guards depends on which way that boxer faces
+const KEYMAP = { KeyW: { team: 0, key: 'jump' }, KeyD: { team: 0, key: 'side', dx: 1 }, KeyA: { team: 0, key: 'side', dx: -1 }, ArrowUp: { team: 1, key: 'jump' }, ArrowLeft: { team: 1, key: 'side', dx: -1 }, ArrowRight: { team: 1, key: 'side', dx: 1 } };
 const KEYS = new Set(Object.keys(KEYMAP));
 window.addEventListener('keydown', e => {
   if (tutOn) { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault(); tutKey(e); return; }
@@ -2156,13 +2188,14 @@ cv.addEventListener('pointerdown', e => {
 });
 // Three buttons a side. vs the CPU: left half = JUMP, right half = PUNCH, a GUARD pad in the middle at the bottom.
 // Two players: red = JUMP | PUNCH | GUARD from the left edge in, blue = GUARD | PUNCH | JUMP out to the right edge.
+// (the two side pads punch or guard depending on which way that boxer faces: their labels follow, e.g. '< PUNCH' / 'GUARD >')
 const PADS_1P = [{ code: 'KeyW', name: 'JUMP', x0: 0, x1: 0.4 }, { code: 'KeyA', name: 'GUARD', x0: 0.4, x1: 0.6 }, { code: 'KeyD', name: 'PUNCH', x0: 0.6, x1: 1 }];
 const PADS_2P = [{ code: 'KeyW', name: 'JUMP', t: 0 }, { code: 'KeyD', name: 'PUNCH', t: 0 }, { code: 'KeyA', name: 'GUARD', t: 0 }, { code: 'ArrowRight', name: 'GUARD', t: 1 }, { code: 'ArrowLeft', name: 'PUNCH', t: 1 }, { code: 'ArrowUp', name: 'JUMP', t: 1 }].map((p, i) => Object.assign(p, { x0: i / 6, x1: (i + 1) / 6 }));
 const TOUCH_ZONE = (x, y) => {
   if (G.vsCpu) return x >= 0.4 && x < 0.6 && y > 0.55 ? 'KeyA' : x < 0.5 ? 'KeyW' : 'KeyD';
   return PADS_2P[Math.min(5, Math.floor(x * 6))].code;
 };
-const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>LEFT: JUMP</span><span>MIDDLE BOTTOM: GUARD</span><span>RIGHT: PUNCH (HOLD = HAYMAKER)</span>' : '<span>RED: JUMP, PUNCH, GUARD</span><span>BLUE: GUARD, PUNCH, JUMP</span>';
+const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>LEFT: JUMP</span><span>MIDDLE BOTTOM + RIGHT: PUNCH / GUARD (THE ONE TOWARD YOUR FOE PUNCHES; HOLD = HAYMAKER)</span>' : '<span>RED: JUMP + TWO SIDE PADS</span><span>BLUE: TWO SIDE PADS + JUMP</span><span>PAD TOWARD THE FOE = PUNCH</span>';
 function drawTouchPads(G) {
   if (G.tutorial || !document.body.classList.contains('touch') || G.cvc || G.paused || (G.state !== 'play' && G.state !== 'ko')) return;
   const pads = G.vsCpu ? PADS_1P : PADS_2P, W = cv.width, H = cv.height, y0 = H * 0.7, hh = H * 0.16, down = new Set(touchKeys.values());
@@ -2171,7 +2204,8 @@ function drawTouchPads(G) {
     const x = W * p.x0 + 4 * DPR, w = W * (p.x1 - p.x0) - 8 * DPR, col = p.t === 1 || p.code.startsWith('Arrow') ? '#86b2ff' : '#ff8173';
     ctx.globalAlpha = down.has(p.code) ? 0.65 : 0.38; ctx.fillStyle = down.has(p.code) ? (G.vsCpu ? '#ffffff' : col) : '#141019'; ctx.fillRect(x, y0, w, hh);
     ctx.globalAlpha = 0.9; ctx.strokeStyle = G.vsCpu ? CREAM : col; ctx.lineWidth = 2 * DPR; ctx.strokeRect(x, y0, w, hh);
-    ctx.fillStyle = CREAM; ctx.fillText(p.name, x + w / 2, y0 + hh / 2);
+    const act = G.actOf(p.code, G.vsCpu ? 0 : p.t), nm = act === 'jump' ? 'JUMP' : act === 'punch' ? 'PUNCH' : 'GUARD', ar = KEYMAP[p.code].dx;
+    ctx.fillStyle = CREAM; ctx.fillText(act === 'jump' ? nm : ar < 0 ? '< ' + nm : nm + ' >', x + w / 2, y0 + hh / 2);
   }
   ctx.restore();
 }
