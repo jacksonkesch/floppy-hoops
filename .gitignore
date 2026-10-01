@@ -1,0 +1,4 @@
+.claude-flow/
+.swarm/
+agentdb.rvf*
+ruvector.db
