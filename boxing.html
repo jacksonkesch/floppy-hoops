@@ -45,7 +45,7 @@
 </style>
 </head>
 <body>
-<canvas id="game" tabindex="0" aria-label="Floppy Boxing. Ragdoll boxing. Red: W to jump, D to punch. Blue: Up arrow to jump, Left arrow to punch. Knock the other boxer out by emptying their health bar."></canvas>
+<canvas id="game" tabindex="0" aria-label="Floppy Boxing. Ragdoll boxing with skill moves. Red: W to jump, D to punch (tap to jab, hold and let go in the green for a haymaker), A to guard. Blue: Up arrow to jump, Left arrow to punch, Right arrow to guard. Time a guard just before a punch for a perfect block, tap guard while hopping to dodge, fill the super bar and press jump and punch together for a super uppercut. Knock the other boxer out by emptying their health bar."></canvas>
 <div id="err" hidden>The physics engine didn't load. Check your connection and reload the page.</div>
 <div id="menu" hidden role="dialog" aria-labelledby="menu-title">
   <div class="panel">
@@ -84,6 +84,21 @@ const BELL_T = 0.8;          // the bell rings this long into a round; keys do n
 const TIRED_T = 22;          // after this long in a round, legs start going wobbly (no endless rounds)
 const PUNCH_T = 0.28;     // how long the arm stays out after a punch press (the key can stay down)
 const HP_MAX = 100;
+// ---- SKILL: haymaker meter, guard / perfect block, combos + super, dodge + counter
+const HOLD_T = 0.22;         // punch held this long (after the jab) and the haymaker meter starts
+const METER_SPD = 1.6;       // meter units per second (0..1..0, ping-pong)
+const METER_G = 0.8;         // centre of the green zone
+const HAY_MULT = 2.2;        // green haymaker damage
+const JAB_REC = 0.1;         // recovery after a jab before the next one can start (a press in the last bit is buffered)
+const PBLOCK_T = 0.15;       // guard pressed this recently before a punch lands = PERFECT BLOCK
+const GUARD_RED = 0.6;       // damage (and knockback) a held guard takes off
+const COMBO_T = 1.2, COMBO_STEP = 0.15;
+const HOP_BASE = 2.4, HOP_LEAN = 6;   // hop speed toward the other boxer: base + lean-in bonus
+const SUPER_DMG = 35;
+const DOWN_HP = 15, KD_DMG = 8;   // a fall is only a knockout when health is this low; otherwise a KNOCKDOWN that costs a little health and they get back up
+const DMG_K = 1.2;           // all punch damage scales with this (so the health bar, not a fall, usually ends a round)
+const DODGE_T = 0.35, DODGE_CD = 1.1, COUNTER_T = 0.8;
+const SUP_GAIN_HIT = 1.0, SUP_GAIN_TAKEN = 0.7, SUP_GAIN_PB = 12;   // super bar (0..100) per point of damage dealt / taken
 const HIT_MIN = 4;         // slowest glove speed (m/s, toward the other boxer) that counts as a punch
 const INK = '#141019', CREAM = '#fff6e0', ORANGE = '#ff8a2a', GREEN = '#43f07a';
 const TEAM = [
@@ -154,10 +169,13 @@ const CPU_LEVELS = {
   // distances it punches at. fuzz: how far off it judges that distance. patience: how long it waits just out of
   // range for the other boxer to come in (and whiff) before stepping in itself. close: chance of an uppercut when
   // smothered. aim: chance of holding a body-only punch to wait for the head. lean: how far it must be leaning in before it hops (0 = whenever), so the hop lands in reach. predict: how far ahead it reads where the other boxer's head is going. hold: how long it holds the key.
-  easy:       { react: 0.34, mash: 0.45, near: 0.6, far: 2.8, fuzz: 0.8,  patience: 0,   close: 0.5, predict: 0,    hold: [0.12, 0.5], aim: 0,   lean: 0 },
-  normal:     { react: 0.2,  mash: 0.05, near: 0.8, far: 2.2, fuzz: 0.45, patience: 0.6, close: 0.4, predict: 0,    hold: [0.15, 0.4], aim: 0.2, lean: 0 },
-  hard:       { react: 0.1,  mash: 0,    near: 1.0, far: 1.9, fuzz: 0.25, patience: 1.6, close: 0.25, predict: 0.03,  hold: [0.28, 0.36], aim: 0.5, lean: 0.1 },
-  impossible: { react: 0.017, mash: 0,   near: 1.1, far: 1.85, fuzz: 0,   patience: 2.5, close: 0.2, predict: 0.2,  hold: [0.3, 0.32], aim: 0.9, lean: 0.1 },
+  // SKILLS: rt = seconds before it can see a punch coming (it can only block/dodge after that). guardP: chance to throw a guard up at a
+  // punch it saw. pblock: chance to time that guard as a PERFECT BLOCK. dodgeP: chance to back-hop out of it. hay: chance to wind up a
+  // haymaker on a boxer who can't hit back, hayErr: how far off the green it lets go. superP: chance per look to fire a full super bar.
+  easy:       { react: 0.34, mash: 0.45, near: 0.6, far: 2.8, fuzz: 0.8,  patience: 0,   close: 0.5, predict: 0,    hold: [0.08, 0.16], aim: 0,   lean: 0,   rt: 0.2,  guardP: 0.04, pblock: 0,    dodgeP: 0.01, hay: 0.03, hayErr: 0.3,  superP: 0.1},
+  normal:     { react: 0.2,  mash: 0.05, near: 0.8, far: 2.2, fuzz: 0.45, patience: 0.6, close: 0.4, predict: 0,    hold: [0.08, 0.16], aim: 0.2, lean: 0,   rt: 0.1,  guardP: 0.12,  pblock: 0.04, dodgeP: 0.05,  hay: 0.12, hayErr: 0.16, superP: 0.4},
+  hard:       { react: 0.1,  mash: 0,    near: 1.0, far: 1.9, fuzz: 0.25, patience: 1.6, close: 0.25, predict: 0.03,  hold: [0.08, 0.16], aim: 0.5, lean: 0.1, rt: 0.06, guardP: 0.25,  pblock: 0.15, dodgeP: 0.1, hay: 0.3, hayErr: 0.08, superP: 0.8},
+  impossible: { react: 0.017, mash: 0,   near: 1.1, far: 1.85, fuzz: 0,   patience: 2.5, close: 0.2, predict: 0.2,  hold: [0.08, 0.16], aim: 0.9, lean: 0.1, rt: 0.02, guardP: 0.1,  pblock: 0.45,  dodgeP: 0.1,  hay: 0.3,  hayErr: 0.02, superP: 1},
 };
 const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER VS CPU' },
@@ -181,6 +199,11 @@ const KO_CLIPS = [
   { clip: 'greenlight', trim: [0.04, 1.6], gain: 2.1 }, { clip: 'chaching', trim: [0.15, 1.55], gain: 1.9 },
   { clip: 'daddyshome', trim: [0, 6.06], gain: 0.72 }, { clip: 'bigsplash', trim: [0, 3.3], gain: 1 },
   { clip: 'ding', trim: [0.06, 1.0], gain: 1 }, { clip: 'fnn', trim: [0, 6.14], gain: 0.55 },
+].filter(e => CLIP_SRC[e.clip]);
+// the haymaker's green-release clips: short ones, so the sound is over by the time it lands
+const HAY_CLIPS = [
+  { clip: 'greenlight', trim: [0.04, 1.6], gain: 2.1 }, { clip: 'ding', trim: [0.06, 1.0], gain: 1 }, { clip: 'chaching', trim: [0.15, 1.55], gain: 1.9 },
+  { clip: 'coke', trim: [0, 1.43], gain: 1 }, { clip: 'thatsgreen', trim: [0.03, 1.9], gain: 1 },
 ].filter(e => CLIP_SRC[e.clip]);
 const WIN_CLIP = CLIP_SRC.greenfn ? { clip: 'greenfn', trim: [0, 7.19], gain: 0.94 } : null;
 
@@ -316,6 +339,11 @@ class Sfx {
   clash() { this.tone('triangle', 300, 220, 0.06, 0.12); this.hiss(0.04, 0.12, 'bandpass', 1500); }
   thud(i) { this.tone('sine', 95, 40, 0.18, 0.6 * i); this.hiss(0.12, 0.3 * i, 'lowpass', 700, 150); }
   hop() { this.tone('square', 190, 260, 0.05, 0.025); }
+  haymaker() { this.tone('sawtooth', 120, 420, 0.22, 0.12); this.tone('sine', 520, 1040, 0.18, 0.1); this.hiss(0.2, 0.18, 'bandpass', 600, 2400, 1.2); }
+  superGo() { this.tone('sawtooth', 90, 700, 0.5, 0.14); this.hiss(0.5, 0.3, 'bandpass', 400, 3000, 0.8); this.tone('square', 330, 990, 0.3, 0.05, 0.1); }
+  dodge() { this.hiss(0.14, 0.12, 'bandpass', 1800, 500, 1.4); this.tone('triangle', 700, 300, 0.1, 0.06); }
+  pblock() { this.tone('triangle', 880, 1320, 0.2, 0.18); this.tone('sine', 1760, 1760, 0.3, 0.08, 0.03); this.hiss(0.05, 0.2, 'highpass', 4000); }
+  block() { this.tone('triangle', 220, 120, 0.09, 0.2); this.hiss(0.06, 0.2, 'lowpass', 1200, 400); }
   rope(i) { this.tone('sine', 140, 300, 0.18, 0.18 * i); this.tone('triangle', 70, 150, 0.18, 0.1 * i); }
   bell(n = 2) {
     if (!this.ok) return;
@@ -464,6 +492,10 @@ class Boxer {
     this.held = false; this.pressT = -9; this.relT = -9; this.jumpCD = 0; this.stun = 0; this.dmg = 0; this.ko = false; this.celebrate = false;
     this.fallenT = 0; this.feet = 0; this.grounded = false; this.fallen = false; this.airT = 0; this.upT = 0;
     this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.9, 1.1); this.hitCD = [0]; this.lastHitT = -9; this.headHits = 0; this.lastHeadT = -9; this.dizzy = 0; this.stunK = 1;
+    // skills
+    this.punchUntil = 0; this.jabReady = 0; this.buf = -9; this.atk = null; this.hayUntil = 0; this.charging = false; this.chargeT = 0; this.meter = 0; this.hw = 0.1; this.stumbleAt = 0;
+    this.guardHeld = false; this.guardPressT = -9; this.gstam = 1; this.invUntil = 0; this.dodgeCD = 0; this.counterUntil = 0; this.lastJumpT = -9; this.boost = 0;
+    this.comboN = 0; this.comboT = -9; this.sup = 0; this.superFly = null; this.ghosts = []; this.ghostT = 0; this.lastJumpPress = -9; this.lastPunchPress = -9; this.dodgePopT = -9; this.kdT = -9; this.behindT = 0;
     this.build(x); this.makeSprites();
     if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
   }
@@ -550,6 +582,13 @@ class Boxer {
     const onFeet = this.feet > 0 || this.footY() < 0.1;
     this.grounded = onFeet && Math.abs(th) < 1.0;
     if (!onFeet) this.airT += dt; else this.airT = 0;
+    // balanced on a corner post or the ropes for ages: give them a shove back into the ring (and out of it if they hang on)
+    if (this.airT > 1.6 && !this.ko && !this.fallen && g.roundT > BELL_T) {
+      const side = Math.sign(this.x) || 1, ring = g.cfg.ringX;
+      if (Math.abs(this.x) > ring - 0.8) for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x - side * 4 * dt * 60 * 0.1, y: Math.min(lv.y, 0.5) }); }
+      if (this.airT > 4.5) g.koQ.push([this, 'out']);
+    }
+    this.skillUpdate(dt);
     this.armsUpdate();
     if (this.ko) return;
     // tipped over but propped up (on the ropes, on the gloves, on the other boxer): pop back up if you can.
@@ -557,7 +596,7 @@ class Boxer {
     if (this.fallen) {
       this.fallenT += dt;
       if (this.fallenT > 0.5 && this.stun <= 0 && this.jumpCD <= 0 && g.tired < 0.5) this.getUp();
-      if (this.fallenT > 1.3) g.koQ.push([this, 'down']);
+      if (this.fallenT > (this.hp > DOWN_HP ? 2.6 : 1.3)) g.koQ.push([this, 'down']);
     } else this.fallenT = 0;
     this.upT -= dt;
     const bal = this.balance();
@@ -578,17 +617,30 @@ class Boxer {
     for (let i = 0; i < 1; i++) {
       const sh = this.shoulders[i], el = this.elbows[i];
       if (this.ko) { sh.setMaxMotorTorque(2); sh.setMotorSpeed(0); el.setMaxMotorTorque(1); el.setMotorSpeed(0); continue; }
-      const weak = this.stun > 0 ? 0.25 : 1;
+      const weak = this.stun > 0 ? 0.25 : 1, t = g.time;
       if (this.celebrate) {
         const wave = Math.sin(g.time * 9) * 0.35;
         this.drive(sh, dir * (2.9 + wave), 14, 14, 150); this.drive(el, dir * 0.3, 10, 10, 40);
-      } else if (this.held && g.time - this.pressT < PUNCH_T) {
-        // punch (as in the real game): the arm snaps fully straight out at head height, then comes back to the guard
-        // even if the key stays down. Press again to throw the next one.
+      } else if (this.superFly) {
+        // flying uppercut: the arm swings up from low to high, straight
+        const k = smooth(this.superFly.t / 0.28);
+        this.drive(sh, dir * lerp(0.2, 2.75, k), 40, 24, 420); this.drive(el, dir * lerp(0.9, 0.05, k), 30, 24, 140);
+      } else if (t < this.hayUntil) {
+        // haymaker: the wound-up arm whips through harder than a jab
+        this.drive(sh, dir * 1.85, 40, 26, 420 * weak); this.drive(el, dir * 0.05, 30, 26, 140 * weak);
+        if (!g.isShadow && !REDUCED) { const p = this.glovePos(0); g.addPart(p.x, p.y, -dir * rand(0.5, 2.5), rand(-0.5, 1.5), 4, rand(0.15, 0.3), pick(['#43f07a', '#ffffff', '#b6ffd0']), 1); }
+      } else if (this.charging) {
+        // winding up: the glove pulls back low behind the hip
+        this.drive(sh, dir * -0.35, 14, 10, 150 * weak); this.drive(el, dir * 0.55, 12, 10, 60 * weak);
+      } else if (t < this.punchUntil) {
+        // jab (as in the real game): the arm snaps fully straight out at head height, then comes back to the guard
         const rk = c.rocket ? 1.5 : 1;
         this.drive(sh, dir * 1.82, 34 * rk, 20 * rk, 320 * weak);
         this.drive(el, dir * 0.05, 26 * rk, 22 * rk, 110 * weak);
         if (c.rocket && !g.isShadow) { const p = this.glovePos(0); g.addPart(p.x, p.y, -dir * rand(1, 4), rand(-1, 1.5), 9, rand(0.2, 0.45), pick(['#ffb02a', '#ff5a1f', '#ffe9a8']), pick([1, 2])); }
+      } else if (this.guarding()) {
+        // guard held: both gloves (well, the glove) tight in front of the face
+        this.drive(sh, dir * 1.3, 14, 10, 110 * weak); this.drive(el, dir * 2.45, 12, 10, 60 * weak);
       } else {
         // guard: the glove comes back up in front of the face, bouncing a little
         const bob = Math.sin(g.time * 6 + this.swayPh) * 0.1;
@@ -597,15 +649,20 @@ class Boxer {
       }
     }
   }
-  // punch: only the arm snap. jump: only the hop (or the get-up when down). 'both' is what the CPU does with its one key.
-  press(mode = 'both') {
-    if (mode !== 'jump') this.punch();
-    if (mode !== 'punch') this.jump();
-  }
+  // punch: tap = jab (the arm snap, at once), hold on = haymaker meter. jump: only the hop (or the get-up when down).
   punch() {
-    const g = this.game;
-    this.held = true; this.pressT = g.time;
+    const g = this.game, t = g.time;
+    this.held = true; this.pressT = t;
+    if (t < this.jabReady) { this.buf = t; return false; }   // still recovering from the last jab: remembered for a moment
+    return this.fireJab();
+  }
+  fireJab() {
+    const g = this.game, t = g.time;
+    if (this.ko || this.fallen || this.superFly || this.charging || t < this.hayUntil) return false;
+    this.punchUntil = t + PUNCH_T; this.jabReady = t + PUNCH_T + JAB_REC; this.buf = -9;
+    this.atk = { kind: 'jab', mult: 1, until: t + PUNCH_T + 0.05, used: false };
     if (g.state === 'play') g.stats[this.team].punches++;
+    return true;
   }
   jump() {
     if (this.ko) return;
@@ -614,14 +671,159 @@ class Boxer {
   }
   release() {
     this.held = false; this.relT = this.game.time;
+    if (this.charging) this.fireCharge();
+  }
+  guarding() { return this.guardHeld && !this.ko && !this.fallen && !this.charging && !this.superFly && this.game.time >= this.hayUntil && this.game.time >= this.punchUntil; }
+  // how wide the green is: shrinks when wobbly (hurt, tired, stunned) or when the other boxer is right on top of you
+  greenHW() {
+    const g = this.game, op = g.boxers[1 - this.team];
+    let f = Math.min(this.balance(), 0.35 + 0.65 * this.hp / HP_MAX);
+    if (this.stun > 0) f *= 0.6;
+    if (op && Math.abs(op.head.getPosition().x - this.head.getPosition().x) < 1.1) f *= 0.7;
+    return clamp(0.14 * f, 0.04, 0.14);
+  }
+  startCharge() { this.charging = true; this.chargeT = 0; this.meter = 0; this.hw = this.greenHW(); }
+  cancelCharge() { this.charging = false; }
+  // let go of the meter: green = HAYMAKER, near it = a solid punch, way off = a weak punch and a stumble
+  fireCharge() {
+    const g = this.game, t = g.time, dir = this.dir, d = Math.abs(this.meter - METER_G);
+    this.charging = false;
+    const zone = d <= this.hw ? 'green' : d <= 0.22 ? 'good' : 'red';
+    this.hayUntil = t + 0.36; this.punchUntil = 0; this.jabReady = t + 0.36 + JAB_REC;
+    const mult = zone === 'green' ? HAY_MULT : zone === 'good' ? 1.35 : 0.5;
+    this.atk = { kind: zone === 'green' ? 'hay' : zone === 'good' ? 'good' : 'weak', mult, until: t + 0.46, used: false };
+    const st = g.stats[this.team];
+    if (g.state === 'play') { st.punches++; st.hays++; if (zone === 'green') st.green++; else if (zone === 'red') st.weak++; }
+    // step into it
+    const step = zone === 'green' ? 2.6 : zone === 'good' ? 1.6 : 0.8;
+    for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x + dir * step, y: lv.y }); }
+    const hp = this.head.getPosition();
+    if (zone === 'green') {
+      g.popup('HAYMAKER!', hp.x, hp.y + 1.0, GREEN, 24, 1.0);
+      g.sfx.haymaker(); g.addShake(5); g.slowmo(0.35, 0.18); g.excite = Math.max(g.excite, 0.8);
+      if (g.settings.memes === 'on') g.sfx.playClip(pick(HAY_CLIPS));
+      for (let i = 0; i < 14; i++) g.addPart(hp.x, hp.y, rand(-4, 4), rand(-1, 4), 6, rand(0.3, 0.6), pick([GREEN, '#ffffff', '#b6ffd0']), pick([1, 2]));
+    } else if (zone === 'red') {
+      g.popup('WEAK!', hp.x, hp.y + 0.9, '#ff5a4a', 8, 0.8);
+      this.stumbleAt = t + 0.25; g.sfx.clash();
+    } else g.sfx.whoosh();
+    if (zone !== 'red') g.sfx.whoosh();
+  }
+  guardDown() {
+    const g = this.game, t = g.time;
+    this.guardHeld = true;
+    if (this.ko) return;
+    if (this.charging) this.cancelCharge();
+    // tap guard while hopping (or just after a hop) = a quick back-hop dodge
+    if (this.dodgeCD <= 0 && !this.fallen && this.stun <= 0 && !this.superFly && (this.airT > 0.04 || t - this.lastJumpT < 0.25)) { this.dodge(); return; }
+    if (t - this.guardPressT > 0.5) this.guardPressT = t;     // a fresh timing window; mashing doesn't reopen it
+  }
+  guardUp() { this.guardHeld = false; }
+  dodge() {
+    const g = this.game, t = g.time, dir = this.dir;
+    this.invUntil = t + DODGE_T; this.dodgeCD = DODGE_CD; this.counterUntil = t + DODGE_T + COUNTER_T; this.ghostT = 0; this.ghosts.length = 0;
+    this.charging = false; this.punchUntil = Math.min(this.punchUntil, t); this.hayUntil = Math.min(this.hayUntil, t);
+    for (const b of this.parts) b.setLinearVelocity({ x: -dir * 5.4, y: Math.max(b.getLinearVelocity().y, 3.2 * Math.sqrt(g.cfg.gravity / 20)) });
+    this.body.setAngularVelocity(dir * 1.0);
+    g.sfx.dodge(); g.stats[this.team].dodgeTry++;
+  }
+  // flying uppercut: a big leap at the other boxer with the arm swinging up. Needs a full super bar.
+  super() {
+    const g = this.game, t = g.time, dir = this.dir, op = g.boxers[1 - this.team], c = g.cfg;
+    this.sup = 0; this.charging = false; this.atk = null; this.hayUntil = 0; this.punchUntil = 0; this.stumbleAt = 0;
+    const dx = Math.max(0, (op.head.getPosition().x - this.head.getPosition().x) * dir);
+    const vx = dir * clamp(dx * 2.3, 3.5, 10), vy = 7.2 * Math.sqrt(c.gravity / 20) * Math.sqrt(c.hop);
+    for (const b of this.parts) b.setLinearVelocity({ x: vx, y: vy });
+    this.body.setAngularVelocity(-dir * 0.8);
+    this.superFly = { t: 0, hit: false, until: 0.8 }; this.jumpCD = 0.8; this.upT = 0.8; this.lastJumpT = t;
+    if (g.state === 'play') g.stats[this.team].supers++;
+    const hp = this.head.getPosition();
+    g.popup('UPPERCUT!', hp.x, hp.y + 1.1, ORANGE, 16, 1.1); g.sfx.superGo(); g.addShake(4); g.slowmo(0.55, 0.15);
+  }
+  skillUpdate(dt) {
+    const g = this.game, t = g.time, dir = this.dir;
+    this.dodgeCD -= dt;
+    if (this.ko) { this.charging = false; this.superFly = null; return; }
+    const live = (g.state === 'play' || g.state === 'title') && g.roundT > BELL_T && !g.koInfo;
+    if (this.guarding()) this.gstam = Math.max(0, this.gstam - 0.45 * dt); else this.gstam = Math.min(1, this.gstam + 0.7 * dt);
+    if (this.stumbleAt && t >= this.stumbleAt) {
+      this.stumbleAt = 0; this.stun = Math.max(this.stun, 0.7); this.stunK = 0.45; this.dizzy = Math.max(this.dizzy, 0.7);
+      this.body.setAngularVelocity(this.body.getAngularVelocity() - dir * 1.6);
+    }
+    if (this.atk && t > this.atk.until) this.atk = null;
+    // a jab that was pressed during the last bit of recovery goes out now
+    if (this.buf > 0 && t >= this.jabReady) { if (t - this.buf < 0.16 && live && this.stun <= 0) this.fireJab(); this.buf = -9; }
+    // held on past the jab: the haymaker meter starts
+    if (live && this.held && !this.charging && !this.guardHeld && !this.superFly && t >= this.hayUntil && t - this.pressT >= HOLD_T && this.stun <= 0 && !this.fallen) this.startCharge();
+    if (this.charging) {
+      if (this.stun > 0 || this.fallen || !live) this.cancelCharge();
+      else {
+        this.chargeT += dt;
+        const x = (this.chargeT * METER_SPD) % 2; this.meter = x < 1 ? x : 2 - x;
+        this.hw = this.greenHW();
+      }
+    }
+    // the other boxer has hopped over you and is behind you: after a moment you spin round to face them again
+    const op = g.boxers[1 - this.team];
+    if (live && op && !op.ko && !this.fallen && this.stun <= 0 && !this.superFly && (op.x - this.x) * dir < -0.8) this.behindT += dt; else this.behindT = 0;
+    if (this.behindT > 0.7) { this.behindT = 0; this.flip(); }
+    if (this.superFly) this.superStep(dt);
+    // afterimages while dodging
+    if (t < this.invUntil + 0.1) {
+      this.ghostT -= dt;
+      if (this.ghostT <= 0 && t < this.invUntil) { this.ghostT = 0.05; this.ghosts.push({ t0: t, s: this.snap() }); }
+    }
+    while (this.ghosts.length && t - this.ghosts[0].t0 > 0.3) this.ghosts.shift();
+  }
+  // turn round to face the other way: the dir flips, the arm is mirrored about the shoulder so nothing jolts
+  flip() {
+    this.dir = -this.dir; const dir = this.dir;
+    if (this.game.state === 'play') this.game.stats[this.team].flips++;
+    this.legX = [dir * 0.09, -dir * 0.09];
+    this.elbows[0].setLimits(...(dir > 0 ? [-0.15, 2.7] : [-2.7, 0.15]));
+    const sx = this.body.getWorldPoint(this.shLocal).x;
+    for (const b of [this.uppers[0], this.fores[0]]) {
+      const p = b.getPosition(), v = b.getLinearVelocity();
+      b.setTransform({ x: 2 * sx - p.x, y: p.y }, -b.getAngle()); b.setLinearVelocity({ x: -v.x, y: v.y }); b.setAngularVelocity(-b.getAngularVelocity());
+    }
+    this.punchUntil = 0; this.hayUntil = 0; this.charging = false;
+  }
+  snap() {
+    const q = b => { const p = b.getPosition(); return new Pose(p.x, p.y, b.getAngle()); };
+    return { body: q(this.body), head: q(this.head), up: q(this.uppers[0]), fore: q(this.fores[0]) };
+  }
+  superStep(dt) {
+    const g = this.game, F = this.superFly, dir = this.dir, op = g.boxers[1 - this.team], t = g.time;
+    F.t += dt;
+    const gp = this.glovePos(0);
+    for (let i = 0; i < 2; i++) g.addPart(gp.x, gp.y, -dir * rand(0.5, 3), rand(-1, 2.5), 3, rand(0.2, 0.45), pick(['#ffb02a', '#ff5a1f', '#ffe9a8', '#ff3b1a']), pick([2, 3]));
+    // never fly past the other boxer (you can't turn round): stop short of their head, and slow down after the homing stretch
+    if (!op.ko) {
+      const hx = (op.head.getPosition().x - this.head.getPosition().x) * dir;
+      if (hx < 0.55 && F.t > 0.08) for (const b of this.parts) { const lv = b.getLinearVelocity(); if (lv.x * dir > 0) b.setLinearVelocity({ x: -dir * 0.6, y: lv.y }); }
+      else if (F.t >= 0.45) for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.9, y: lv.y }); }
+    }
+    if (!F.hit) {
+      // home in on the other boxer's head for the first stretch of the flight
+      if (F.t < 0.45 && !op.ko) {
+        const hx = (op.head.getPosition().x - this.head.getPosition().x) * dir;
+        if (hx > 0.3) for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lerp(lv.x, dir * clamp(hx * 3.2, 2, 10), Math.min(1, dt * 10)), y: lv.y }); }
+      }
+      // close enough: it lands (also when the contact missed the exact moment)
+      const hp = op.head.getPosition(), cp = op.center();
+      const dh = Math.hypot(gp.x - hp.x, gp.y - hp.y) - op.d.headR - this.d.gloveR;
+      const bx = Math.abs(gp.x - cp.x) < op.d.torsoW / 2 + this.d.gloveR + 0.05 && Math.abs(gp.y - cp.y) < op.d.torsoH / 2 + this.d.gloveR;
+      if (!op.ko && (dh < 0.12 || bx) && F.t > 0.04) g.superHit(this, op, dh < 0.12 ? hp : cp, dh < 0.12);
+    }
+    if (F.t > F.until || (F.hit && F.t > F.hitT + 0.25)) this.superFly = null;
   }
   // a hop forward along your lean: leaning in (on the forward bob) sends you further
   lunge() {
     const c = this.game.cfg, dir = this.dir, lf = this.leanFwd(), v = Math.sqrt(c.gravity / 20);
-    const vx = dir * (2.4 + 6 * lf) * c.hop, vy = 6.2 * c.hop * v;
+    const vx = dir * (HOP_BASE + HOP_LEAN * lf) * c.hop, vy = 6.2 * c.hop * v;
     for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.25 + vx, y: vy }); }
     this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.5 - dir * 1.2);
-    this.jumpCD = 0.32;
+    this.jumpCD = 0.32; this.lastJumpT = this.game.time;
   }
   getUp() {
     const th = this.angle(), g = this.game.cfg.gravity, v = 6 * Math.sqrt(g / 20);
@@ -634,6 +836,14 @@ class Boxer {
   }
   draw(r) {
     const s = this.spr, flip = this.dir < 0, front = 0;
+    // dodge afterimages
+    const gt = this.game.time;
+    for (const gh of this.ghosts) {
+      const a = clamp(1 - (gt - gh.t0) / 0.3, 0, 1) * 0.4; if (a <= 0) continue;
+      ctx.globalAlpha = a; const q = gh.s;
+      r.local(s.torso, q.body, this.tc.x, this.tc.y, flip); r.part(s.head, q.head, flip); r.part(s.up, q.up, flip); r.part(s.fore, q.fore, flip);
+    }
+    ctx.globalAlpha = 1;
     const glove = (i, spr) => { const p = this.glovePos(i); r.part(spr, new Pose(p.x, p.y, this.fores[i].getAngle()), flip); };
     // back leg, front leg, torso, head, arm
     r.local(s.legB, this.body, this.legX[1], 0, flip);
@@ -651,7 +861,8 @@ class Boxer {
 class CPU {
   constructor(game, team, level) {
     this.g = game; this.team = team; this.level = level; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal;
-    this.dn = { punch: false, jump: false }; this.until = { punch: 0, jump: 0 }; this.punchCD = 0; this.aimT = 0;
+    this.dn = { punch: false, jump: false, guard: false }; this.until = { punch: 0, jump: 0, guard: 0 }; this.punchCD = 0; this.aimT = 0;
+    this.hayMode = false; this.hayTgt = METER_G; this.prevDiff = 0; this.hayDead = 0; this.threatT = -9; this.threatAct = null; this.pendGuard = -1; this.superWait = 0;
     this.t = 0; this.think = rand(0, 0.3); this.waitT = 0; this.bias = 0; this.biasT = 0;
   }
   set(key, down) { if (this.dn[key] === down) return; this.dn[key] = down; this.g.evq.push({ team: this.team, key, down }); }
@@ -667,11 +878,62 @@ class CPU {
     const bodyOk = bx > 0 && bx - od.torsoW / 2 * 0.8 < R && Math.abs(bp.y - sh.y) < od.torsoH / 2 + d.gloveR;
     return { ok: headOk || bodyOk, head: headOk, R, hx };
   }
+  // what the other boxer's glove is about to do to me: seconds until it lands (null if no punch is coming)
+  incoming(me, op) {
+    const g = this.g, t = g.time;
+    if (op.ko) return null;
+    const flying = !!op.superFly, punching = (t < op.punchUntil) || t < op.hayUntil || flying;
+    if (!punching) return null;
+    const gp = op.glovePos(0), gv = op.fores[0].getLinearVelocityFromWorldPoint(gp), mv = me.body.getLinearVelocity();
+    const closing = (gv.x - mv.x) * op.dir;
+    if (closing < 1.5) return null;
+    const hx = (me.head.getPosition().x - gp.x) * op.dir - me.d.headR - op.d.gloveR, bx = (me.center().x - gp.x) * op.dir - me.d.torsoW / 2 - op.d.gloveR;
+    const gap = Math.max(0, Math.min(hx, bx));
+    if (gap > 2.2) return null;
+    return gap / closing;
+  }
+  // reflexes, run every step: the haymaker meter, guard / perfect block / dodge when a punch is coming. true = busy
+  skills(dt) {
+    const g = this.g, L = this.L, me = g.boxers[this.team], op = g.boxers[1 - this.team], t = g.time;
+    if (me.ko || op.ko) { this.hayMode = false; this.set('punch', false); this.set('guard', false); return false; }
+    // the haymaker meter: let go when it crosses the spot it picked in the green (level-dependent error)
+    if (this.hayMode) {
+      if (me.stun > 0 || me.fallen || this.t > this.hayDead) { this.hayMode = false; this.set('punch', false); this.punchCD = 0.3; }
+      else if (me.charging) {
+        const d = me.meter - this.hayTgt, crossed = this.prevDiff !== 0 && Math.sign(d) !== Math.sign(this.prevDiff);
+        this.prevDiff = d;
+        if (crossed || Math.abs(d) < 0.012) {
+          const r = this.reach(me, op, 0.12);
+          if (r.ok || me.chargeT > 1.9) { this.hayMode = false; this.set('punch', false); this.punchCD = PUNCH_T + 0.3; }
+        }
+      }
+    }
+    // a punch is coming
+    if (this.pendGuard >= 0 && this.t >= this.pendGuard) { this.pendGuard = -1; this.tap('guard', 0.22); }
+    const tti = this.incoming(me, op);
+    if (tti === null) { this.threatAct = null; return false; }
+    const seen = Math.max(op.pressT, op.hayUntil - 0.36, 0);   // when the punch began
+    if (t - seen < L.rt && !op.superFly) return false;          // hasn't seen it yet
+    if (!this.threatAct) {
+      const u = Math.random(), canDodge = me.dodgeCD <= 0 && me.stun <= 0 && !me.fallen && (!me.grounded || me.jumpCD <= 0);
+      if (canDodge && u < L.dodgeP) this.threatAct = 'dodge';
+      else if (u < L.dodgeP + L.pblock) this.threatAct = 'pblock';
+      else if (u < L.dodgeP + L.pblock + L.guardP) this.threatAct = 'guard';
+      else this.threatAct = 'none';
+      this.threatT = t;
+      if (this.threatAct !== 'none' && this.hayMode) { this.hayMode = false; this.set('punch', false); }
+      if (this.threatAct === 'dodge') {
+        if (me.grounded) { this.tap('jump', 0.05); this.pendGuard = this.t + 0.034; } else this.tap('guard', 0.2);
+      } else if (this.threatAct === 'guard') this.tap('guard', 0.35);
+    } else if (this.threatAct === 'pblock' && !this.dn.guard && tti <= 0.09) this.tap('guard', 0.25);
+    return false;
+  }
   update(dt) {
     const g = this.g, L = this.L;
     this.t += dt; this.punchCD -= dt;
-    for (const k of ['punch', 'jump']) if (this.dn[k] && this.t >= this.until[k]) this.set(k, false);
-    if (!((g.state === 'play' || g.state === 'title') && g.roundT > BELL_T)) { this.set('punch', false); this.set('jump', false); return; }
+    for (const k of ['punch', 'jump', 'guard']) if (this.dn[k] && this.t >= this.until[k] && !(k === 'punch' && this.hayMode)) this.set(k, false);
+    if (!((g.state === 'play' || g.state === 'title') && g.roundT > BELL_T)) { this.set('punch', false); this.set('jump', false); this.set('guard', false); this.hayMode = false; return; }
+    if (this.skills(dt)) return;
     if ((this.think -= dt) > 0) return;
     this.think = L.react * rand(0.7, 1.3);
     const me = g.boxers[this.team], op = g.boxers[1 - this.team];
@@ -680,7 +942,21 @@ class CPU {
     if (me.fallen) { if (!this.dn.jump) this.tap('jump', 0.1); return; }
     if (me.stun > 0) return;
     if ((this.biasT -= L.react) <= 0) { this.bias = (Math.random() * 2 - 1) * L.fuzz; this.biasT = 0.8; }
-    const ready = this.punchCD <= 0 && !this.dn.punch && !(me.held);
+    const ready = this.punchCD <= 0 && !this.dn.punch && !(me.held) && !this.dn.guard;
+    // a full super bar: leap at them with jump + punch together
+    if (me.sup >= 100 && !me.superFly && !this.dn.guard && Math.random() < L.superP) {
+      const sx = (op.head.getPosition().x - me.head.getPosition().x) * me.dir;
+      if (sx > 1.0 && sx < 4.6 && op.invUntil < g.time) { this.tap('punch', 0.12); this.tap('jump', 0.1); this.punchCD = 0.6; return; }
+    }
+    // a boxer who can't hit back (stunned, dizzy, just whiffed) gets a haymaker: hold punch, let go in the green
+    if (ready && !this.hayMode && L.hay > 0 && !this.dn.guard && me.guardPressT < g.time - 0.4 && me.boost < g.time) {
+      const helpless = op.stun > 0.15 || op.fallen;
+      const rr = this.reach(me, op, 0.2);
+      if (helpless && rr.hx > 0 && rr.hx - rr.R < 0.9 && Math.random() < L.hay) {
+        this.hayMode = true; this.hayDead = this.t + 2.6; this.hayTgt = METER_G + (Math.random() * 2 - 1) * L.hayErr; this.prevDiff = 0;
+        this.set('punch', true); this.until.punch = 1e9; this.punchCD = 99; return;
+      }
+    }
     // punch only when the glove can reach (the hop's speed carries you in, so look a little ahead; better levels look further)
     const r = this.reach(me, op, 0.08 + L.predict + L.react * 0.5), R = r.R;
     const slack = this.bias * 0.5;              // sloppy levels misjudge the reach
@@ -704,7 +980,7 @@ class CPU {
     this.waitT += L.react;
     const pat = L.patience * (hd <= L.far + 1.2 ? 0.5 : 1) * rand(0.7, 1.3);
     // leaning in sends the hop further: wait for a lean that gets the glove there
-    const hopD = (2.4 + 6 * me.leanFwd()) * g.cfg.hop * 0.6, lateOK = this.waitT > pat + 0.5;
+    const hopD = (HOP_BASE + HOP_LEAN * me.leanFwd()) * g.cfg.hop * 0.6, lateOK = this.waitT > pat + 0.5;
     if (this.waitT > pat && (!L.lean || (hopD + R * 0.9 >= hd - 0.2 && me.leanFwd() >= L.lean) || lateOK)) { this.waitT = 0; this.tap('jump', 0.1); }
   }
 }
@@ -736,7 +1012,7 @@ function makeLook() {
   return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk']) };
 }
-const newStats = () => [0, 1].map(() => ({ punches: 0, head: 0, body: 0, big: 0, kos: 0, best: 0 }));
+const newStats = () => [0, 1].map(() => ({ punches: 0, head: 0, body: 0, big: 0, kos: 0, best: 0, hays: 0, green: 0, weak: 0, pblocks: 0, blocks: 0, dodgeTry: 0, dodges: 0, counters: 0, supers: 0, superHits: 0, combo: 0, jabHits: 0, hayHits: 0, knockdowns: 0, flips: 0 }));
 const START_X = 2.3;
 
 class Game {
@@ -746,7 +1022,7 @@ class Game {
     this.time = 0; this.realTime = 0; this.state = 'title'; this.stateT = 0; this.paused = false; this.menuOpen = false;
     this.menuSel = 0; this.overSel = 0;
     this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = this.settings.target; this.vsCpu = false; this.cvc = false; this.levels = null;
-    this.stats = newStats(); this.held = [false, false]; this.heldJ = [false, false]; this.evq = []; this.keysDown = new Set(); this.hs = {};
+    this.stats = newStats(); this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.evq = []; this.keysDown = new Set(); this.hs = {};
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
     this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0; this.tired = 0;
     this.cam = { z: 1, x: 0, y: 3.5 };
@@ -843,13 +1119,13 @@ class Game {
     const lv = opts.levels || (this.cvc ? [s.cvcRed, s.cvcBlue] : null);
     this.levels = this.vsCpu ? [null, opts.level || s.level] : this.cvc ? lv : null;
     this.cpus = this.vsCpu ? [new CPU(this, 1, this.levels[1])] : this.cvc ? [new CPU(this, 0, lv[0]), new CPU(this, 1, lv[1])] : [];
-    this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false;
+    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.keysDown.clear(); this.humanHeld = false;
   }
   startGame() { this.startTransition(ORANGE, () => this.newGame()); }
   nextRound() {
     this.round++; this.state = 'play'; this.stateT = 0;
     this.setupRound(this.randomModes(this.settings.modes));
-    this.held = [false, false];
+    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false];
     for (const c of this.cpus) c.down = false;
     for (const code of [...this.keysDown]) this.keysDown.delete(code);
     this.humanHeld = false;
@@ -859,7 +1135,7 @@ class Game {
     this.paused = false; this.trans = null; this.state = 'title'; this.stateT = 0; this.score = [0, 0]; this.round = 1;
     this.newRoster(); this.setupRound(this.randomModes(MODES.map(m => m.id)));
     this.cpus = [new CPU(this, 0, 'hard'), new CPU(this, 1, pick(['normal', 'hard']))]; this.vsCpu = false; this.cvc = false; this.levels = null;
-    this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false;
+    this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.keysDown.clear(); this.humanHeld = false;
   }
   rollTitle() {
     this.startTransition(pick([TEAM[0].jersey, TEAM[1].jersey, ORANGE]), () => { this.newRoster(); this.round++; this.setupRound(this.randomModes(MODES.map(m => m.id))); }, true);
@@ -911,14 +1187,22 @@ class Game {
   releaseAll() { for (const code of [...this.keysDown]) this.humanKey(code, false); }
   handleEvent(ev) {
     const b = this.boxers[ev.team]; if (!b) return;
-    const jump = ev.key !== 'punch', punch = ev.key !== 'jump', live = (this.state === 'play' || this.state === 'title') && this.roundT > BELL_T;
-    if (punch) this.held[ev.team] = ev.down;
-    if (jump) this.heldJ[ev.team] = ev.down;
+    const k = ev.key, live = (this.state === 'play' || this.state === 'title') && this.roundT > BELL_T && !this.koInfo, t = this.time;
+    if (k === 'punch') this.held[ev.team] = ev.down;
+    else if (k === 'jump') this.heldJ[ev.team] = ev.down;
+    else if (k === 'guard') this.heldG[ev.team] = ev.down;
     if (ev.down) {
       if (!live) return;
-      if (punch) { b.punch(); this.sfx.whoosh(); }
-      if (jump) { const g = b.grounded; b.jump(); if (g) this.sfx.hop(); }
-    } else if (punch) b.release();
+      if (k === 'punch' || k === 'jump') {
+        // JUMP + PUNCH together with a full super bar = flying super uppercut
+        const other = k === 'punch' ? 'jump' : 'punch', oHeld = k === 'punch' ? this.heldJ[ev.team] : this.held[ev.team], oT = k === 'punch' ? b.lastJumpPress : b.lastPunchPress;
+        if (k === 'punch') b.lastPunchPress = t; else b.lastJumpPress = t;
+        if (b.sup >= 100 && !b.superFly && !b.ko && !b.fallen && b.stun <= 0 && (oHeld || t - oT < 0.1)) { b.super(); return; }
+        if (k === 'punch') { if (b.punch()) this.sfx.whoosh(); }
+        else { const gr = b.grounded; b.jump(); if (gr) this.sfx.hop(); }
+      } else b.guardDown();
+    } else if (k === 'punch') b.release();
+    else if (k === 'guard') b.guardUp();
   }
 
   // ------------------------------------------------ contacts
@@ -941,50 +1225,135 @@ class Game {
   }
   // ------------------------------------------------ punches
   landHit(h) {
-    const att = h.att, vic = h.vic, c = this.cfg, dir = att.dir;
+    const att = h.att, vic = h.vic, c = this.cfg, dir = att.dir, t = this.time;
     if (vic.ko || att.ko) return;
-    if (h.part === 'glove' || h.part === 'arm') { if (Math.hypot(h.vx, h.vy) > 6 && (this.sndCD || 0) < this.time) { this.sndCD = this.time + 0.08; this.sfx.clash(); } return; }
-    if (att.hitCD[h.arm] > this.time) return;
+    if (h.part === 'glove' || h.part === 'arm') { if (Math.hypot(h.vx, h.vy) > 6 && (this.sndCD || 0) < t) { this.sndCD = t + 0.08; this.sfx.clash(); } return; }
+    if (att.superFly) { if (!att.superFly.hit) this.superHit(att, vic, { x: h.x, y: h.y }, h.part === 'head'); return; }
+    if (att.hitCD[h.arm] > t) return;
     // only the part of the glove's speed going at the other boxer counts (uppercuts count a bit too)
     const along = h.vx * dir + Math.max(0, h.vy) * 0.35;
     if (along < HIT_MIN) return;
-    att.hitCD[h.arm] = this.time + 0.25;
-    const head = h.part === 'head';
+    att.hitCD[h.arm] = t + 0.25;
+    const head = h.part === 'head', live = this.state === 'play', st = this.stats[att.team], vs = this.stats[vic.team];
+    // DODGE: a back-hop in the clear, the punch whiffs
+    if (vic.invUntil > t) {
+      if (t - vic.dodgePopT > 0.5) { vic.dodgePopT = t; this.popup('DODGE!', vic.x, vic.head.getPosition().y + 0.9, '#8be9ff', 16, 0.8); this.sfx.dodge(); if (live) vs.dodges++; }
+      return;
+    }
+    // PERFECT BLOCK: guard pressed a hair before the punch lands
+    if (t - vic.guardPressT <= PBLOCK_T && !vic.fallen && !vic.superFly) { this.perfectBlock(att, vic, h); if (live) vs.pblocks++; return; }
     const gk = Math.pow(c.glove, 0.8) * Math.sqrt(c.gloveDen);
-    const P = clamp((along - HIT_MIN) / 10, 0.05, 1.6) * c.punch * gk * (head ? 1 : 0.35);
-    const k = c.knock * 0.75;
+    let P = clamp((along - HIT_MIN) / 10, 0.05, 1.6) * c.punch * gk * (head ? 1 : 0.35);
+    const blk = vic.guarding() ? GUARD_RED * clamp(vic.gstam / 0.35, 0.4, 1) : 0;
+    if (blk && live) vs.blocks++;
+    // what kind of punch it was, and everything that multiplies it
+    let mult = 1, kind = 'jab';
+    const atk = att.atk && att.atk.until > t ? att.atk : null;
+    if (atk) { mult *= atk.mult; kind = atk.kind; atk.used = true; }
+    if (att.comboN > 0 && t - att.comboT <= COMBO_T) att.comboN++; else att.comboN = 1;
+    att.comboT = t; vic.comboN = 0;
+    mult *= 1 + COMBO_STEP * (Math.min(att.comboN, 7) - 1);
+    let counter = false;
+    if (att.counterUntil > t) { counter = true; mult *= 1.6; att.counterUntil = 0; }
+    let boosted = false;
+    if (att.boost > t) { boosted = true; mult *= 2; att.boost = 0; }
+    const Pk = clamp(P * (1 + 0.5 * (mult - 1)), 0, 2.4);
+    const k = c.knock * 0.75 * (1 - blk * 0.85);
     if (head) {
       const hv = vic.head.getLinearVelocity();
-      vic.head.setLinearVelocity({ x: hv.x + dir * (2 + 7 * P) * k, y: hv.y + (0.6 + 2 * P) * k });
-      const sk = lerp(0.9, 0.3, clamp(P / 1.2, 0, 1)); vic.stunK = vic.stun > 0 ? Math.min(vic.stunK, sk) : sk; vic.stun = Math.max(vic.stun, 0.2 + 0.42 * P); vic.dizzy = Math.max(vic.dizzy, 0.6 + 1.6 * P);
-      vic.dmg += P;
-    } else vic.dmg += P * 0.4;
+      vic.head.setLinearVelocity({ x: hv.x + dir * (2 + 7 * Pk) * k, y: hv.y + (0.6 + 2 * Pk) * k });
+      const sk = lerp(0.9, 0.3, clamp(Pk / 1.2, 0, 1)); vic.stunK = vic.stun > 0 ? Math.min(vic.stunK, sk) : sk;
+      vic.stun = Math.max(vic.stun, (0.2 + 0.42 * Pk) * (1 - blk) + (counter ? 0.5 : 0)); vic.dizzy = Math.max(vic.dizzy, (0.6 + 1.6 * Pk) * (1 - blk));
+      vic.dmg += Pk * (1 - blk);
+    } else vic.dmg += Pk * 0.4 * (1 - blk);
     // health bar: a few solid head shots empty it, body shots chip away
-    vic.hp = Math.max(0, vic.hp - (head ? 6 + 10 * P : 2.5 + 5 * P));
-    vic.hurtT = 0.3; vic.chunkD = 0.5;
+    const dmg = (head ? 6 + 10 * P : 2.5 + 5 * P) * DMG_K * mult * (1 - blk);
+    vic.hp = Math.max(0, vic.hp - dmg);
+    vic.hurtT = 0.3; vic.chunkD = 0.5; vic.charging = false;
+    att.sup = Math.min(100, att.sup + dmg * SUP_GAIN_HIT); vic.sup = Math.min(100, vic.sup + dmg * SUP_GAIN_TAKEN);
     if (vic.hp <= 0) this.koQ.push([vic, 'hit']);
     const bv = vic.body.getLinearVelocity();
-    vic.body.setLinearVelocity({ x: bv.x + dir * (0.6 + 2.6 * P) * k, y: bv.y + 0.4 * P * k });
-    vic.body.setAngularVelocity(vic.body.getAngularVelocity() - dir * (0.4 + 3 * P) * k);
+    vic.body.setLinearVelocity({ x: bv.x + dir * (0.6 + 2.6 * Pk) * k, y: bv.y + 0.4 * Pk * k });
+    vic.body.setAngularVelocity(vic.body.getAngularVelocity() - dir * (0.4 + 3 * Pk) * k);
     // the puncher bounces off a little
     const av = att.body.getLinearVelocity(); att.body.setLinearVelocity({ x: av.x - dir * 0.5, y: av.y });
-    vic.lastHitT = this.time; vic.lastHitBy = att; this.roundHits++;
-    const st = this.stats[att.team];
-    if (this.state === 'play') { st[head ? 'head' : 'body']++; if (head && P > 0.9) st.big++; st.best = Math.max(st.best, Math.round(P * 100)); }
+    vic.lastHitT = t; vic.lastHitBy = att; this.roundHits++;
+    if (live) {
+      st[head ? 'head' : 'body']++; if (head && (Pk > 0.9 || kind === 'hay')) st.big++; st.best = Math.max(st.best, Math.round(dmg));
+      if (kind === 'hay') st.hayHits++; else if (kind === 'jab') st.jabHits++;
+      if (counter) st.counters++;
+      st.combo = Math.max(st.combo, att.comboN);
+    }
     // fx
-    if (head) this.sfx.punch(clamp(0.45 + P * 0.5, 0, 1)); else this.sfx.body(clamp(0.4 + P * 0.5, 0, 1));
-    const n = Math.round(4 + P * 10);
+    if (blk) this.sfx.block(); else if (head) this.sfx.punch(clamp(0.45 + Pk * 0.5, 0, 1)); else this.sfx.body(clamp(0.4 + Pk * 0.5, 0, 1));
+    const n = Math.round(4 + Pk * 10);
     for (let i = 0; i < n; i++) this.addPart(h.x, h.y, dir * rand(0, 4) + rand(-1.5, 1.5), rand(-1, 3), 9, rand(0.25, 0.5), pick(['#ffffff', '#ffd23f', '#ffe9a8']), pick([1, 2]));
-    if (head && P > 0.45) {
-      this.popup(pick(POW_WORDS), h.x + dir * 0.3, h.y + 0.7, P > 1 ? '#ff4b4b' : '#ffd23f', P > 1 ? 24 : 16, 0.8);
-      this.addShake(2 + P * 4); this.excite = Math.max(this.excite, 0.5 + P * 0.4);
-      if (P > 1 && this.state === 'play') this.slowmo(0.35, 0.12);
+    const py = h.y + 0.7;
+    if (kind === 'hay' && !blk) {
+      this.addShake(10); this.slowmo(0.3, 0.2); this.excite = 1; this.flash = Math.max(this.flash, REDUCED ? 0 : 0.12);
+      for (let i = 0; i < 16; i++) this.addPart(h.x, h.y, dir * rand(0, 6) + rand(-2, 2), rand(-1, 4), 8, rand(0.3, 0.6), pick([GREEN, '#ffffff', '#b6ffd0']), pick([2, 3]));
+    }
+    if (counter) this.popup('COUNTER!', h.x - dir * 0.2, py + 0.5, '#8be9ff', 16, 0.9);
+    if (boosted) this.popup('DOUBLE POWER!', h.x - dir * 0.2, py + 0.9, '#ffd23f', 8, 0.9);
+    if (att.comboN >= 2) this.popup(`x${att.comboN} COMBO`, att.x - dir * 0.2, att.head.getPosition().y + 1.1, '#ffb13d', 8 + Math.min(att.comboN, 6) * 2, 0.8);
+    if (blk) this.popup('BLOCKED', h.x, py, '#b9c3dd', 8, 0.5);
+    else if (head && Pk > 0.45) {
+      this.popup(pick(POW_WORDS), h.x + dir * 0.3, py, Pk > 1 ? '#ff4b4b' : '#ffd23f', Pk > 1 ? 24 : 16, 0.8);
+      this.addShake(2 + Pk * 4); this.excite = Math.max(this.excite, 0.5 + Pk * 0.4);
+      if (Pk > 1 && live && kind !== 'hay') this.slowmo(0.35, 0.12);
     } else if (head) this.popup(pick(['POP', 'TAP', 'BIP']), h.x, h.y + 0.6, CREAM, 8, 0.5);
+  }
+  perfectBlock(att, vic, h) {
+    const t = this.time, dir = att.dir;
+    vic.guardPressT = -9; vic.boost = t + 5; vic.sup = Math.min(100, vic.sup + SUP_GAIN_PB);
+    att.stun = Math.max(att.stun, 0.8); att.stunK = 0.3; att.dizzy = Math.max(att.dizzy, 0.8); att.charging = false; att.atk = null; att.hayUntil = 0; att.punchUntil = 0;
+    att.hitCD[0] = t + 0.6; att.comboN = 0;
+    const av = att.body.getLinearVelocity(); att.body.setLinearVelocity({ x: av.x - dir * 3, y: av.y + 0.5 });
+    att.body.setAngularVelocity(att.body.getAngularVelocity() + dir * 1.2);
+    const rv = vic.body.getLinearVelocity(); vic.body.setLinearVelocity({ x: rv.x + dir * 0.3, y: rv.y });
+    this.popup('PERFECT BLOCK!', h.x, h.y + 0.9, '#8be9ff', 16, 1.0);
+    this.sfx.pblock(); this.addShake(3); this.slowmo(0.5, 0.14); this.excite = Math.max(this.excite, 0.6);
+    for (let i = 0; i < 14; i++) { const a = rand(0, 6.28); this.addPart(h.x, h.y, Math.cos(a) * rand(2, 5), Math.sin(a) * rand(2, 5), 2, rand(0.25, 0.5), pick(['#8be9ff', '#ffffff', '#d9f8ff']), pick([1, 2])); }
+  }
+  // the flying super uppercut connects
+  superHit(att, vic, pos, head) {
+    const t = this.time, dir = att.dir, F = att.superFly, live = this.state === 'play', st = this.stats[att.team];
+    if (!F || F.hit || vic.ko) return;
+    F.hit = true; F.hitT = F.t;
+    if (vic.invUntil > t) { this.popup('DODGE!', vic.x, vic.head.getPosition().y + 0.9, '#8be9ff', 16, 0.8); this.sfx.dodge(); if (live) this.stats[vic.team].dodges++; return; }
+    if (t - vic.guardPressT <= PBLOCK_T) { this.perfectBlock(att, vic, { x: pos.x, y: pos.y }); att.superFly = null; if (live) this.stats[vic.team].pblocks++; return; }
+    const blk = vic.guarding() ? GUARD_RED * 0.8 : 0;
+    const dmg = SUPER_DMG * (head ? 1 : 0.8) * (1 - blk) * (att.boost > t ? 1.5 : 1);
+    att.boost = 0; vic.hp = Math.max(0, vic.hp - dmg); vic.hurtT = 0.4; vic.chunkD = 0.6; vic.charging = false; vic.comboN = 0;
+    if (vic.hp <= 0) this.koQ.push([vic, 'hit']);
+    vic.sup = Math.min(100, vic.sup + dmg * SUP_GAIN_TAKEN);
+    const k = this.cfg.knock * (1 - blk * 0.6);
+    const hv = vic.head.getLinearVelocity(); vic.head.setLinearVelocity({ x: hv.x + dir * 9 * k, y: hv.y + 5 * k });
+    const bv = vic.body.getLinearVelocity(); vic.body.setLinearVelocity({ x: bv.x + dir * 7 * k, y: bv.y + 4.5 * k });
+    vic.body.setAngularVelocity(vic.body.getAngularVelocity() - dir * 5 * k);
+    vic.stun = Math.max(vic.stun, 1.0 * (1 - blk)); vic.stunK = 0.3; vic.dizzy = Math.max(vic.dizzy, 2 * (1 - blk)); vic.dmg += 1.5 * (1 - blk);
+    vic.lastHitT = t; vic.lastHitBy = att; this.roundHits++;
+    att.comboN = (att.comboN > 0 && t - att.comboT <= COMBO_T ? att.comboN : 0) + 1; att.comboT = t;
+    for (const b of att.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.3 - dir * 1, y: Math.max(lv.y, 1) }); }
+    if (live) { st.superHits++; st[head ? 'head' : 'body']++; st.big++; st.best = Math.max(st.best, Math.round(dmg)); st.combo = Math.max(st.combo, att.comboN); }
+    this.sfx.punch(1); this.sfx.ko();
+    this.popup('SUPER!', pos.x, pos.y + 1.1, ORANGE, 24, 1.1);
+    this.addShake(14); this.slowmo(0.22, 0.4); this.excite = 1; if (!REDUCED) this.flash = Math.max(this.flash, 0.3);
+    for (let i = 0; i < 30; i++) this.addPart(pos.x, pos.y, dir * rand(0, 8) + rand(-3, 3), rand(-2, 6), 6, rand(0.3, 0.8), pick(['#ffb02a', '#ff5a1f', '#ffe9a8', '#ffffff']), pick([2, 3]));
   }
   // ------------------------------------------------ knockouts
   onKO(b, how) {
     if (b.ko || this.koInfo) return;
     if (!(this.state === 'play' || this.state === 'title') || this.roundT < BELL_T) return;
+    if (how === 'down' && b.hp > DOWN_HP) {
+      // knocked over with health left: a knockdown, not a knockout
+      if (this.time > b.kdT + 1.5) {
+        b.kdT = this.time; b.hp = Math.max(1, b.hp - KD_DMG); b.hurtT = 0.3; b.chunkD = 0.5; b.charging = false; b.stun = Math.max(b.stun, 0.5);
+        if (this.state === 'play') this.stats[1 - b.team].knockdowns++;
+        this.popup('KNOCKDOWN!', b.x, 3.2, '#ff8173', 16, 1.0); this.sfx.thud(0.8); this.addShake(5);
+      }
+      return;
+    }
     const other = this.boxers[1 - b.team];
     b.knockOut();
     // both down at once: a double knockout, nobody scores
@@ -1016,7 +1385,7 @@ class Game {
       this.belled = true;
       if (this.state === 'play') { this.sfx.bell(1); this.popup('FIGHT!', 0, 4.2, ORANGE, 24, 1); }
       // a key held through the bell counts as a press the moment the fight starts
-      this.boxers.forEach((b, t) => { if (this.held[t] && !b.held) { b.punch(); this.sfx.whoosh(); } if (this.heldJ[t]) b.jump(); });
+      this.boxers.forEach((b, t) => { if (this.held[t] && !b.held) { if (b.punch()) this.sfx.whoosh(); } if (this.heldJ[t]) b.jump(); if (this.heldG[t]) b.guardDown(); });
     }
     if ((this.state === 'play' || this.state === 'title') && !this.koInfo && this.roundT > TIRED_T) {
       this.tired = clamp((this.roundT - TIRED_T) / 16, 0, 1);
@@ -1082,7 +1451,7 @@ class Game {
   slowmo(scale, dur) { this.tsTarget = scale; this.tsT = dur; }
   addShake(a) { this.shakeA = Math.max(this.shakeA, REDUCED ? a * 0.25 : a); }
   addPart(x, y, vx, vy, g, life, col, sz, kind) { if (this.parts.length < 500) this.parts.push({ x, y, vx, vy, g, life, max: life, col, sz, kind }); }
-  popup(text, x, y, col, size, dur) { this.pops.push({ text, x: clamp(x, -6.8, 6.8), y: clamp(y, 1.0, 6.2), col, size, dur, t: 0 }); }
+  popup(text, x, y, col, size, dur) { const lim = Math.max(0, 7.6 - text.length * size * 0.9 / 40); this.pops.push({ text, x: clamp(x, -lim, lim), y: clamp(y, 1.0, 6.2), col, size, dur, t: 0 }); }
   // ------------------------------------------------ camera: frames both boxers, zooms in hard on a knockout
   updateCam(rdt) {
     const C = this.cam, K = this.koInfo;
@@ -1221,7 +1590,18 @@ function drawHealth(G) {
     seg(0, fw, b.hurtT > 0 && Math.floor(G.realTime * 30) % 2 ? '#ffffff' : col);
     if (fw > 0) { artRect(t === 0 ? x : x + W - fw, Y, fw, 2, 'rgba(255,255,255,0.35)'); artRect(t === 0 ? x : x + W - fw, Y + H - 2, fw, 2, 'rgba(0,0,0,0.25)'); }
     for (let i = 1; i < 10; i++) artRect(x + Math.round(W * i / 10) - 1, Y + H - 3, 1, 3, 'rgba(20,16,25,0.55)');
-    if (G.vsCpu || G.cvc) txt(G.teamName(t), AX(t === 0 ? x : x + W), AY(Y + H + 8), 8, T.light, { ow: 0.7, align: t === 0 ? 'left' : 'right' });
+    // super bar under the health bar: fills as you land and take hits; full = JUMP + PUNCH together
+    const SY0 = Y + H + 3, SH = 4, sf = clamp(b.sup / 100, 0, 1), full = sf >= 1, fl = full && Math.floor(G.realTime * 8) % 2;
+    artRect(x - 1, SY0 - 1, W + 2, SH + 2, INK); artRect(x, SY0, W, SH, '#262b3d');
+    const sw = Math.round(W * sf);
+    if (sw > 0) { artRect(t === 0 ? x : x + W - sw, SY0, sw, SH, fl ? '#ffffff' : full ? '#ffd23f' : '#ff8a2a'); artRect(t === 0 ? x : x + W - sw, SY0, sw, 1, 'rgba(255,255,255,0.4)'); }
+    const lab = G.vsCpu || G.cvc, ny = SY0 + SH + 7;
+    if (lab) txt(G.teamName(t), AX(t === 0 ? x : x + W), AY(ny), 8, T.light, { ow: 0.7, align: t === 0 ? 'left' : 'right' });
+    if (b.comboN >= 2 && G.time - b.comboT < COMBO_T) {
+      const fade = clamp((COMBO_T - (G.time - b.comboT)) / 0.4, 0.4, 1); ctx.globalAlpha = fade;
+      txt(`x${b.comboN} COMBO`, AX(t === 0 ? x + W : x), AY(ny), 8, '#ffb13d', { ow: 0.7, align: t === 0 ? 'right' : 'left' });
+      ctx.globalAlpha = 1;
+    } else if (full && Math.floor(G.realTime * 4) % 2) txt('SUPER!', AX(t === 0 ? x + W : x), AY(ny), 8, '#ffd23f', { ow: 0.7, align: t === 0 ? 'right' : 'left' });
   });
 }
 const PAUSE_BTN = { x: 296, y: 4, w: 20, h: 20 };
@@ -1271,14 +1651,39 @@ function drawKOBox(G, K) {
     txt(label, AX(160), AY(92.5), 8, '#ffffff', { ow: 0.7 });
   }
 }
+// the haymaker meter, like Floppy Hoops' shot meter: a tall bar behind the boxer, the fill sweeps up and down, let go in the green
+function drawMeter(b) {
+  const tp = b.center(), m = b.meter, hw = b.hw, g = METER_G;
+  const cx = Math.round(SX(tp.x - b.dir * 0.95)), cy = Math.round(SY(tp.y + 0.55));
+  const W = Math.round(5 * S), H = Math.round(28 * S), L = cx - (W >> 1), T = cy - (H >> 1), u = Math.max(1, Math.round(S));
+  const yOf = v => T + Math.round(H * (1 - clamp(v, 0, 1)));
+  ctx.fillStyle = INK; ctx.fillRect(L - u, T - u, W + 2 * u, H + 2 * u);
+  ctx.fillStyle = '#2a2f3f'; ctx.fillRect(L, T, W, H);
+  const g0 = yOf(g + hw), g1 = yOf(g - hw);
+  ctx.fillStyle = '#1f6b35'; ctx.fillRect(L, g0, W, Math.max(u, g1 - g0));
+  const d = Math.abs(m - g), col = d <= hw ? GREEN : d <= 0.22 ? '#ffd23f' : '#ff5a4a';
+  const fy = yOf(m);
+  ctx.fillStyle = col; ctx.fillRect(L + u, fy, W - 2 * u, T + H - fy);
+  ctx.fillStyle = GREEN; ctx.fillRect(L - u, g0 - (u >> 1), W + 2 * u, u); ctx.fillRect(L - u, g1 - (u >> 1), W + 2 * u, u);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(L - 2 * u, fy - (u >> 1), W + 4 * u, u);
+}
 function drawWorldText(G) {
   // who is who, over the heads at the start of a match
-  if (G.state === 'play' && G.round === 1 && G.roundT < 3.2 && !G.cvc) {
+  if (G.state === 'play' && G.round === 1 && G.roundT < 3.6 && !G.cvc) {
     G.boxers.forEach((b, t) => {
       if (G.vsCpu && t === 1) return;
-      const hp = b.head.getPosition(), bob = Math.sin(G.realTime * 6 + t) * 1.5;
-      txt(G.vsCpu ? 'W + D' : t === 0 ? 'W + D' : 'UP + LEFT', SX(hp.x), SY(hp.y + b.d.headR + 0.7) + bob * S, 16, TEAM[t].light, { bold: true });
+      const hp = b.head.getPosition(), bob = Math.sin(G.realTime * 6 + t) * 1.5, y = SY(hp.y + b.d.headR + 0.75) + bob * S, x = SX(hp.x);
+      const k = t === 0 ? ['W JUMP', 'D PUNCH', 'A GUARD'] : ['UP JUMP', 'LEFT PUNCH', 'RIGHT GUARD'];
+      k.forEach((l, i) => txt(l, x + (t === 0 ? -0.3 : 0.3) * PPM * S, y - (2 - i) * 9 * S, 8, TEAM[t].light, { bold: true, ow: 0.8, align: t === 0 ? 'right' : 'left' }));
     });
+  }
+  // meters: hold PUNCH and let go in the green
+  for (const b of G.boxers) if (b.charging) drawMeter(b);
+  // a full super bar: tell them how to use it
+  if (G.state === 'play' && !G.cvc) for (const b of G.boxers) {
+    if (b.sup < 100 || b.ko || (G.vsCpu && b.team === 1)) continue;
+    const hp = b.head.getPosition(), bob = Math.sin(G.realTime * 12) * 1.5;
+    txt('SUPER! JUMP+PUNCH', SX(hp.x), SY(hp.y + b.d.headR + 0.55) + bob * S, 8, '#ffd23f', { ow: 0.8, bold: true });
   }
   for (const q of G.pops) {
     const k = q.t < 0.1 ? lerp(0.3, 1.25, q.t / 0.1) : q.t < 0.2 ? lerp(1.25, 1, (q.t - 0.1) / 0.1) : 1;
@@ -1328,9 +1733,13 @@ function drawTitle(G) {
       txt(it.label, AX(r.x + r.w / 2 + 2), AY(r.y + r.h / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
     }
   });
-  txt('W / UP = JUMP', AX(65), AY(147), 8, '#b9c3dd', { ow: 0.6 });
-  txt('D / LEFT = PUNCH', AX(65), AY(156), 8, '#b9c3dd', { ow: 0.6 });
+  txt('W / UP = JUMP', AX(65), AY(143), 8, '#b9c3dd', { ow: 0.6 });
+  txt('D / LEFT = PUNCH', AX(65), AY(151), 8, '#b9c3dd', { ow: 0.6 });
+  txt('A / RIGHT = GUARD', AX(65), AY(159), 8, '#b9c3dd', { ow: 0.6 });
   txt('ARROWS OR W/S + ENTER', AX(65), AY(168), 8, '#7d88a8', { ow: 0.6 });
+  // a tip that changes every few seconds
+  const TIPS = [['HOLD PUNCH, LET GO', 'IN GREEN = HAYMAKER'], ['TAP GUARD AT THE LAST', 'MOMENT = PERFECT BLOCK'], ['LAND AND TAKE HITS TO', 'FILL THE SUPER BAR'], ['FULL BAR: JUMP + PUNCH', '= SUPER UPPERCUT'], ['TAP GUARD WHILE HOPPING', '= DODGE, THEN COUNTER']];
+  TIPS[Math.max(0, Math.floor(t / 4)) % TIPS.length].forEach((l, i) => txt(l, AX(222), AY(15 + i * 8), 8, '#b9c3dd', { ow: 0.7 }));
   const lines = packLines(G.bannerItems.length ? G.bannerItems : ['CLASSIC RING'], 30).slice(0, 3);
   const cx = 222, y0 = 172 - (lines.length - 1) * 9;
   txt('NOW PLAYING', AX(cx), AY(y0 - 10), 8, '#b9c3dd', { ow: 0.7 });
@@ -1401,6 +1810,7 @@ function render(G) {
   if (G.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${G.flash.toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
   if (G.state === 'over') drawOver(G);
   if (G.paused) drawPause();
+  drawTouchPads(G);
   if (G.state === 'title') { drawTrans(G); drawTitle(G); } else drawTrans(G);
   const tl = G.state !== 'title', sy = tl ? 22 : 8, sx = tl ? 4 : 316, sal = tl ? 'left' : 'right';
   if (G.sfx.muted) txt('SOUND OFF  (M)', AX(sx), AY(sy), 8, '#7d88a8', { align: sal, ow: 0.6 });
@@ -1451,12 +1861,12 @@ menuEl.addEventListener('click', e => {
 if (location.search.includes('debug')) { window.floppy = G; window.floppyLevels = CPU_LEVELS; window.floppyStep = n => { for (let i = 0; i < n; i++) { G.frame(STEP); if (!G.paused) G.fixed(STEP); } render(G); }; }
 resize();
 window.addEventListener('resize', resize);
-const KEYMAP = { KeyW: { team: 0, key: 'jump' }, KeyD: { team: 0, key: 'punch' }, ArrowUp: { team: 1, key: 'jump' }, ArrowLeft: { team: 1, key: 'punch' } };
+const KEYMAP = { KeyW: { team: 0, key: 'jump' }, KeyD: { team: 0, key: 'punch' }, KeyA: { team: 0, key: 'guard' }, ArrowUp: { team: 1, key: 'jump' }, ArrowLeft: { team: 1, key: 'punch' }, ArrowRight: { team: 1, key: 'guard' } };
 const KEYS = new Set(Object.keys(KEYMAP));
 window.addEventListener('keydown', e => {
   if (G.menuOpen) { if (e.code === 'Escape') closeMenu(); return; }
   const code = e.code;
-  if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'Space') e.preventDefault();
+  if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight' || code === 'Space') e.preventDefault();
   if (code === 'KeyM') { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); return; }
   if (G.state === 'title') {
     if (e.repeat) return;
@@ -1504,9 +1914,27 @@ cv.addEventListener('pointerdown', e => {
     if (p.x >= b.x - 2 && p.x <= b.x + b.w + 2 && p.y >= b.y - 2 && p.y <= b.y + b.h + 2) { G.paused = !G.paused; if (G.paused) G.releaseAll(); }
   }
 });
-// vs the CPU the whole screen is your button; two players each hold their own half
-const TOUCH_ZONE = x => G.vsCpu ? (x < 0.5 ? 'KeyW' : 'KeyD') : x < 0.25 ? 'KeyW' : x < 0.5 ? 'KeyD' : x < 0.75 ? 'ArrowLeft' : 'ArrowUp';
-const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>LEFT HALF: JUMP</span><span>RIGHT HALF: PUNCH</span>' : '<span>RED: LEFT EDGE JUMP, NEXT PUNCH</span><span>BLUE: NEXT PUNCH, RIGHT EDGE JUMP</span>';
+// Three buttons a side. vs the CPU: left half = JUMP, right half = PUNCH, a GUARD pad in the middle at the bottom.
+// Two players: red = JUMP | PUNCH | GUARD from the left edge in, blue = GUARD | PUNCH | JUMP out to the right edge.
+const PADS_1P = [{ code: 'KeyW', name: 'JUMP', x0: 0, x1: 0.4 }, { code: 'KeyA', name: 'GUARD', x0: 0.4, x1: 0.6 }, { code: 'KeyD', name: 'PUNCH', x0: 0.6, x1: 1 }];
+const PADS_2P = [{ code: 'KeyW', name: 'JUMP', t: 0 }, { code: 'KeyD', name: 'PUNCH', t: 0 }, { code: 'KeyA', name: 'GUARD', t: 0 }, { code: 'ArrowRight', name: 'GUARD', t: 1 }, { code: 'ArrowLeft', name: 'PUNCH', t: 1 }, { code: 'ArrowUp', name: 'JUMP', t: 1 }].map((p, i) => Object.assign(p, { x0: i / 6, x1: (i + 1) / 6 }));
+const TOUCH_ZONE = (x, y) => {
+  if (G.vsCpu) return x >= 0.4 && x < 0.6 && y > 0.55 ? 'KeyA' : x < 0.5 ? 'KeyW' : 'KeyD';
+  return PADS_2P[Math.min(5, Math.floor(x * 6))].code;
+};
+const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>LEFT: JUMP</span><span>MIDDLE BOTTOM: GUARD</span><span>RIGHT: PUNCH (HOLD = HAYMAKER)</span>' : '<span>RED: JUMP, PUNCH, GUARD</span><span>BLUE: GUARD, PUNCH, JUMP</span>';
+function drawTouchPads(G) {
+  if (!document.body.classList.contains('touch') || G.cvc || G.paused || (G.state !== 'play' && G.state !== 'ko')) return;
+  const pads = G.vsCpu ? PADS_1P : PADS_2P, W = cv.width, H = cv.height, y0 = H * 0.7, hh = H * 0.16, down = new Set(touchKeys.values());
+  ctx.save(); ctx.font = `700 ${Math.max(9, Math.round(H * 0.022))}px Silkscreen, "Courier New", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const p of pads) {
+    const x = W * p.x0 + 4 * DPR, w = W * (p.x1 - p.x0) - 8 * DPR, col = p.t === 1 || p.code.startsWith('Arrow') ? '#86b2ff' : '#ff8173';
+    ctx.globalAlpha = down.has(p.code) ? 0.65 : 0.38; ctx.fillStyle = down.has(p.code) ? (G.vsCpu ? '#ffffff' : col) : '#141019'; ctx.fillRect(x, y0, w, hh);
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = G.vsCpu ? CREAM : col; ctx.lineWidth = 2 * DPR; ctx.strokeRect(x, y0, w, hh);
+    ctx.fillStyle = CREAM; ctx.fillText(p.name, x + w / 2, y0 + hh / 2);
+  }
+  ctx.restore();
+}
 // ---------------------------------------------------------------- touch (touchscreen Chromebooks in tablet mode)
 const touchKeys = new Map();   // pointerId -> key code it is holding
 const touchBar = document.createElement('div'), touchHint = document.createElement('div');
@@ -1522,7 +1950,7 @@ cv.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') return;
   touchOn();
   if (G.paused || !(G.state === 'play' || G.state === 'ko')) return;
-  const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width);
+  const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   touchPress(code, true); touchKeys.set(e.pointerId, code);
   if (cv.setPointerCapture) try { cv.setPointerCapture(e.pointerId); } catch (err) { /* already gone */ }
 });
