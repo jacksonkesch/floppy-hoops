@@ -38,7 +38,22 @@
   body.touch #touchbar { display: flex; }
   #touchbar button { font: 12px Silkscreen, "Courier New", monospace; color: #fff6e0; background: rgba(20, 16, 25, 0.72); border: 2px solid #fff6e0; border-radius: 6px; min-width: 44px; height: 44px; padding: 0 10px; }
   #touchbar button[data-a="pause"] { display: none; } #touchbar[data-pause="1"] button[data-a="pause"] { display: block; }
+  #touchbar button[data-a="how"] { display: none; } #touchbar[data-how="1"] button[data-a="how"] { display: block; }
   #touchbar button[data-a="menu"] { display: none; } #touchbar[data-menu="1"] button[data-a="menu"] { display: block; }
+  #tutpanel[hidden] { display: none; }
+  #tutpanel { position: fixed; top: 12px; left: 12px; bottom: 12px; width: min(236px, calc(100vw - 24px)); font-family: Silkscreen, "Courier New", monospace; z-index: 6; }
+  .tp { box-sizing: border-box; height: 100%; overflow: auto; background: rgba(27, 32, 49, 0.94); border: 3px solid #141019; box-shadow: 0 5px 0 #141019, inset 0 0 0 3px #2b3350; padding: 10px 10px 12px; }
+  .tp h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; color: #ff8a2a; text-shadow: 0 3px 0 #7a2d0c; }
+  .tp .note { margin: 2px 0 6px; font-size: 10px; line-height: 1.3; color: #7d88a8; }
+  .tp-actions { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 8px; }
+  #tut-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 3px; }
+  #tutpanel button { font: inherit; font-size: 11px; line-height: 1.2; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; box-shadow: 0 2px 0 #141019; padding: 5px 7px; cursor: pointer; }
+  #tutpanel button:focus-visible { outline: 3px solid #43f07a; outline-offset: 1px; }
+  #tutpanel .watch { width: 100%; text-align: left; min-height: 30px; }
+  #tutpanel .watch[aria-current="true"] { background: #ff8a2a; color: #141019; }
+  #tutpanel #tut-all[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
+  #tutpanel #tut-exit { width: 100%; }
+  @media (max-height: 560px) { #tutpanel .watch { min-height: 22px; padding: 3px 6px; font-size: 10px; } #tut-list { gap: 2px; margin-bottom: 6px; } .tp { padding: 8px 8px 10px; } .tp .note { margin-bottom: 2px; } .tp-actions { margin: 4px 0 6px; } }
   #touchhint { position: fixed; left: 0; right: 0; bottom: 64px; display: none; justify-content: space-around; pointer-events: none; z-index: 4; font: 13px Silkscreen, "Courier New", monospace; color: #fff6e0; text-shadow: 0 2px 0 #141019; }
   body.touch #touchhint:not(:empty) { display: flex; }
   #touchhint span { background: rgba(20, 16, 25, 0.55); padding: 6px 10px; border-radius: 6px; }
@@ -59,6 +74,15 @@
     <p class="note">After every knockout, one or two of the modes you leave on kick in for the next round. Round 1 is always a normal ring.</p>
     <div id="mode-groups"></div>
     <div class="foot"><button type="button" id="done">DONE</button><span class="hint">SAVED FOR NEXT TIME. ESC ALSO CLOSES.</span></div>
+  </div>
+</div>
+<div id="tutpanel" hidden role="dialog" aria-labelledby="tut-title">
+  <div class="tp">
+    <h2 id="tut-title">HOW TO PLAY</h2>
+    <p class="note">Pick a move to watch it on loop. Arrow keys pick, ESC goes back.</p>
+    <div class="tp-actions"><button type="button" id="tut-all">PLAY ALL</button><button type="button" id="tut-mute">SOUND: ON</button></div>
+    <ol id="tut-list"></ol>
+    <button type="button" id="tut-exit">BACK</button>
   </div>
 </div>
 <script src="planck.min.js"></script>
@@ -182,11 +206,12 @@ const MENU_ITEMS = [
   { id: '2p', label: '2 PLAYERS' },
   { id: 'cvc', label: 'CPU VS CPU' },
   { id: 'modes', label: 'GAME MODES' },
+  { id: 'how', label: 'HOW TO PLAY' },
   { id: 'switch', label: 'SWITCH GAME' },
 ];
 const MENU_X = 14, MENU_W = 104, MENU_Y0 = 60, MENU_DY = 15, MENU_H = 12;
 // big 1P (green) and 2P (blue) buttons side by side, the other entries as a list under them
-const menuRect = i => i === 0 ? { x: 14, y: 56, w: 50, h: 36 } : i === 1 ? { x: 68, y: 56, w: 50, h: 36 } : { x: MENU_X, y: 98 + (i - 2) * 14, w: MENU_W, h: 12 };
+const menuRect = i => i === 0 ? { x: 14, y: 56, w: 50, h: 36 } : i === 1 ? { x: 68, y: 56, w: 50, h: 36 } : { x: MENU_X, y: 95 + (i - 2) * 11, w: MENU_W, h: 10 };
 const OVER_BTNS = [0, 1].map(i => ({ x: 70 + i * 100, y: 140, w: 80, h: 20 }));
 const POW_WORDS = ['POW!', 'BAM!', 'WHAM!', 'BONK!', 'THWACK!', 'BOOM!', 'SMACK!'];
 // Meme clips (mp3s, base64 in clips.js, shared with the other games). One plays on each knockout;
@@ -1056,8 +1081,9 @@ class Game {
       ground.createFixture(new pl.Edge({ x: s * edge, y: APRON_Y }, { x: s * 16, y: APRON_Y }), wf('outside'));
       ground.createFixture(new pl.Edge({ x: s * 16, y: APRON_Y }, { x: s * 16, y: 20 }), wf('wall'));
     }
-    const drop = this.state === 'title' ? rand(0.5, 0.8) : rand(0.6, 0.9);
-    this.boxers = [new Boxer(this, 0, this.roster[0], -Math.min(START_X, rx - 1.3), drop), new Boxer(this, 1, this.roster[1], Math.min(START_X, rx - 1.3), drop)];
+    const drop = this.tutorial ? 0 : this.state === 'title' ? rand(0.5, 0.8) : rand(0.6, 0.9);
+    const sxs = this.startXs || [-Math.min(START_X, rx - 1.3), Math.min(START_X, rx - 1.3)];   // the how-to-play demos place the boxers themselves
+    this.boxers = [new Boxer(this, 0, this.roster[0], sxs[0], drop), new Boxer(this, 1, this.roster[1], sxs[1], drop)];
     this.parts.length = 0; this.pops.length = 0; this.hitQ.length = 0; this.koQ.length = 0; this.ropeQ.length = 0;
     this.roundT = 0; this.roundHits = 0; this.belled = false; this.koInfo = null; this.tired = 0; this.tiredShown = false; this.ropeShake = [0, 0];
     this.cam.z = 1; this.cam.x = 0; this.cam.y = 3.5;
@@ -1146,6 +1172,7 @@ class Game {
     this.sfx.init();
     if (id === 'cpu' || id === '2p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
     else if (id === 'modes') openMenu();
+    else if (id === 'how') openTutorial();
     else if (id === 'switch') location.href = 'index.html';
   }
   startTransition(color, cb, keep) {
@@ -1343,7 +1370,7 @@ class Game {
   }
   // ------------------------------------------------ knockouts
   onKO(b, how) {
-    if (b.ko || this.koInfo) return;
+    if (b.ko || this.koInfo || this.tutorial) return;   // a how-to-play demo never ends a round
     if (!(this.state === 'play' || this.state === 'title') || this.roundT < BELL_T) return;
     if (how === 'down' && b.hp > DOWN_HP) {
       // knocked over with health left: a knockdown, not a knockout
@@ -1482,13 +1509,14 @@ class Game {
 
 // ---------------------------------------------------------------- rendering
 const low = mk(ART_W, ART_H), lowC = low[0], lg = low[1];
-let S = 1, OX = 0, OY = 0, SHX = 0, SHY = 0, DPR = 1;
+let S = 1, OX = 0, OY = 0, SHX = 0, SHY = 0, DPR = 1, RESERVE = 0;   // RESERVE: css px kept clear on the left for the how-to-play list
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(cv.clientWidth * DPR); cv.height = Math.round(cv.clientHeight * DPR);
   const gut = 16 * DPR;
-  S = Math.max(0.5, Math.min((cv.width - 2 * gut) / ART_W, (cv.height - 2 * gut) / ART_H));
-  OX = Math.round((cv.width - ART_W * S) / 2); OY = Math.round((cv.height - ART_H * S) / 2);
+  const rw = RESERVE * DPR;
+  S = Math.max(0.5, Math.min((cv.width - rw - 2 * gut) / ART_W, (cv.height - 2 * gut) / ART_H));
+  OX = Math.round(rw + (cv.width - rw - ART_W * S) / 2); OY = Math.round((cv.height - ART_H * S) / 2);
 }
 const SX = x => OX + ax(x) * S + SHX, SY = y => OY + ay(y) * S + SHY;
 const AX = a => OX + a * S, AY = a => OY + a * S;
@@ -1622,6 +1650,7 @@ function drawHitStar(G) {
   ctx.save(); ctx.translate(cx, cy); ctx.scale(0.8, 0.8); ctx.translate(-cx, -cy); path(); ctx.fillStyle = col; ctx.fill(); ctx.restore();
 }
 function drawHUD(G) {
+  if (G.tutorial) { drawTutHUD(G); return; }
   if (G.state === 'title') return;
   drawScoreboard(G);
   drawHealth(G);
@@ -1729,7 +1758,7 @@ function drawTitle(G) {
       txt(i === 0 ? '1P' : '2P', AX(r.x + r.w / 2), AY(r.y + 14), 24, sel ? INK : '#ffffff', sel ? { outline: hi, ow: 0.01, bold: true } : { bold: true, ow: 1.2 });
       txt(i === 0 ? 'VS CPU' : 'VS FRIEND', AX(r.x + r.w / 2), AY(r.y + 28), 8, sel ? INK : CREAM, sel ? { outline: hi, ow: 0.01 } : { ow: 0.7 });
     } else {
-      if (sel) { const nudge = Math.round(Math.sin(t * 8)); for (let k = 0; k < 3; k++) { artRect(r.x + 3 + nudge, r.y + 3 + k, 1 + k, 1, INK); artRect(r.x + 3 + nudge, r.y + 7 - k, 1 + k, 1, INK); } }
+      if (sel) { const nudge = Math.round(Math.sin(t * 8)); for (let k = 0; k < 3; k++) { artRect(r.x + 3 + nudge, r.y + 2 + k, 1 + k, 1, INK); artRect(r.x + 3 + nudge, r.y + 6 - k, 1 + k, 1, INK); } }
       txt(it.label, AX(r.x + r.w / 2 + 2), AY(r.y + r.h / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
     }
   });
@@ -1774,6 +1803,7 @@ function drawPause() {
   txt('PAUSED', AX(160), AY(80), 24, CREAM);
   txt('PRESS P TO KEEP PLAYING', AX(160), AY(104), 8, ORANGE);
   txt('Q FOR MAIN MENU', AX(160), AY(116), 8, '#b9c3dd');
+  txt('H FOR HOW TO PLAY', AX(160), AY(128), 8, '#b9c3dd');
 }
 function drawTrans(G) {
   const tr = G.trans; if (!tr) return;
@@ -1857,6 +1887,178 @@ menuEl.addEventListener('click', e => {
   syncMenu();
 });
 
+// ---------------------------------------------------------------- how to play: a looping demo reel in the real engine
+// A second Game (never the one you are playing) runs two boxers: a red demonstrator whose key presses are scripted, and a blue dummy that
+// only throws the scripted punch a demo needs to block or dodge. Nothing here scores, ends a round or touches the saved settings.
+const tutPanel = document.getElementById('tutpanel'), tutList = document.getElementById('tut-list');
+let tutG = null, tutOn = false, TD = null;
+const TUT_PRE = 1.2, SILENT_SFX = new Proxy({}, { get: () => () => {} });
+// Each demo is a little generator "script": it presses the keys the way a player would and waits (a number of seconds, or until a
+// condition is true) between presses. It reads the same reach / incoming-punch numbers the CPU boxers use, so the move lands every loop.
+const TUT_LIST = [
+  { id: 'controls', name: 'CONTROLS', lines: ['THREE BUTTONS EACH. RED: A GUARD, W JUMP, D PUNCH.', 'BLUE: RIGHT GUARD, UP JUMP, LEFT PUNCH.'], len: 6.6, xs: [-2.6, 2.6], both: 'BLUE PLAYER', me: 'RED PLAYER',
+    *script(c) { yield 0.6; c.tap(0, 'jump'); yield 0.7; c.tap(1, 'jump'); yield 1.0; c.tap(0, 'punch'); yield 0.6; c.tap(1, 'punch'); yield 0.9; c.tap(0, 'guard', 0.5); yield 0.7; c.tap(1, 'guard', 0.5); },
+    ok: () => true },
+  { id: 'jump', name: 'JUMP', lines: ['TAP JUMP TO HOP TOWARD THE OTHER BOXER.', 'YOU CAN ONLY PUNCH WHEN YOU ARE CLOSE.'], len: 3.6, xs: [-2.2, 2.2],
+    *script(c) { yield 0.6; c.tap(0, 'jump'); yield 1.6; c.tap(0, 'jump'); }, ok: () => TD.hop },
+  { id: 'jab', name: 'JAB', lines: ['TAP PUNCH FOR A QUICK JAB.', 'FAST, SAFE, AND IT BUILDS A COMBO.'], len: 3.4, xs: [-0.8, 0.8],
+    *script(c) { yield 0.4; yield c.until(() => c.reach(0).ok); c.tap(0, 'punch'); }, ok: T => T.stats[0].jabHits >= 1 },
+  { id: 'hay', name: 'HAYMAKER', lines: ['HOLD PUNCH, LET GO WHEN THE METER IS IN THE GREEN.', 'BIG DAMAGE. MISS THE GREEN AND IT IS WEAK.'], len: 4.4, xs: [-0.8, 0.8],
+    *script(c) { yield 0.4; yield c.until(() => c.reach(0).ok); c.press(0, 'punch'); const b = c.me(0); yield c.until(() => b.charging && Math.abs(b.meter - METER_G) < b.hw * 0.5, 3); c.release(0, 'punch'); },
+    ok: T => T.stats[0].hayHits >= 1 && T.stats[0].green >= 1 },
+  { id: 'guard', name: 'GUARD', lines: ['HOLD GUARD TO SOAK UP A PUNCH.', 'YOU TAKE LESS DAMAGE AND LESS KNOCKBACK.'], len: 3.8, xs: [-0.8, 0.8], blue: 'DUMMY',
+    *script(c) { yield 0.4; c.press(0, 'guard'); yield 0.7; yield c.until(() => c.reach(1).ok); c.tap(1, 'punch'); yield 1.2; c.release(0, 'guard'); },
+    ok: T => T.stats[0].blocks >= 1 && T.stats[0].pblocks === 0 },
+  { id: 'pblock', name: 'PERFECT BLOCK', lines: ['PRESS GUARD AT THE LAST MOMENT BEFORE A PUNCH LANDS.', 'THE PUNCHER REELS AND YOUR NEXT HIT IS DOUBLE POWER.'], len: 3.8, xs: [-0.8, 0.8], blue: 'DUMMY',
+    *script(c) { yield 0.5; yield c.until(() => c.reach(1).ok); c.tap(1, 'punch'); yield c.until(() => { const n = c.incoming(0); return n !== null && n <= 0.06; }, 1); c.tap(0, 'guard', 0.3); },
+    ok: T => T.stats[0].pblocks >= 1 },
+  { id: 'dodge', name: 'DODGE + COUNTER', lines: ['TAP GUARD WHILE HOPPING TO BACK-HOP OUT OF A PUNCH.', 'THEN PUNCH BACK FOR A COUNTER.'], len: 5, xs: [-1.2, 1.2], blue: 'DUMMY',
+    *script(c) {
+      yield 0.5; yield c.until(() => c.reach(1).ok); c.tap(1, 'punch');
+      yield c.until(() => { const n = c.incoming(0); return n !== null && n <= 0.16; }, 1.5); c.tap(0, 'jump', 0.05); yield 0.04; c.tap(0, 'guard', 0.15);
+      yield 0.3; c.tap(1, 'jump');                       // the dummy hops in after its missed punch, so the counter has somewhere to land
+      yield 0.75; c.tap(0, 'jump'); yield 0.1; c.tap(0, 'punch');   // back on your feet: hop in and hit it while the counter is still live
+    }, ok: T => T.stats[0].dodges >= 1 && T.stats[0].counters >= 1 },
+  { id: 'combo', name: 'COMBO', lines: ['LAND PUNCHES IN A ROW BEFORE THE COMBO TIMER RUNS OUT.', 'EVERY HIT IN THE CHAIN HITS HARDER.'], len: 4, xs: [3.4, 4.6],
+    *script(c) { yield 0.4; for (let i = 0; i < 4; i++) { yield c.until(() => c.reach(0).ok, 0.8); c.tap(0, 'punch'); yield 0.3; } }, ok: T => T.stats[0].combo >= 3 },
+  { id: 'super', name: 'SUPER UPPERCUT', lines: ['LAND AND TAKE HITS TO FILL THE SUPER BAR.', 'THEN PRESS JUMP + PUNCH TOGETHER.'], len: 3.8, xs: [-1.6, 1.6], sup: true,
+    *script(c) { yield 0.6; yield c.until(() => { const dx = (c.me(1).head.getPosition().x - c.me(0).head.getPosition().x); return dx > 1.6 && dx < 3; }, 2.5); c.press(0, 'jump'); c.press(0, 'punch'); yield 0.12; c.release(0, 'jump'); c.release(0, 'punch'); }, ok: T => T.stats[0].superHits >= 1 },
+];
+const KEYS_RED = [['A', 'GUARD', 'guard'], ['W', 'JUMP', 'jump'], ['D', 'PUNCH', 'punch']], KEYS_BLUE = [['RIGHT', 'GUARD', 'guard'], ['UP', 'JUMP', 'jump'], ['LEFT', 'PUNCH', 'punch']];
+function tutReset() {
+  const T = tutG, d = TUT_LIST[TD.i];
+  T.round = 2; T.startXs = null; T.forceArena = 'ring'; T.setupRound([]);
+  T.state = 'play'; T.stateT = 0; T.koInfo = null; T.score = [0, 0]; T.stats = newStats(); T.trans = null;
+  T.held = [false, false]; T.heldJ = [false, false]; T.heldG = [false, false]; T.evq.length = 0; T.hs = {}; T.keysDown.clear();
+  T.timeScale = 1; T.tsT = 0; T.tsTarget = 1; T.shakeA = 0; T.flash = 0; T.excite = 0; T.tired = 0;
+  T.boxers.forEach((b, i) => { b.swayPh = i * 2.1; b.swayW = SWAY_W; });   // the same sway every loop, so every loop plays out the same
+  if (d.sup) T.boxers[0].sup = 100;
+  T.time = 0; T.roundT = BELL_T + 0.001; T.belled = true;   // no bell, no FIGHT!: the demo is live at once
+  // let the boxers settle on their feet (silently, unseen) so every loop starts from the same calm stance
+  const real = T.sfx; T.sfx = SILENT_SFX;
+  for (let i = 0; i < TUT_PRE * 60; i++) T.fixed(STEP);
+  // then stand them where this demo wants them (they start the default ring apart, so the gloves never tangle on the way to the guard)
+  T.boxers.forEach((b, i) => { const dx = d.xs[i] - b.x; for (const q of b.parts) { const p = q.getPosition(); q.setTransform({ x: p.x + dx, y: p.y }, q.getAngle()); q.setLinearVelocity({ x: 0, y: 0 }); q.setAngularVelocity(0); } });
+  for (let i = 0; i < 24; i++) T.fixed(STEP);
+  T.sfx = real;
+  T.pops.length = 0; T.parts.length = 0; T.hitQ.length = 0; T.koQ.length = 0; T.ropeQ.length = 0; T.shakeA = 0; T.flash = 0; T.excite = 0; T.tsT = 0; T.timeScale = 1; T.stats = newStats();
+  for (const b of T.boxers) { b.hp = HP_MAX; b.hpChunk = HP_MAX; b.hurtT = 0; }
+  for (let i = 0; i < 40; i++) T.updateCam(0.1);
+  T.t0 = T.roundT;
+  TD.hop = false; TD.hs = {}; TD.lit = {}; TD.pend = []; TD.wait = 0;
+  TD.cpu = new CPU(T, 0, 'hard');   // only borrowed for its reach() / incoming() maths: it never presses a key
+  TD.gen = d.script(tutCtx());
+}
+function tutCtx() {
+  const T = tutG, key = (team, k, down) => { T.evq.push({ team, key: k, down }); TD.hs[team + k] = down; if (down) TD.lit[team + k] = T.realTime + 0.2; };
+  const c = {
+    get t() { return T.roundT - T.t0; },
+    me: team => T.boxers[team],
+    press: (team, k) => key(team, k, true), release: (team, k) => key(team, k, false),
+    tap: (team, k, len = 0.12) => { key(team, k, true); TD.pend.push({ at: c.t + len, team, k }); },
+    reach: team => TD.cpu.reach(T.boxers[team], T.boxers[1 - team], 0.1),
+    incoming: team => TD.cpu.incoming(T.boxers[team], T.boxers[1 - team]),
+    until: (fn, max = 1.5) => { const by = c.t + max; return () => fn() || c.t >= by; },
+  };
+  return c;
+}
+function tutTick() {
+  const T = tutG, d = TUT_LIST[TD.i], tt = T.roundT - T.t0;
+  for (let i = TD.pend.length - 1; i >= 0; i--) if (TD.pend[i].at <= tt) { const p = TD.pend.splice(i, 1)[0]; T.evq.push({ team: p.team, key: p.k, down: false }); TD.hs[p.team + p.k] = false; }
+  for (let n = 0; n < 24; n++) {
+    const w = TD.wait;
+    if (typeof w === 'number' ? tt < w : !w()) break;
+    const r = TD.gen.next();
+    if (r.done) { TD.wait = 1e9; break; }
+    TD.wait = typeof r.value === 'number' ? tt + r.value : r.value;
+  }
+  T.fixed(STEP);
+  for (const b of T.boxers) { b.hp = HP_MAX; b.hpChunk = HP_MAX; b.hurtT = 0; }
+  if (tt > 0.3 && !T.boxers[0].grounded) TD.hop = true;
+  if (tt >= d.len) {
+    const ok = !!d.ok(T), r = TD.res[d.id] || (TD.res[d.id] = { n: 0, ok: 0 });
+    r.n++; if (ok) r.ok++; TD.loops++;
+    if (TD.mode === 'all' && ++TD.here >= 2) { TD.here = 0; TD.i = (TD.i + 1) % TUT_LIST.length; syncTut(true); }
+    tutReset();
+  }
+}
+function tutStepFrames(n) { for (let i = 0; i < n; i++) { tutG.frame(STEP); tutTick(); } }
+function tutPick(i, mode) {
+  TD.i = (i + TUT_LIST.length) % TUT_LIST.length; TD.mode = mode || 'one'; TD.here = 0; tutReset(); syncTut(true);
+}
+function syncTut(scroll) {
+  tutList.querySelectorAll('.watch').forEach((w, i) => { w.setAttribute('aria-current', String(i === TD.i)); if (scroll && i === TD.i) w.scrollIntoView({ block: 'nearest' }); });
+  document.getElementById('tut-all').setAttribute('aria-pressed', String(TD.mode === 'all'));
+  document.getElementById('tut-mute').textContent = G.sfx.muted ? 'SOUND: OFF' : 'SOUND: ON';
+}
+(function buildTut() {
+  TUT_LIST.forEach((e, i) => {
+    const li = document.createElement('li'), w = document.createElement('button');
+    w.type = 'button'; w.className = 'watch'; w.id = 'tut-watch-' + e.id; w.dataset.i = i; w.textContent = e.name;
+    li.appendChild(w); tutList.appendChild(li);
+  });
+})();
+function openTutorial() {
+  if (!tutG) {
+    tutG = new Game(); tutG.sfx = G.sfx; tutG.tutorial = true; tutG.cpus = []; tutG.vsCpu = false; tutG.cvc = false;
+    tutG.settings = JSON.parse(JSON.stringify(G.settings));   // a copy: the demos can never write the saved settings
+  }
+  TD = { i: 0, mode: 'one', here: 0, idx: 0, hop: false, hs: {}, lit: {}, res: {}, loops: 0 };
+  tutOn = true; tutPanel.hidden = false; RESERVE = tutPanel.offsetWidth + 24; resize();
+  tutPick(0); cv.focus();
+}
+function closeTutorial() {
+  if (!tutOn) return;
+  tutOn = false; tutPanel.hidden = true; RESERVE = 0; G.sfx.stopClip(); resize(); cv.focus();
+}
+function tutKey(e) {
+  const c = e.code;
+  if (c === 'Escape') closeTutorial();
+  else if (c === 'KeyM') { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); syncTut(); }
+  else if (e.repeat) return;
+  else if (c === 'ArrowUp' || c === 'ArrowLeft' || c === 'KeyW' || c === 'KeyA') { G.sfx.init(); G.sfx.tick(); tutPick(TD.i - 1, TD.mode); }
+  else if (c === 'ArrowDown' || c === 'ArrowRight' || c === 'KeyS' || c === 'KeyD') { G.sfx.init(); G.sfx.tick(); tutPick(TD.i + 1, TD.mode); }
+  else if (c === 'Enter' || c === 'Space') { G.sfx.init(); tutPick(TD.i, 'one'); }
+  else if (c === 'KeyP') { G.sfx.init(); TD.mode = TD.mode === 'all' ? 'one' : 'all'; TD.here = 0; syncTut(); }
+}
+tutPanel.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  G.sfx.init();
+  if (b.classList.contains('watch')) tutPick(Number(b.dataset.i), 'one');
+  else if (b.id === 'tut-all') { TD.mode = TD.mode === 'all' ? 'one' : 'all'; TD.here = 0; syncTut(); }
+  else if (b.id === 'tut-mute') { G.sfx.setMuted(!G.sfx.muted); syncTut(); }
+  else if (b.id === 'tut-exit') closeTutorial();
+  cv.focus();
+});
+// caption up top, the demonstrator's keys (and the dummy's, when it throws something) lighting up along the bottom
+function drawKeyCaps(G, x0, keys, team, label) {
+  const T = TEAM[team], now = G.realTime;
+  txt(label, AX(x0 + 49), AY(143), 8, T.light, { ow: 0.7, bold: true });
+  keys.forEach(([cap, name, key], i) => {
+    const x = x0 + i * 33, id = team + key, on = TD.hs[id] || (TD.lit[id] || 0) > now;
+    artRect(x - 1, 148, 32, 19, INK); artRect(x, 149, 30, 17, on ? T.light : '#262b3d'); artRect(x, 163, 30, 3, on ? T.jersey : '#1b1f30');
+    if (on) artRect(x - 1, 146, 32, 1, T.light);
+    txt(cap, AX(x + 15), AY(156), 8, on ? INK : CREAM, { ow: on ? 0.01 : 0.7, outline: on ? T.light : INK, bold: true });
+    txt(name, AX(x + 15), AY(174), 8, on ? T.light : '#7d88a8', { ow: 0.6 });
+  });
+}
+function drawTutHUD(G) {
+  const d = TUT_LIST[TD.i];
+  ctx.fillStyle = 'rgba(12,14,24,0.82)'; ctx.fillRect(AX(0), AY(2), ART_W * S, 46 * S);
+  artRect(0, 48, ART_W, 1, '#2b3350');
+  txt(d.name, AX(160), AY(14), 16, ORANGE, { bold: true, ow: 1.2 });
+  d.lines.forEach((l, i) => txt(l, AX(160), AY(28 + i * 9), 8, CREAM, { ow: 0.7 }));
+  txt(`${TD.i + 1}/${TUT_LIST.length}${TD.mode === 'all' ? '  PLAY ALL' : ''}`, AX(316), AY(7), 8, '#7d88a8', { ow: 0.6, align: 'right' });
+  drawKeyCaps(G, 6, KEYS_RED, 0, d.me || 'YOU (RED)');
+  if (d.blue || d.both) drawKeyCaps(G, 215, KEYS_BLUE, 1, d.both || d.blue);
+  if (d.sup) {
+    const b = G.boxers[0], f = clamp(b.sup / 100, 0, 1);
+    artRect(112, 152, 96, 8, INK); artRect(113, 153, 94, 6, '#262b3d'); if (f > 0) artRect(113, 153, Math.round(94 * f), 6, f >= 1 && Math.floor(G.realTime * 8) % 2 ? '#ffffff' : '#ffd23f');
+    txt(f >= 1 ? 'SUPER BAR FULL' : 'SUPER BAR', AX(160), AY(145), 8, f >= 1 ? '#ffd23f' : '#7d88a8', { ow: 0.7 });
+  }
+}
+if (location.search.includes('debug')) window.floppyTut = { open: () => openTutorial(), close: () => closeTutorial(), pick: (i, m) => tutPick(i, m), step: n => { tutStepFrames(n); render(tutG); }, get g() { return tutG; }, get td() { return TD; }, list: TUT_LIST, get on() { return tutOn; }, get reserve() { return RESERVE; } };
+
 // ---------------------------------------------------------------- boot
 if (location.search.includes('debug')) { window.floppy = G; window.floppyLevels = CPU_LEVELS; window.floppyStep = n => { for (let i = 0; i < n; i++) { G.frame(STEP); if (!G.paused) G.fixed(STEP); } render(G); }; }
 resize();
@@ -1864,6 +2066,7 @@ window.addEventListener('resize', resize);
 const KEYMAP = { KeyW: { team: 0, key: 'jump' }, KeyD: { team: 0, key: 'punch' }, KeyA: { team: 0, key: 'guard' }, ArrowUp: { team: 1, key: 'jump' }, ArrowLeft: { team: 1, key: 'punch' }, ArrowRight: { team: 1, key: 'guard' } };
 const KEYS = new Set(Object.keys(KEYMAP));
 window.addEventListener('keydown', e => {
+  if (tutOn) { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault(); tutKey(e); return; }
   if (G.menuOpen) { if (e.code === 'Escape') closeMenu(); return; }
   const code = e.code;
   if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight' || code === 'Space') e.preventDefault();
@@ -1887,6 +2090,7 @@ window.addEventListener('keydown', e => {
   if (KEYS.has(code)) { if (!e.repeat) G.humanKey(code, true); }
   else if (code === 'KeyP' || code === 'Escape') { if (G.state === 'play' || G.state === 'ko' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
   else if (code === 'KeyQ') { if (G.paused) G.toTitle(); }
+  else if (code === 'KeyH') { if (G.paused) openTutorial(); }
 });
 window.addEventListener('keyup', e => { if (KEYS.has(e.code)) { e.preventDefault(); G.humanKey(e.code, false); } });
 window.addEventListener('blur', () => { G.releaseAll(); if (G.state === 'play' || G.state === 'ko') G.paused = true; });
@@ -1897,6 +2101,7 @@ function menuHit(p) {
 }
 const overHit = p => OVER_BTNS.findIndex(r => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2);
 cv.addEventListener('pointermove', e => {
+  if (tutOn) return;
   if (G.state === 'over' && G.stateT > 1.2) { const i = overHit(artPoint(e)); if (i >= 0) G.overSel = i; cv.style.cursor = i >= 0 ? 'pointer' : ''; return; }
   if (G.state !== 'title' || G.menuOpen) { cv.style.cursor = ''; return; }
   const i = menuHit(artPoint(e));
@@ -1905,6 +2110,7 @@ cv.addEventListener('pointermove', e => {
 });
 cv.addEventListener('pointerdown', e => {
   cv.focus(); G.sfx.init();
+  if (tutOn) return;
   if (G.state === 'title' && !G.menuOpen) {
     const i = menuHit(artPoint(e));
     if (i >= 0) { G.menuSel = i; G.menuPick(); }
@@ -1924,7 +2130,7 @@ const TOUCH_ZONE = (x, y) => {
 };
 const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>LEFT: JUMP</span><span>MIDDLE BOTTOM: GUARD</span><span>RIGHT: PUNCH (HOLD = HAYMAKER)</span>' : '<span>RED: JUMP, PUNCH, GUARD</span><span>BLUE: GUARD, PUNCH, JUMP</span>';
 function drawTouchPads(G) {
-  if (!document.body.classList.contains('touch') || G.cvc || G.paused || (G.state !== 'play' && G.state !== 'ko')) return;
+  if (G.tutorial || !document.body.classList.contains('touch') || G.cvc || G.paused || (G.state !== 'play' && G.state !== 'ko')) return;
   const pads = G.vsCpu ? PADS_1P : PADS_2P, W = cv.width, H = cv.height, y0 = H * 0.7, hh = H * 0.16, down = new Set(touchKeys.values());
   ctx.save(); ctx.font = `700 ${Math.max(9, Math.round(H * 0.022))}px Silkscreen, "Courier New", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const p of pads) {
@@ -1939,7 +2145,7 @@ function drawTouchPads(G) {
 const touchKeys = new Map();   // pointerId -> key code it is holding
 const touchBar = document.createElement('div'), touchHint = document.createElement('div');
 touchBar.id = 'touchbar'; touchHint.id = 'touchhint';
-touchBar.innerHTML = '<button data-a="full" aria-label="Full screen">&#x26F6;</button><button data-a="pause" aria-label="Pause">II</button><button data-a="menu">MENU</button>';
+touchBar.innerHTML = '<button data-a="full" aria-label="Full screen">&#x26F6;</button><button data-a="pause" aria-label="Pause">II</button><button data-a="menu">MENU</button><button data-a="how">HOW</button>';
 document.body.append(touchBar, touchHint);
 const touchOn = () => document.body.classList.add('touch');
 function touchPress(code, down) {
@@ -1949,6 +2155,7 @@ function touchPress(code, down) {
 cv.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') return;
   touchOn();
+  if (tutOn) return;
   if (G.paused || !(G.state === 'play' || G.state === 'ko')) return;
   const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   touchPress(code, true); touchKeys.set(e.pointerId, code);
@@ -1964,12 +2171,14 @@ touchBar.addEventListener('click', e => {
     else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   } else if (a === 'pause') { if (G.state === 'play' || G.state === 'ko' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
   else if (a === 'menu') { G.paused = false; G.toTitle(); }
+  else if (a === 'how') { if (G.paused) openTutorial(); }
   cv.focus();
 });
 setInterval(() => {
   const playing = G.state === 'play' || G.state === 'ko';
-  touchBar.dataset.menu = G.paused || G.state === 'over' ? '1' : '';
-  touchBar.dataset.pause = playing || G.paused ? '1' : '';
+  touchBar.dataset.menu = !tutOn && (G.paused || G.state === 'over') ? '1' : '';
+  touchBar.dataset.how = !tutOn && G.paused ? '1' : '';
+  touchBar.dataset.pause = !tutOn && (playing || G.paused) ? '1' : '';
   const hint = G.state === 'play' && !G.paused && G.roundT < 3.5 && G.round <= 2 ? TOUCH_HINT() : '';
   if (touchHint.dataset.text !== hint) { touchHint.dataset.text = hint; touchHint.innerHTML = hint; }
 }, 150);
@@ -1978,6 +2187,15 @@ if (document.fonts && document.fonts.load) document.fonts.load('400 16px Silkscr
 let last = performance.now(), acc = 0;
 function loop(now) {
   const rdt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (tutOn) {
+    tutG.frame(rdt);
+    acc += rdt * tutG.timeScale * GAME_SPEED;
+    let n = 0;
+    while (acc >= STEP && n < 5) { tutTick(); acc -= STEP; n++; }
+    if (n >= 5) acc = 0;
+    render(tutG);
+    requestAnimationFrame(loop); return;
+  }
   G.frame(rdt);
   if (!G.paused) {
     acc += rdt * G.timeScale * GAME_SPEED;
