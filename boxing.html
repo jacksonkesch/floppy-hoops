@@ -153,11 +153,11 @@ const CPU_LEVELS = {
   // react: seconds between looks. mash: chance of just swinging whatever the distance. near/far: the head-to-head
   // distances it punches at. fuzz: how far off it judges that distance. patience: how long it waits just out of
   // range for the other boxer to come in (and whiff) before stepping in itself. close: chance of an uppercut when
-  // smothered. predict: how far ahead it reads where the other boxer's head is going. hold: how long it holds the key.
-  easy:       { react: 0.34, mash: 0.45, near: 0.6, far: 2.8, fuzz: 0.8,  patience: 0,   close: 0.5, predict: 0,    hold: [0.12, 0.5] },
-  normal:     { react: 0.2,  mash: 0.12, near: 0.8, far: 2.2, fuzz: 0.45, patience: 0.6, close: 0.4, predict: 0,    hold: [0.15, 0.4] },
-  hard:       { react: 0.07, mash: 0,    near: 1.0, far: 1.9, fuzz: 0.15, patience: 1.6, close: 0.25, predict: 0,   hold: [0.2, 0.3] },
-  impossible: { react: 0.017, mash: 0,   near: 1.1, far: 1.85, fuzz: 0,   patience: 2.5, close: 0.2, predict: 0.1,  hold: [0.24, 0.26] },
+  // smothered. aim: chance of holding a body-only punch to wait for the head. lean: how far it must be leaning in before it hops (0 = whenever), so the hop lands in reach. predict: how far ahead it reads where the other boxer's head is going. hold: how long it holds the key.
+  easy:       { react: 0.34, mash: 0.45, near: 0.6, far: 2.8, fuzz: 0.8,  patience: 0,   close: 0.5, predict: 0,    hold: [0.12, 0.5], aim: 0,   lean: 0 },
+  normal:     { react: 0.2,  mash: 0.05, near: 0.8, far: 2.2, fuzz: 0.45, patience: 0.6, close: 0.4, predict: 0,    hold: [0.15, 0.4], aim: 0.2, lean: 0 },
+  hard:       { react: 0.1,  mash: 0,    near: 1.0, far: 1.9, fuzz: 0.25, patience: 1.6, close: 0.25, predict: 0.03,  hold: [0.28, 0.36], aim: 0.5, lean: 0.1 },
+  impossible: { react: 0.017, mash: 0,   near: 1.1, far: 1.85, fuzz: 0,   patience: 2.5, close: 0.2, predict: 0.2,  hold: [0.3, 0.32], aim: 0.9, lean: 0.1 },
 };
 const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER VS CPU' },
@@ -645,36 +645,67 @@ class Boxer {
 }
 
 // ---------------------------------------------------------------- CPU
-// One key, like a person: it can only decide when to press and how long to hold.
+// Two keys, like a person: HOP (jump key) steps in along the lean, PUNCH (arm key) snaps the arm out. It hops in to
+// range and only punches when the glove can actually reach a head or body inside the punch window (also in mid-air
+// after a hop); otherwise it keeps the guard up.
 class CPU {
   constructor(game, team, level) {
     this.g = game; this.team = team; this.level = level; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal;
-    this.down = false; this.t = 0; this.until = 0; this.think = rand(0, 0.3); this.waitT = 0; this.bias = 0; this.biasT = 0;
+    this.dn = { punch: false, jump: false }; this.until = { punch: 0, jump: 0 }; this.punchCD = 0; this.aimT = 0;
+    this.t = 0; this.think = rand(0, 0.3); this.waitT = 0; this.bias = 0; this.biasT = 0;
   }
-  set(down) { if (this.down === down) return; this.down = down; this.g.evq.push({ team: this.team, key: 'both', down }); }
-  tap(d) { this.set(true); this.until = this.t + d; }
+  set(key, down) { if (this.dn[key] === down) return; this.dn[key] = down; this.g.evq.push({ team: this.team, key, down }); }
+  tap(key, d) { this.set(key, true); this.until[key] = this.t + d; }
+  // can a punch thrown within the window (PUNCH_T) land? look ahead by 'lead' seconds at where the other boxer will be.
+  reach(me, op, lead) {
+    const dir = me.dir, d = me.d, od = op.d;
+    const sh = me.body.getWorldPoint(me.shLocal), R = d.upLen + d.foreLen + d.gloveR;
+    const ov = op.body.getLinearVelocity(), mv = me.body.getLinearVelocity();
+    const rx = (ov.x - mv.x) * lead * dir, hp = op.head.getPosition(), bp = op.center();
+    const hx = (hp.x - sh.x) * dir + rx, bx = (bp.x - sh.x) * dir + rx;
+    const headOk = hx > 0 && hx - od.headR * 0.8 < R && Math.abs(hp.y - sh.y) < od.headR + d.gloveR + 0.1;
+    const bodyOk = bx > 0 && bx - od.torsoW / 2 * 0.8 < R && Math.abs(bp.y - sh.y) < od.torsoH / 2 + d.gloveR;
+    return { ok: headOk || bodyOk, head: headOk, R, hx };
+  }
   update(dt) {
     const g = this.g, L = this.L;
-    this.t += dt;
-    if (!((g.state === 'play' || g.state === 'title') && g.roundT > BELL_T)) { this.set(false); return; }
-    if (this.down) { if (this.t >= this.until) this.set(false); return; }
+    this.t += dt; this.punchCD -= dt;
+    for (const k of ['punch', 'jump']) if (this.dn[k] && this.t >= this.until[k]) this.set(k, false);
+    if (!((g.state === 'play' || g.state === 'title') && g.roundT > BELL_T)) { this.set('punch', false); this.set('jump', false); return; }
     if ((this.think -= dt) > 0) return;
     this.think = L.react * rand(0.7, 1.3);
     const me = g.boxers[this.team], op = g.boxers[1 - this.team];
     if (me.ko || op.ko) return;
     const hold = () => rand(L.hold[0], L.hold[1]);
-    if (me.fallen) { this.tap(0.1); return; }
-    if (!me.grounded || me.jumpCD > 0 || me.stun > 0) return;
-    if (Math.random() < L.mash) { this.tap(hold()); return; }
-    // how far apart the heads are (as this level judges it), a moment from now
+    if (me.fallen) { if (!this.dn.jump) this.tap('jump', 0.1); return; }
+    if (me.stun > 0) return;
     if ((this.biasT -= L.react) <= 0) { this.bias = (Math.random() * 2 - 1) * L.fuzz; this.biasT = 0.8; }
-    const mh = me.head, oh = op.head, rel = (oh.getLinearVelocity().x - mh.getLinearVelocity().x) * me.dir;
-    const hd = (oh.getPosition().x - mh.getPosition().x) * me.dir + rel * L.predict + this.bias;
-    if (hd < L.near) { if (Math.random() < L.close) this.tap(hold()); return; }
-    if (hd <= L.far) { this.waitT = 0; this.tap(hold()); return; }
-    // out of range: wait for them to come in, then step in yourself
+    const ready = this.punchCD <= 0 && !this.dn.punch && !(me.held);
+    // punch only when the glove can reach (the hop's speed carries you in, so look a little ahead; better levels look further)
+    const r = this.reach(me, op, 0.08 + L.predict + L.react * 0.5), R = r.R;
+    const slack = this.bias * 0.5;              // sloppy levels misjudge the reach
+    const inReach = r.ok && r.hx - r.R < slack + 0.0 && r.hx > 0;
+    if (ready) {
+      if (inReach && !r.head && Math.random() < L.aim && this.aimT < 0.5) { this.aimT += L.react; }
+      else if (inReach) {
+        this.aimT = 0;
+        // smothered (inside 'near'): only sometimes bother, 'close' is the chance of an uppercut-ish jab
+        const smothered = r.hx < L.near * 0.5;
+        if (!smothered || Math.random() < L.close + 0.5) { this.tap('punch', hold()); this.punchCD = PUNCH_T + 0.12; return; }
+      } else if (Math.random() < L.mash) { this.tap('punch', hold()); this.punchCD = PUNCH_T + 0.12; return; }
+    }
+    // hop in: from out of reach but inside 'far', wait for them to whiff first (patience), then step in
+    if (!me.grounded || me.jumpCD > 0 || this.dn.jump) return;
+    const hd = (op.head.getPosition().x - me.head.getPosition().x) * me.dir + this.bias;
+    if (hd < -0.3) { this.waitT += L.react; if (this.waitT > 1.2) { this.waitT = 0; this.tap('jump', 0.1); } return; }   // slipped past: hop about to reset
+    if (inReach || hd < L.near) { this.waitT = 0; return; }
+    // the sharp levels don't hop into a boxer who is in the air and coming (they'd just eat the punch): let them land first
+    if (L.lean && !op.grounded && hd < L.far + 1) return;
     this.waitT += L.react;
-    if (this.waitT > L.patience * rand(0.7, 1.3)) { this.waitT = 0; this.tap(0.1); }
+    const pat = L.patience * (hd <= L.far + 1.2 ? 0.5 : 1) * rand(0.7, 1.3);
+    // leaning in sends the hop further: wait for a lean that gets the glove there
+    const hopD = (2.4 + 6 * me.leanFwd()) * g.cfg.hop * 0.6, lateOK = this.waitT > pat + 0.5;
+    if (this.waitT > pat && (!L.lean || (hopD + R * 0.9 >= hd - 0.2 && me.leanFwd() >= L.lean) || lateOK)) { this.waitT = 0; this.tap('jump', 0.1); }
   }
 }
 
@@ -921,15 +952,15 @@ class Game {
     const head = h.part === 'head';
     const gk = Math.pow(c.glove, 0.8) * Math.sqrt(c.gloveDen);
     const P = clamp((along - HIT_MIN) / 10, 0.05, 1.6) * c.punch * gk * (head ? 1 : 0.35);
-    const k = c.knock;
+    const k = c.knock * 0.75;
     if (head) {
       const hv = vic.head.getLinearVelocity();
       vic.head.setLinearVelocity({ x: hv.x + dir * (2 + 7 * P) * k, y: hv.y + (0.6 + 2 * P) * k });
-      const sk = lerp(0.85, 0.06, clamp(P / 1.2, 0, 1)); vic.stunK = vic.stun > 0 ? Math.min(vic.stunK, sk) : sk; vic.stun = Math.max(vic.stun, 0.25 + 0.6 * P); vic.dizzy = Math.max(vic.dizzy, 0.6 + 1.6 * P);
+      const sk = lerp(0.9, 0.3, clamp(P / 1.2, 0, 1)); vic.stunK = vic.stun > 0 ? Math.min(vic.stunK, sk) : sk; vic.stun = Math.max(vic.stun, 0.2 + 0.42 * P); vic.dizzy = Math.max(vic.dizzy, 0.6 + 1.6 * P);
       vic.dmg += P;
     } else vic.dmg += P * 0.4;
     // health bar: a few solid head shots empty it, body shots chip away
-    vic.hp = Math.max(0, vic.hp - (head ? 12 + 20 * P : 5 + 10 * P));
+    vic.hp = Math.max(0, vic.hp - (head ? 6 + 10 * P : 2.5 + 5 * P));
     vic.hurtT = 0.3; vic.chunkD = 0.5;
     if (vic.hp <= 0) this.koQ.push([vic, 'hit']);
     const bv = vic.body.getLinearVelocity();
@@ -1297,9 +1328,9 @@ function drawTitle(G) {
       txt(it.label, AX(r.x + r.w / 2 + 2), AY(r.y + r.h / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
     }
   });
-  txt('W / UP = JUMP', AX(65), AY(138), 8, '#b9c3dd', { ow: 0.6 });
-  txt('D / LEFT = PUNCH', AX(65), AY(147), 8, '#b9c3dd', { ow: 0.6 });
-  txt('ARROWS OR W/S + ENTER', AX(65), AY(162), 8, '#7d88a8', { ow: 0.6 });
+  txt('W / UP = JUMP', AX(65), AY(147), 8, '#b9c3dd', { ow: 0.6 });
+  txt('D / LEFT = PUNCH', AX(65), AY(156), 8, '#b9c3dd', { ow: 0.6 });
+  txt('ARROWS OR W/S + ENTER', AX(65), AY(168), 8, '#7d88a8', { ow: 0.6 });
   const lines = packLines(G.bannerItems.length ? G.bannerItems : ['CLASSIC RING'], 30).slice(0, 3);
   const cx = 222, y0 = 172 - (lines.length - 1) * 9;
   txt('NOW PLAYING', AX(cx), AY(y0 - 10), 8, '#b9c3dd', { ow: 0.7 });
