@@ -520,7 +520,7 @@ class Boxer {
     // skills
     this.punchUntil = 0; this.jabReady = 0; this.buf = -9; this.atk = null; this.hayUntil = 0; this.charging = false; this.chargeT = 0; this.meter = 0; this.hw = 0.1; this.stumbleAt = 0;
     this.guardHeld = false; this.guardPressT = -9; this.gstam = 1; this.invUntil = 0; this.dodgeCD = 0; this.counterUntil = 0; this.lastJumpT = -9; this.boost = 0;
-    this.comboN = 0; this.comboT = -9; this.sup = 0; this.superFly = null; this.ghosts = []; this.ghostT = 0; this.lastJumpPress = -9; this.lastPunchPress = -9; this.dodgePopT = -9; this.kdT = -9; this.behindT = 0;
+    this.comboN = 0; this.comboT = -9; this.sup = 0; this.superFly = null; this.ghosts = []; this.ghostT = 0; this.lastJumpPress = -9; this.lastPunchPress = -9; this.dodgePopT = -9; this.kdT = -9; this.behindT = 0; this.gloveGhost = 0; this.gloveContactT = 0; this.gloveBehindT = 0;
     this.build(x); this.makeSprites();
     if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
   }
@@ -1039,6 +1039,8 @@ function makeLook() {
 }
 const newStats = () => [0, 1].map(() => ({ punches: 0, head: 0, body: 0, big: 0, kos: 0, best: 0, hays: 0, green: 0, weak: 0, pblocks: 0, blocks: 0, dodgeTry: 0, dodges: 0, counters: 0, supers: 0, superHits: 0, combo: 0, jabHits: 0, hayHits: 0, knockdowns: 0, flips: 0 }));
 const START_X = 2.3;
+const OVERLAP_D = 0.55;
+const GLOVE_PIN_T = 0.3, GLOVE_PAST = 0.1;   // seconds a glove may press on a body before it ghosts through; how far past the centre line it ghosts
 
 class Game {
   constructor() {
@@ -1047,7 +1049,7 @@ class Game {
     this.time = 0; this.realTime = 0; this.state = 'title'; this.stateT = 0; this.paused = false; this.menuOpen = false;
     this.menuSel = 0; this.overSel = 0;
     this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = this.settings.target; this.vsCpu = false; this.cvc = false; this.levels = null;
-    this.stats = newStats(); this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.evq = []; this.keysDown = new Set(); this.hs = {};
+    this.overT = 0; this.stats = newStats(); this.held = [false, false]; this.heldJ = [false, false]; this.heldG = [false, false]; this.evq = []; this.keysDown = new Set(); this.hs = {};
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
     this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0; this.tired = 0;
     this.cam = { z: 1, x: 0, y: 3.5 };
@@ -1071,6 +1073,7 @@ class Game {
     const w = this.world = new pl.World({ gravity: { x: 0, y: -gravity } });
     w.on('begin-contact', c => this.onContact(c, 1));
     w.on('end-contact', c => this.onContact(c, -1));
+    w.on('pre-solve', c => this.preSolve(c));
     const ground = w.createBody();
     const wf = (kind, extra) => Object.assign({ friction: kind === 'floor' ? Math.min(0.9, fx.fric) : 0.6, restitution: 0, filterCategoryBits: CAT_WORLD, userData: { kind } }, extra || {});
     ground.createFixture(new pl.Edge({ x: -edge, y: 0 }, { x: edge, y: 0 }), wf('floor'));
@@ -1233,6 +1236,15 @@ class Game {
   }
 
   // ------------------------------------------------ contacts
+  // no hugging: a glove never pushes against the other boxer's torso/head/legs once it is past their centre line,
+  // just after it landed a hit, or after it has been pressed against them for a moment (it passes through instead of wedging)
+  preSolve(c) {
+    const fA = c.getFixtureA(), fB = c.getFixtureB(), A = fA.getUserData() || {}, B = fB.getUserData() || {};
+    let gl, ot;
+    if (A.part === 'glove' && B.kind === 'part' && B.part !== 'glove') { gl = A; ot = B; } else if (B.part === 'glove' && A.kind === 'part' && A.part !== 'glove') { gl = B; ot = A; } else return;
+    const att = gl.boxer, vic = ot.boxer; if (!vic || vic === att) return;
+    if (this.time < att.gloveGhost || att.gloveContactT > GLOVE_PIN_T || (att.glovePos(0).x - vic.center().x) * vic.dir < GLOVE_PAST) c.setEnabled(false);
+  }
   onContact(c, sign) {
     const fA = c.getFixtureA(), fB = c.getFixtureB();
     this.pair(fA, fB, sign); this.pair(fB, fA, sign);
@@ -1260,7 +1272,7 @@ class Game {
     // only the part of the glove's speed going at the other boxer counts (uppercuts count a bit too)
     const along = h.vx * dir + Math.max(0, h.vy) * 0.35;
     if (along < HIT_MIN) return;
-    att.hitCD[h.arm] = t + 0.25;
+    att.hitCD[h.arm] = t + 0.25; att.gloveGhost = t + 0.3;
     const head = h.part === 'head', live = this.state === 'play', st = this.stats[att.team], vs = this.stats[vic.team];
     // DODGE: a back-hop in the clear, the punch whiffs
     if (vic.invUntil > t) {
@@ -1447,6 +1459,28 @@ class Game {
     }
   }
   afterStep(dt) {
+    // hug protection: time each glove has been pressed on the other boxer, and push boxers apart if they stay overlapped
+    for (const b of this.boxers) {
+      let ct = false; const o = this.boxers[1 - b.team];
+      for (let ce = b.fores[0].getContactList(); ce; ce = ce.next) {
+        const c = ce.contact; if (!c.isTouching()) continue;
+        const u = (c.getFixtureA().getBody() === b.fores[0] ? c.getFixtureB() : c.getFixtureA()).getUserData();
+        if (u && u.kind === 'part' && u.boxer === o && u.part !== 'glove' && u.part !== 'arm') ct = true;
+      }
+      b.gloveContactT = ct ? b.gloveContactT + dt : 0;
+      // glove stuck behind the other boxer's centre line after the punch window closed: the boxers get eased apart below
+      const gx = b.glovePos(0).x - o.center().x;
+      b.gloveBehindT = (this.state === 'play' && !b.ko && !o.ko && this.time >= b.punchUntil && this.time >= b.hayUntil && !b.superFly && gx * o.dir < 0 && Math.abs(gx) < 0.9) ? b.gloveBehindT + dt : 0;
+    }
+    if (this.state === 'play' && this.boxers.length === 2) {
+      const a = this.boxers[0], b = this.boxers[1], dx = b.x - a.x;
+      if (Math.abs(dx) < OVERLAP_D && !a.ko && !b.ko && !a.fallen && !b.fallen) this.overT += dt; else this.overT = 0;
+      if (this.overT > 0.5 || a.gloveBehindT > 0.3 || b.gloveBehindT > 0.3) {
+        const s = dx === 0 ? 1 : Math.sign(dx), k = 0.35;
+        for (const q of a.parts) { const v = q.getLinearVelocity(); q.setLinearVelocity({ x: v.x - s * k, y: v.y }); }
+        for (const q of b.parts) { const v = q.getLinearVelocity(); q.setLinearVelocity({ x: v.x + s * k, y: v.y }); }
+      }
+    }
     for (const h of this.hitQ) this.landHit(h);
     this.hitQ.length = 0;
     this.ropeQ.length = 0;
