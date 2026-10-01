@@ -25,6 +25,8 @@
   .seg, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   #menu button { font: inherit; font-size: 13px; line-height: 1.2; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; box-shadow: 0 3px 0 #141019; padding: 7px 10px; cursor: pointer; }
   #menu button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
+  #menu button[data-lock="1"] { background: #ffd23f; color: #141019; box-shadow: 0 0 0 2px #ff8a2a; }
+  #menu button[data-lock="1"]::after { content: " \2605 ALWAYS"; font-size: 10px; }
   #menu button:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
   #menu button:active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
   .modes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; padding-top: 14px; border-top: 2px solid #2b3350; }
@@ -82,7 +84,7 @@
     <div class="row"><span class="lbl">ALLEY-OOP MODE</span><div class="seg" data-key="cvcOop"><button type="button" id="opt-cvcoop-off" data-v="off">OFF</button><button type="button" id="opt-cvcoop-on" data-v="on">ON</button></div></div>
     <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
     <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
-    <div class="modes-head"><span class="lbl">RANDOM MODES</span><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div>
+    <div class="modes-head"><span class="lbl">RANDOM MODES</span><span class="lbl" style="font-size:11px;opacity:.8">click once = random, twice = ALWAYS every round, thrice = off</span><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div>
     <p class="note">After every point, one or more of the modes you leave on kicks in. Round 1 is always a normal gym. The CPU tournament uses these settings too.</p>
     <div id="mode-groups"></div>
     <div class="foot"><button type="button" id="done">DONE</button><span class="hint">SAVED FOR NEXT TIME. ESC ALSO CLOSES.</span></div>
@@ -117,6 +119,12 @@ const MASK_BALL = CAT_WORLD | CAT_PLAYER | CAT_HOOP;
 const HOOP_CX = 6.45, BOARD_X = 7.12;
 let RIM_Y = 3.5, RIM_HALF = 0.55;          // set per round by the hoop mode
 const METER_TIME = 0.62, METER_GREEN = 0.8, DUNK_RANGE = 2.6;
+// a HEAD JUMP (off somebody's head) is a springboard, the same for everyone: up, and flying at the hoop you
+// attack, far enough to come down about a metre in front of the rim (from up to about 5 m out)
+const springVel = p => {
+  const g = p.game, vy = g.cfg.jumpV * 1.15, T = 2 * vy / g.cfg.gravity * 0.9, ahead = (g.hoopFor(p.team).cx - p.center().x) * p.dir;
+  return { x: p.dir * clamp((ahead - 1.1) / T, 1.2, 6.2), y: vy };
+};
 const GAME_SPEED = 0.95;   // the whole game runs a touch slower than real time
 const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 1.45, NECK_HZ = 2.6;
 const INK = '#141019', CREAM = '#fff6e0', ORANGE = '#ff8a2a', GREEN = '#43f07a';
@@ -902,7 +910,7 @@ class Ball {
     this.body.setGravityScale(0);
     this.holder = null; this.arm = 0; this.ghost = false; this.ghostT = 0; this.green = false; this.dunked = null; this.padCD = 0;
     this.lastThrower = null; this.throwTime = -9; this.prevY = 5.8; this.stillT = 0; this.rimT = -9; this.waiting = true;
-    this.spr = ballSprite(Math.max(6, Math.round(B.r * 2 * PPM)), B.look);
+    if (!game.isShadow) this.spr = ballSprite(Math.max(6, Math.round(B.r * 2 * PPM)), B.look);
   }
   setHeld(on) { this.fix.setFilterData({ groupIndex: 0, categoryBits: CAT_BALL, maskBits: on ? 0 : MASK_BALL }); }
 }
@@ -928,7 +936,7 @@ class Player {
     this.feet = 0; this.grounded = false; this.fallen = false;
     this.wob = 0; this.swaySign = 1; this.airT = 0; this.airVy = 0; this.flailT = 0; this.flailCD = 0; this.flailK = 0; this.flailPh = 0; this.flailTick = 0;
     this.dunk = null; this.hang = null; this.holding = null; this.spinA = 0; this.front = false; this.armScale = 1;
-    this.build(x); this.makeSprites();
+    this.build(x); if (!game.isShadow) this.makeSprites();
     if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
   }
   build(x) {
@@ -1114,10 +1122,36 @@ class Player {
     if (this.dunk || this.hang) return;
     if (this.fallen) { if (this.center().y < 1.2 && this.jumpCD <= 0) this.getUp(); return; }   // mashing doesn't re-spin you
     if (this.grounded && this.jumpCD <= 0) this.jump();
+    else if (!this.grounded && this.jumpCD <= 0) { const o = this.headBelow(); if (o) this.jump(o); }   // off somebody's head, mid-air
+  }
+  // a head right under our feet, close enough to jump off (coming down onto it, or it coming up to meet us)
+  headBelow() {
+    const f0 = this.footPoint(0), f1 = this.footPoint(1), fx = (f0.x + f1.x) / 2, fy = Math.min(f0.y, f1.y), vy = this.body.getLinearVelocity().y;
+    for (const o of this.game.players) {
+      if (o === this || o.fallen || o.hang) continue;
+      const hd = o.head.getPosition(), top = hd.y + o.d.headR, gap = fy - top;
+      if (Math.abs(hd.x - fx) < 0.42 && gap > -0.2 && gap < 0.45 && vy - o.head.getLinearVelocity().y < 1.5) return o;
+    }
+    return null;
   }
   release() { this.armsUp = false; }
-  jump() {
+  jump(off) {
+    const on = off || (this.standOn && this.feet > 0 && this.footY() > 0.8 ? this.standOn : null);
+    if (on) {
+      // off somebody's head: they get shoved down, and it's a second jump way up in the air
+      for (const q of on.parts) { const lv = q.getLinearVelocity(); q.setLinearVelocity({ x: lv.x, y: Math.min(lv.y, 0) - 3 }); }
+      this.headJumpT = this.game.time; this.standOn = null;
+      const hp = this.head.getPosition(); this.game.popup('HEAD JUMP!', hp.x, hp.y + 0.8, '#ff8a2a', 8, 0.9); this.game.sfx.boing();
+    }
     const th = this.angle(), v = this.game.cfg.jumpV;
+    if (on) {
+      // a head is a springboard: it sends you up and on toward the hoop you attack, whichever way you were leaning
+      const sv = springVel(this);
+      for (const b of this.parts) b.setLinearVelocity(sv);
+      this.body.setAngularVelocity(-th * 3);
+      this.jumpCD = 0.3;
+      return;
+    }
     const fwd = -Math.sin(th) * this.dir > 0, vx = -Math.sin(th) * v * JUMP_LEAN * (fwd ? 1.15 : 1), vy = v * (0.8 + 0.2 * Math.cos(th));
     for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.2 + vx, y: vy }); }
     this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.7 + th * 0.8 + rand(-0.5, 0.5));
@@ -1334,11 +1368,103 @@ class CPU {
     }
   }
 }
+// ---------------------------------------------------------------- lookahead
+// A second, silent copy of the game the IMPOSSIBLE brain can try things out in: the same physics and rules, started
+// from where the real game is right now and run a second or so ahead. It can't see what chance will do in the real
+// game (every try rolls its own dice), so each answer is a guess, and it plays the other side as it would play itself.
+const NOOP = () => {};
+const SHADOW_NOOPS = ['popup', 'addPart', 'flame', 'slowmo', 'addShake', 'cue', 'greenSound', 'watchShot', 'recordFrame', 'startReplay', 'playImpact'];
+function getShadow(g, slot = 0) {
+  const all = g.shadows || (g.shadows = []);
+  let S = all[slot];
+  if (!S || S.shadowKey !== g.roundId) {
+    S = new Game(true);
+    S.shadowKey = g.roundId;
+    S.settings = g.settings; S.roster = g.roster;
+    S.setupRound(g.rc, g.teamSize);
+    S.cfg.wind = g.cfg.wind;
+    for (const k of SHADOW_NOOPS) S[k] = NOOP;
+    S.sfx = new Proxy({}, { get: () => NOOP });
+    all[slot] = S;
+  }
+  return S;
+}
+const copyPrims = (a, b) => { for (const k of Object.keys(a)) { const v = a[k]; if (v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') b[k] = v; } };
+const copyBody = (a, b) => { b.setTransform(a.getPosition(), a.getAngle()); b.setLinearVelocity(a.getLinearVelocity()); b.setAngularVelocity(a.getAngularVelocity()); b.setAwake(true); };
+// the shadow's state = the real game's state right now (false when somebody is mid-dunk or hanging: not copied)
+function syncShadow(g, S, me) {
+  if (g.players.some(p => p.dunk || p.hang)) return false;
+  // bodies first, and a hair of a step so the contacts exist before anything is counted
+  g.players.forEach((p, i) => { for (let k = 0; k < p.parts.length; k++) copyBody(p.parts[k], S.players[i].parts[k]); });
+  g.balls.forEach((b, i) => { copyBody(b.body, S.balls[i].body); S.balls[i].body.setGravityScale(b.body.getGravityScale()); });
+  g.hoops.forEach((h, i) => { if (h.moving) copyBody(h.body, S.hoops[i].body); });
+  S.world.step(1e-6, 1, 1);
+  S.world.s_step.dt = STEP; S.world.s_step.inv_dt = 1 / STEP;   // (so the next real step doesn't think that was a long wait)
+  // contacts that are touching carry how hard they were pushing; give the copy the same so it settles the same way
+  const fkey = f => { const u = f.getUserData() || {}; return u.kind + ':' + (u.player ? u.player.id : '') + (u.part || '') + (u.arm === undefined ? '' : u.arm) + (u.kind === 'ball' ? g.balls.indexOf(u.ball) : ''); };
+  const have = new Map();
+  for (let c = S.world.getContactList(); c; c = c.getNext()) if (c.isTouching()) have.set(fkey(c.getFixtureA()) + '|' + fkey(c.getFixtureB()), c);
+  for (let c = g.world.getContactList(); c; c = c.getNext()) {
+    if (!c.isTouching()) continue;
+    const d = have.get(fkey(c.getFixtureA()) + '|' + fkey(c.getFixtureB()));
+    if (!d) continue;
+    const m0 = c.getManifold(), m1 = d.getManifold();
+    if (m0.type !== m1.type) continue;
+    for (let i = 0; i < m0.pointCount; i++) { const q = m0.points[i], r = m1.points.slice(0, m1.pointCount).find(x => x.id.key === q.id.key); if (r) { r.normalImpulse = q.normalImpulse; r.tangentImpulse = q.tangentImpulse; } }
+  }
+  copyPrims(g, S);   // time, round time, state, scores, and so on
+  S.isShadow = true; S.shadowKey = g.roundId; S.cfg.wind = g.cfg.wind;
+  S.score = g.score.slice(); S.stats = g.stats.map(x => ({ ...x })); S.held = g.held.slice(); S.streak = { ...g.streak };
+  const pi = p => (p ? g.players.indexOf(p) : -1), P = i => (i >= 0 ? S.players[i] : null);
+  g.players.forEach((p, i) => { const q = S.players[i]; copyPrims(p, q); q.dunk = null; q.hang = null; q.standOn = P(pi(p.standOn)); });
+  g.balls.forEach((b, i) => {
+    const q = S.balls[i]; copyPrims(b, q);
+    q.holder = P(pi(b.holder)); q.lastThrower = P(pi(b.lastThrower)); q.shotBy = P(pi(b.shotBy)); q.dunked = null; q.greenClip = null; q.oopLob = b.oopLob ? { ...b.oopLob } : null; q.setHeld(!!b.holder);
+  });
+  g.players.forEach((p, i) => { S.players[i].holding = p.holding ? S.balls[g.balls.indexOf(p.holding)] : null; });
+  S.meters = g.meters.map(m => ({ ...m, player: P(pi(m.player)), ball: S.balls[g.balls.indexOf(m.ball)] }));
+  g.hoops.forEach((h, i) => copyPrims(h, S.hoops[i]));
+  S.evq.length = 0; S.grabQ.length = 0; S.bumpQ.length = 0; S.bonkQ.length = 0; S.airballQ.length = 0; S.deflectQ.length = 0; S.dustQ.length = 0; S.sndQ.length = 0; S.parts.length = 0; S.pops.length = 0;
+  // the brains: ours and theirs, started where the real ones are
+  S.cpus = [0, 1].map(t => {
+    const real = g.cpus.find(c => c.team === t), c = makeCPU(S, t, 'impossible', { oop: !!(real && real.oopMode) });
+    // (our own brain carries on from where it is; for theirs all we can see is whether the key is down, so that's all it gets)
+    if (real && t === me) { copyPrims(real, c); c.hold = real.hold ? { until: real.hold.until } : null; }
+    else { c.down = !!g.held[t]; c.t = g.time; c.until = g.time + 0.1; }
+    c.g = S; c.oop = null; c.noLook = true; c.mref = null; c.force = null;
+    return c;
+  });
+  return true;
+}
+// One try in the shadow: our team's key does `force` ({ down, t }: held that way for t seconds) and then the brain carries on
+// as usual, and both sides play on. A step at a time; the answer comes back when the try is over, scored for our team: +1 for a
+// basket, -1 against, and in between for who has the ball, a shot in the air, or a loose ball nearer to us or to them.
+function stepRun(r, team, n) {
+  const S = r.S;
+  if (r.k === r.lag && r.c.t) S.cpus[team].force = { down: r.c.down, t: r.c.t };   // (the real key does this once the look is over)
+  S.fixed(STEP); r.k++;
+  if (S.state !== 'play') return S.state === 'scored' ? (S.scorer === team ? 1 : -1) : 0;
+  if (r.had) { const h = S.players.find(p => p.holding); if (h && h.team !== team) return -0.35; }   // (the ball was ours and now it isn't)
+  if (r.k < n) return null;
+  const b = S.balls[0], h = S.players.find(p => p.holding);
+  if (h) return h.team === team ? 0.32 : -0.32;
+  if (b.green && b.lastThrower) return b.lastThrower.team === team ? 0.9 : -0.9;
+  const bp = b.body.getPosition();
+  let dm = 99, dt = 99;
+  for (const p of S.players) { const d = Math.hypot(p.center().x - bp.x, Math.max(0, bp.y - 3.2) * 0.6); if (p.team === team) dm = Math.min(dm, d); else dt = Math.min(dt, d); }
+  return 0.25 * Math.tanh((dt - dm) / 1.5);
+}
 // The IMPOSSIBLE level. The other levels react late and guess; this one reads the whole court every frame and
 // plans with the game's own physics: where a hop from this lean will land, and whether a raised hand will meet
 // a ball's flight. It shoots on the meter step closest to green, only when nobody can goaltend it, throws
 // alley-oops to a teammate it has parked under the rim, blocks and goaltends anything in reach, and times
 // every hop to the rocking so each one goes where it wants.
+// When the ball is being fought over it also plays the next moment out in a shadow copy of the game (see lookahead
+// above), once for each thing it could do with its key, and does whichever went best.
+// how the lookahead works: how far ahead (secs), how often a look starts (frames), how near the ball has to be fought over
+// (m), how many steps of each try run per frame (cut down on slow machines to stay under `budget` ms), and what it tries
+// ({ down, t }: the key held up or down for t seconds)
+const TUNE = { look2: 1, lookMargin: 0.1, lookH: 0.8, lookEvery: 6, lookR: 4.5, lookAge: 14, chunk: 24, budget: 6, cands: [{ t: 0 }, { down: true, t: 0.1 }, { down: true, t: 0.5 }, { down: false, t: 0.2 }] };
 class ImpossibleCPU extends CPU {
   constructor(game, team, level, opts) {
     super(game, team, level);
@@ -1354,10 +1480,10 @@ class ImpossibleCPU extends CPU {
   }
   // where p's arm (shoulder to hand) will be t seconds after pressing now (or after `delay`). The arm swings
   // forward and up to overhead, leaning a little out in front; any part of it can take the ball.
-  arm(p, t, delay, jv) {
+  arm(p, t, delay, jv, launch) {
     const g = this.g.cfg.gravity, c = p.center(), s = Math.max(0, t - delay), L = p.d.armLen;
     let x = c.x, y = c.y;
-    if (p.grounded && s > 0) {
+    if ((p.grounded || launch) && s > 0) {
       // the ragdoll's torso lags the jump a little: measured, it rises like 91% of the take-off speed, 0.03 s late
       const vx = jv.x * 0.91, vy = jv.y * 0.91, u = clamp(s - 0.03, 0, 2 * vy / g);
       x += vx * u; y += vy * u - 0.5 * g * u * u;
@@ -1427,6 +1553,54 @@ class ImpossibleCPU extends CPU {
     if (settled || (Math.sign(go) === Math.sign(want) && Math.abs(go) > Math.min(Math.abs(want), 1.5) * 0.45 && Math.abs(go) < Math.abs(want) + 1.8)) { this.tap(tapT); return true; }
     return false;
   }
+  // is the ball being fought over? then try a few things with the key for the next moment (each in its own shadow game,
+  // a few steps per frame so the real game never stalls) and, when they've played out, do the one that went best
+  tryOut(mine, rivals) {
+    const g = this.g;
+    if (this.job) return this.advanceLook();
+    // (the shadow games are built one a frame as each round starts, so none of them costs a hitch)
+    let have = 0; while (g.shadows && have < g.shadows.length && g.shadows[have].shadowKey === g.roundId) have++;
+    if (have < TUNE.cands.length) { getShadow(g, have); return false; }
+    if ((this.lookT2 = (this.lookT2 || 0) - 1) > 0) return false;
+    this.lookT2 = TUNE.lookEvery;
+    const holder = g.players.find(p => p.holding);
+    let near = false;
+    for (const b of g.balls) {
+      if (b.waiting) continue;
+      const bp = b.body.getPosition();
+      if (holder) { if (holder.team === this.team ? rivals.some(o => Math.abs(o.x - holder.x) < TUNE.lookR) : mine.some(o => Math.abs(o.x - holder.x) < TUNE.lookR)) near = true; }
+      else if (g.players.some(p => Math.abs(p.x - bp.x) < TUNE.lookR) && bp.y < 6.5) near = true;
+    }
+    if (!near) return false;
+    const had = !!(holder && holder.team === this.team), runs = [];
+    for (let i = 0; i < TUNE.cands.length; i++) {
+      const c = TUNE.cands[i], S = getShadow(g, i);
+      if (!syncShadow(g, S, this.team)) return false;
+      runs.push({ c, S, v: null, k: 0, had, lag: Math.ceil(Math.round(TUNE.lookH / STEP) / (this.chunk || TUNE.chunk)) - 1 });
+    }
+    this.job = { id: g.roundId, t0: g.time, runs, age: 0 };
+    if (!this.chunk) this.chunk = TUNE.chunk;
+    return this.advanceLook();
+  }
+  advanceLook() {
+    const g = this.g, J = this.job, t0 = performance.now(), n = Math.round(TUNE.lookH / STEP);
+    if (J.id !== g.roundId || g.state !== 'play' || ++J.age > TUNE.lookAge) { this.job = null; return false; }
+    let done = true;
+    for (const r of J.runs) {
+      for (let i = 0; i < this.chunk && r.v === null; i++) r.v = stepRun(r, this.team, n);
+      if (r.v === null) done = false;
+    }
+    // (slower machines do fewer steps a frame, so a look takes more frames instead of making any one frame long)
+    if (TUNE.budget) { const ms = performance.now() - t0; this.ema = this.ema === undefined ? ms : this.ema * 0.8 + ms * 0.2; this.chunk = clamp(this.chunk + (this.ema > TUNE.budget ? -1 : this.ema < TUNE.budget * 0.5 ? 1 : 0), 3, 24); }
+    if (!done) return false;
+    this.job = null;
+    let best = J.runs[0];
+    for (const r of J.runs) if (r.v > best.v) best = r;
+    const left = best.c.t - Math.max(0, J.age - best.lag - 1) * STEP;   // (what's left of the key press it picked, if the look ran long)
+    if (!best.c.t || best.v < J.runs[0].v + TUNE.lookMargin || left < 0.03) return false;
+    this.force = { down: best.c.down, t: left };
+    this.hold = null; this.set(best.c.down); return true;
+  }
   releaseMeter(m) {
     // the meter moves in steps: let go on the step nearest the middle of the green
     const inc = STEP / (METER_TIME * m.speed);
@@ -1449,6 +1623,7 @@ class ImpossibleCPU extends CPU {
     if (!(g.state === 'play' || g.state === 'title')) { this.set(false); this.oop = null; this.hold = null; return; }
     const mine = g.players.filter(p => p.team === this.team), rivals = g.players.filter(p => p.team !== this.team);
     const m = g.meters.find(q => q.state === 'charging' && q.player.team === this.team);
+    if (this.force && !m) { this.force.t -= STEP; if (this.force.t > 0) { this.hold = null; this.set(this.force.down); return; } this.force = null; }
     if (m && this.oopMode) g.clearMeter(m.player);   // ALLEY-OOP MODE: no shots, so a hop with the ball is just a hop
     else if (m) { this.releaseMeter(m); return; }
     if (mine.some(p => p.dunk || p.hang)) {
@@ -1456,6 +1631,11 @@ class ImpossibleCPU extends CPU {
       else if (this.oop && this.oop.self && this.oop.finisher.dunk) { const h = this.oop.finisher.head.getPosition(); g.popup('SELF ALLEY-OOP!', h.x, h.y + 1.2, '#ffd23f', 8, 1.2); this.oop = null; }
       else this.oop = null;
       return;
+    }
+    if (TUNE.look2 && !this.noLook && !this.oopMode && !m && g.state === 'play') {
+      let did = false;
+      try { did = this.tryOut(mine, rivals); } catch (e) { this.noLook = true; this.job = null; console.warn('lookahead off:', e); }   // (never let a failed try take the game down)
+      if (did) return;
     }
     if (this.oop && this.runOop(mine)) return;
     if (this.hold) { if (this.t < this.hold.until && !mine.some(p => p.holding)) return; this.hold = null; this.set(false); }
@@ -1633,6 +1813,13 @@ class ImpossibleCPU extends CPU {
     if (this.down) return;
     const mates = mine.filter(p => p !== h && !p.fallen);
     const pressed = rivals.some(o => !o.fallen && Math.abs(o.center().x - h.x) < 1.2);   // about to get stripped
+    // a plain dunk is allowed too: in the air with the rim in reach, press for the slam; near the rim on the floor, hop up to it
+    if (!h.grounded && h.canDunk()) { this.tap(0.1); return; }
+    if (h.grounded && a(h) > 0.3 && a(h) < 3.2 && !pressed && !h.fallen && h.jumpCD <= 0) { this.tap(0.1); return; }
+    // CRAZY PLAY: a finisher standing on somebody's head right now (it only lasts a moment): throw it up there
+    // for a second jump off that head, and catch it on the way down for the slam
+    const perched = mates.find(p => p.jumpCD <= 0 && ((p.grounded && p.standOn && p.footY() > 0.9) || (!p.grounded && p.headBelow())));
+    if (perched) { const plan = this.planOop(h, [perched], rivals, true); if (plan) { this.lob(h, plan); return; } }
     // look for a lob every few frames (each look tries every finisher and catch height)
     if ((this.lookT = (this.lookT || 0) - STEP) <= 0) {
       this.lookT = 0.05;
@@ -1640,13 +1827,17 @@ class ImpossibleCPU extends CPU {
       let pass = mates.length ? this.planOop(h, mates, rivals) : null;
       // DOWNTOWN: a long, high lob from anywhere on the floor to a finisher already by the rim
       if (mates.length && (!pass || !pass.open)) { const long = this.planLongOop(h, mates, rivals); if (long && (long.open || !pass)) pass = long; }
+      // THE SKY WALK: a sky-high lob over a head by the rim, for a finisher to climb up and jump off (tried often:
+      // it's the show-stopper)
+      if (mates.length && (!pass || !pass.open) && this.waitT > 0.5 && Math.random() < 0.25) { const sky = this.planSkyOop(h, mates, rivals); if (sky) { this.lob(h, sky); return; } }
       const self = !pass || !pass.open ? this.planOop(h, [h], rivals) : null;
       const plan = pass && pass.open ? pass : self && self.open && (!mates.length || this.waitT > 1.4) ? self
         : pressed || this.waitT > 2.6 ? pass || self : null;
       if (plan) { this.lob(h, plan); return; }
     }
-    // (a press this close would turn into a plain dunk, not an oop: don't hop the handler in there)
-    if (h.canDunk() || h.canDunk(true)) return;
+    // setting it up: a hop that lands a finisher's feet on a head by the rim (their rim guard's, or a teammate
+    // already up in the air)
+    if (mates.length && this.waitT > 0.3 && this.climb(mates)) return;
     // move up: finishers out where a jump carries them to the rim, the handler back far enough to throw over the top
     // (the handler doesn't need to come up: it can throw it from downtown)
     const spots = mates.length
@@ -1654,38 +1845,95 @@ class ImpossibleCPU extends CPU {
       : [{ p: h, x: hoop.cx - dir * 3.6, w: 1 }];
     this.move(spots, 0.35);
   }
+  // a hop right now that brings a finisher's feet down on somebody's head, near enough the rim to go up from there
+  climb(mates, check) {
+    const g = this.g, hoop = g.hoopFor(this.team), grav = g.cfg.gravity;
+    for (const f of mates) {
+      if (!f.grounded || f.jumpCD > 0 || f.footY() > 0.3) continue;
+      const jv = this.jumpVel(f), c = f.center(), off = c.y - f.footY();
+      for (const o of g.players) {
+        if (o === f || o.fallen || o.dunk || o.hang) continue;
+        if (o.team === this.team && o.grounded) continue;   // (a teammate on the floor jumps too when we press)
+        const hd = o.head.getPosition(), top = hd.y + o.d.headR, ov = o.body.getLinearVelocity();
+        const a = (hoop.cx - hd.x) * f.dir;
+        if (a < -0.2 || a > DUNK_RANGE + 1.2) continue;
+        // (their head can be on the way up or down: what matters is our feet coming down onto it from above)
+        const flying = !o.grounded, land = flying ? (ov.y + Math.sqrt(Math.max(0, ov.y * ov.y + 2 * grav * Math.max(0, hd.y - 1.9)))) / grav : 9;
+        for (let t = 0.12; t < 0.9; t += STEP) {
+          const vy = jv.y * 0.91 - grav * t, tt = Math.min(t, land);
+          const x = c.x + jv.x * 0.91 * t, fy = c.y + jv.y * 0.91 * t - 0.5 * grav * t * t - off;
+          const ox = hd.x + (flying ? ov.x * tt : 0), oy = top + (flying ? ov.y * tt - 0.5 * grav * tt * tt : 0), ovy = flying && t < land ? ov.y - grav * t : 0;
+          if (vy < ovy && Math.abs(x - ox) < 0.3 && fy - oy > -0.1 && fy - oy < 0.35) { if (!check) this.tap(0.1); return true; }
+        }
+      }
+    }
+    return false;
+  }
   // every lob worth throwing right now: for each finisher, a jump pressed d seconds after the throw, caught
   // near the top with the hand out, in dunk range. Rated by whether any of them can get a hand on it first.
-  planOop(h, cands, rivals) {
+  planOop(h, cands, rivals, high) {
     const g = this.g, b = h.holding; if (!b) return null;
     const hoop = g.hoopFor(this.team), grav = g.cfg.gravity * b.body.getGravityScale(), from = b.body.getPosition();
     let best = null;
     for (const f of cands) {
-      if (f.fallen || !f.grounded) continue;
+      if (f.fallen || (!f.grounded && !high)) continue;
       const self = f === h, om = f.body.getAngularVelocity();
       // the jump goes off almost at once: the players rock, so a jump planned further ahead goes somewhere else.
       // (so the lob waits for a moment when the lean sends them the right way)
       // (throwing it to yourself: the game won't let you grab your own throw for 0.45 s, so catch it on the way down)
       for (const d of [0.03]) {
         if (f.jumpCD > d) continue;
-        const jv = this.jumpVel(f, f.angle() + om * d), up = jv.y * 0.91 / g.cfg.gravity;
-        for (const k of [0.7, 0.85, 1, 1.15, 1.3]) {
+        const jv = high ? springVel(f) : this.jumpVel(f, f.angle() + om * d), up = jv.y * 0.91 / g.cfg.gravity;
+        // (from up on a head the top of the jump is way over the rim: catch it on the way down instead)
+        for (const k of high ? [0.9, 1.1, 1.3, 1.5, 1.7, 1.9, 2.1, 2.3] : [0.7, 0.85, 1, 1.15, 1.3]) {
           const tc = d + 0.03 + up * k;
           if (self && tc < 0.5) continue;
-          const A = this.arm(f, tc, d, jv), cx = A.sx - f.dir * 0.05, cy = A.sy - 0.42, ahead = (hoop.cx - cx) * f.dir;
-          if (ahead < 0.5 || ahead > DUNK_RANGE - 0.4 || cy > hoop.y + 1.0) continue;   // has to be a dunk from there (with room to spare)
+          const A = this.arm(f, tc, d, jv, high), cx = A.sx - f.dir * 0.05, cy = A.sy - 0.42, ahead = (hoop.cx - cx) * f.dir;
+          if (ahead < (high ? 0.35 : 0.5) || ahead > DUNK_RANGE - (high ? 0.25 : 0.4) || cy > hoop.y + (high ? 1.12 : 1.0)) continue;   // has to be a dunk from there (with room to spare)
           const P = { x: A.sx + (A.hx - A.sx) * 0.8, y: A.sy + (A.hy - A.sy) * 0.8 };
           const vel = { x: (P.x - from.x) / tc, y: (P.y - from.y + 0.5 * grav * tc * tc) / tc };
-          if (Math.hypot(vel.x, vel.y) > 13) continue;
+          if (Math.hypot(vel.x, vel.y) > (high ? 16 : 13)) continue;
           const path = this.flight(from, vel, tc + 0.02, false);
           // (the lob mustn't clip the backboard on the way in)
           if (path.some(q => Math.abs(q.x - hoop.side * BOARD_X) < 0.2 && q.y > hoop.y - 0.3 && q.y < hoop.y + 1.4)) continue;
           // (or bang off the rim before it gets to the hand)
           if (path.some(q => Math.abs(q.x - hoop.cx) < RIM_HALF + 0.2 && Math.abs(q.y - hoop.y) < 0.3)) continue;
+          if (this.bodiesInWay(path, h, f, tc, b.r)) continue;
           const touch = this.firstTouch(path, rivals, b.r + 0.22);
           // no touch beats any touch, then a later touch; a teammate beats yourself; the further they fly, the better
           const score = (touch ? touch : 9) - (self && cands.length > 1 ? 1.5 : 0) + Math.abs(jv.x) * 0.05;
           if (!best || score > best.score) best = { f, d, tc, vel, score, open: !touch, self, P, hand: { x: A.hx, y: A.hy } };
+        }
+      }
+    }
+    return best;
+  }
+  // a SKY WALK lob: sky-high, coming down over somebody's head by the rim (a stepping stone), with a finisher close
+  // enough to hop up onto that head and jump off it into the ball (see runOop)
+  planSkyOop(h, mates, rivals) {
+    const g = this.g, b = h.holding; if (!b) return null;
+    const hoop = g.hoopFor(this.team), grav = g.cfg.gravity * b.body.getGravityScale(), from = b.body.getPosition();
+    let best = null;
+    for (const st of g.players) {
+      if (st === h || st.fallen || st.dunk || st.hang) continue;
+      const hd = st.head.getPosition(), a = (hoop.cx - hd.x) * h.dir;
+      if (a < 0.2 || a > DUNK_RANGE + 0.6) continue;
+      for (const f of mates) {
+        if (f === st || f.fallen || !f.grounded || Math.abs(f.x - hd.x) > 2.8 || Math.abs(f.x - hd.x) < 0.5) continue;
+        // up over the stepping stone, a bit toward the rim: where a jump off that head tops out
+        const P = { x: hd.x + h.dir * 0.5, y: hd.y + st.d.headR + 2.9 };
+        if ((hoop.cx - P.x) * h.dir < 0.4) continue;
+        for (const T of [1.3, 1.5, 1.7]) {
+          const vel = { x: (P.x - from.x) / T, y: (P.y - from.y + 0.5 * grav * T * T) / T };
+          if (Math.hypot(vel.x, vel.y) > 19 || vel.y < 3) continue;
+          const path = this.flight(from, vel, T + 0.02, false);
+          if (path.some(q => q.y > VY1 - 0.3)) continue;
+          if (path.some(q => Math.abs(q.x - hoop.side * BOARD_X) < 0.2 && q.y > hoop.y - 0.3 && q.y < hoop.y + 1.4)) continue;
+          if (path.some(q => Math.abs(q.x - hoop.cx) < RIM_HALF + 0.2 && Math.abs(q.y - hoop.y) < 0.3)) continue;
+          if (this.bodiesInWay(path, h, f, Math.min(T, 0.6), b.r)) continue;   // (nobody takes it off the thrower's hand)
+          const touch = this.firstTouch(path, rivals, b.r + 0.22, 0.12);
+          const score = (touch ? touch : 9) - Math.abs(Math.abs(f.x - hd.x) - 1.5);
+          if (!best || score > best.score) best = { f, stone: st, d: 0, tc: T, vel, score, open: !touch, self: false, sky: true, P };
         }
       }
     }
@@ -1713,6 +1961,7 @@ class ImpossibleCPU extends CPU {
         if (path.some(q => Math.abs(q.x - hoop.side * BOARD_X) < 0.2 && q.y > hoop.y - 0.3 && q.y < hoop.y + 1.4)) continue;
         if (path.some(q => Math.abs(q.x - hoop.cx) < RIM_HALF + 0.2 && Math.abs(q.y - hoop.y) < 0.3)) continue;
         if (path.some(q => q.y > VY1 - 0.4)) continue;   // (under the roof)
+        if (this.bodiesInWay(path, h, f, T, b.r)) continue;
         const touch = this.firstTouch(path, rivals, b.r + 0.22, 0.1);
         const score = (touch ? touch : 9) - Math.abs(T - 1.3) * 0.3;   // (a high, hanging lob looks best and gives the most chances to time the jump)
         if (!best || score > best.score) best = { f, d: 0, tc: T, vel, score, open: !touch, self: false, long: true, P };
@@ -1730,6 +1979,36 @@ class ImpossibleCPU extends CPU {
       if (ahead < 0.45 || ahead > DUNK_RANGE - 0.3 || cy > hoop.y + 1.0) continue;
       const P = { x: A.sx + (A.hx - A.sx) * 0.8, y: A.sy + (A.hy - A.sy) * 0.8 };
       if (Math.hypot(q.x - P.x, q.y - P.y) < 0.3) return true;
+    }
+    return false;
+  }
+  // does the lob fly into somebody's head or body on the way (a teammate's hand grabbing it early counts too)?
+  bodiesInWay(path, h, f, tc, r) {
+    for (const p of this.g.players) {
+      if (p === h || p.fallen) continue;
+      const hd = p.head.getPosition(), c = p.center(), v = p.body.getLinearVelocity(), air = !p.grounded, g = this.g.cfg.gravity;
+      const hp = p.team === this.team ? p.handPos(0) : null;
+      for (const q of path) {
+        if (q.t > tc - (p === f ? 0.15 : 0.02)) break;
+        const dx = v.x * q.t, dy = air ? v.y * q.t - 0.5 * g * q.t * q.t : 0;
+        if (Math.hypot(q.x - hd.x - dx, q.y - hd.y - dy) < p.d.headR + r + 0.08) return true;
+        if (Math.abs(q.x - c.x - dx) < 0.3 + r && Math.abs(q.y - c.y - dy) < 0.6 + r) return true;
+        if (hp && Math.hypot(q.x - hp.x - dx, q.y - hp.y - dy) < r + 0.3) return true;
+      }
+    }
+    return false;
+  }
+  // up over a head: would jumping off it right now put the hand on the ball, near the top, in dunk range?
+  skyCatch(f, b) {
+    const g = this.g, path = this.ballFlight(b), jv = springVel(f), up = jv.y * 0.91 / g.cfg.gravity;
+    for (const k of [0.8, 1, 1.2, 1.4, 1.6, 1.8, 2]) {
+      const tc = 0.03 + up * k, q = path.find(o => o.t >= tc); if (!q) return false;
+      const A = this.arm(f, tc, 0, jv, true), cx = A.sx - f.dir * 0.05, cy = A.sy - 0.42, ahead = (g.hoopFor(this.team).cx - cx) * f.dir;
+      if (ahead < 0.4 || ahead > DUNK_RANGE - 0.2 || cy > g.hoopFor(this.team).y + 1.1) continue;
+      for (const u of [0.55, 0.75, 0.95]) {
+        const P = { x: A.sx + (A.hx - A.sx) * u, y: A.sy + (A.hy - A.sy) * u };
+        if (Math.hypot(q.x - P.x, q.y - P.y) < 0.35) return true;
+      }
     }
     return false;
   }
@@ -1755,15 +2034,31 @@ class ImpossibleCPU extends CPU {
     b.body.setLinearVelocity(plan.vel); b.body.setAngularVelocity(-plan.f.dir * 5); b.ghost = false; b.green = false;
     const downtown = Math.abs(g.hoopFor(this.team).cx - h.x) > HOOP_CX;   // thrown from their own half
     g.sfx.shot(); const hp = h.head.getPosition(); g.popup(plan.self ? 'SELF LOB!' : downtown ? 'DOWNTOWN LOB!' : 'LOB!', hp.x, hp.y + 0.9, downtown ? '#ffd23f' : '#fff6e0', 8, 0.9);
-    this.oop = { finisher: plan.f, self: plan.self, ball: b, pressAt: plan.long ? Infinity : this.t + plan.d - STEP, catchT: plan.tc, t: 0, phase: 'lob', long: !!plan.long };
+    this.oop = { finisher: plan.f, self: plan.self, ball: b, pressAt: plan.long || plan.sky ? Infinity : this.t + plan.d - STEP, catchT: plan.tc, t: 0, phase: 'lob', long: !!plan.long, sky: !!plan.sky };
+    if (plan.sky) g.popup('SKY LOB!', hp.x, hp.y + 1.4, '#ff4fa3', 8, 0.9);
     this.set(false); this.waitT = 0;
   }
   // the lob is up: jump on time, keep the key held through the catch (so it turns into the slam), then let go
   runOop(mine) {
     const O = this.oop, g = this.g, f = O.finisher, b = O.ball;
+    if (!b) { O.t += STEP; if (O.t > 1.2) this.oop = null; return false; }   // a 'shot' mark has no lob ball (the meter is still running)
     O.t += STEP;
     const gone = !mine.includes(f) || (b.holder && b.holder.team !== this.team) || O.t > O.catchT + 1.2;
     if (gone || (b.holder && b.holder === f && !f.dunk && f.grounded)) { this.oop = null; this.set(false); return false; }
+    if (O.sky) {
+      // the sky walk, step by step, every frame against where the ball really is
+      if (this.down && this.t >= this.until) this.set(false);
+      if (this.down || b.holder) return true;
+      if (f.grounded && f.jumpCD <= 0) {
+        // on the floor: hop when the jump brings our feet down onto a head (or straight into the catch)
+        const direct = this.longCatch(f, b);
+        if (direct || this.climb([f], true)) { this.set(true); this.until = this.t + (direct ? 0.9 : 0.1); }
+      } else if (!f.grounded && f.jumpCD <= 0 && f.headBelow() && this.skyCatch(f, b)) {
+        // up on the head: the jump off it meets the ball in dunk range. Go, and keep the arm up for the catch
+        this.set(true); this.until = this.t + 0.9;
+      }
+      return true;
+    }
     if (O.phase === 'lob') {
       if (O.long) {
         // a downtown lob: go up the moment a jump from this lean meets it up by the rim
@@ -1793,7 +2088,7 @@ function migrateModes(m, ver) {
   return m;
 }
 function loadSettings() {
-  const def = { ver: 4, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), soundsOff: [] };
+  const def = { ver: 4, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
@@ -1803,6 +2098,7 @@ function loadSettings() {
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
       ver: 4,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
+      always: Array.isArray(s.always) ? s.always.filter(id => MODES.some(m => m.id === id)) : [],
       dunks: Array.isArray(s.dunks) ? s.dunks.filter(id => ALL_DUNKS.includes(id)) : def.dunks,
       // the sound list was redone in v4, so older switches start fresh
       soundsOff: (s.ver || 0) >= 4 && Array.isArray(s.soundsOff) ? s.soundsOff.filter(id => SOUND_BY_ID[id]) : [],
@@ -1821,15 +2117,16 @@ function makeLook(used) {
 }
 const ALL_MODES = MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id));   // the menu background skips the ones that start off
 const TEAM_X = { 1: [-3.2], 2: [-5.2, -2.4], 3: [-5.8, -3.8, -1.8] };
-const newStats = () => [0, 1].map(() => ({ baskets: 0, shots: 0, greens: 0, dunks: 0, blocks: 0, steals: 0 }));
+const newStats = () => [0, 1].map(() => ({ baskets: 0, shots: 0, greens: 0, dunks: 0, blocks: 0, steals: 0, skywalks: 0 }));
 
 class Game {
-  constructor() {
-    this.sfx = new Sfx();
-    this.settings = loadSettings();
+  constructor(shadow) {   // (a shadow is the silent copy the IMPOSSIBLE brain plays ahead in: no sprites, no sound, no crowd)
+    this.isShadow = !!shadow;
+    this.sfx = shadow ? null : new Sfx();
+    this.settings = shadow ? null : loadSettings();
     this.time = 0; this.realTime = 0; this.state = 'title'; this.stateT = 0; this.paused = false; this.menuOpen = false;
     this.menuSel = 0; this.titleRollAt = 0;
-    this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = this.settings.target; this.vsCpu = false; this.cvc = false;
+    this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = shadow ? 5 : this.settings.target; this.vsCpu = false; this.cvc = false;
     this.teamSize = 2; this.tourney = null; this.stats = newStats();
     this.held = [false, false]; this.evq = []; this.keysDown = new Set(); this.humanHeld = false;
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
@@ -1841,8 +2138,9 @@ class Game {
     this.snow = Array.from({ length: 70 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(6, 16), w: rand(0, 6) }));
     this.clouds = Array.from({ length: 4 }, (_, i) => ({ x: i * 90 + rand(0, 40), y: rand(14, 50), w: rand(22, 36), v: rand(1.5, 3.5) }));
     this.gusts = Array.from({ length: 14 }, () => ({ x: rand(0, ART_W), y: rand(20, 128), l: rand(6, 16) }));
-    this.newRoster();
     this.lastRc = CLASSIC_ROUND;
+    if (shadow) { this.cpus = []; return; }
+    this.newRoster();
     this.setupRound(CLASSIC_ROUND, 2);
     this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')];
   }
@@ -1893,7 +2191,7 @@ class Game {
     const obst = OBST[rc.obst || 'none'];
     RIM_Y = hoop.y; RIM_HALF = hoop.half;
     const gravity = court.gravity * phys.grav, jumpH = court.jumpH * phys.jump * body.jump;
-    this.rc = rc;
+    this.rc = rc; this.roundId = (this.roundId || 0) + 1;
     this.cfg = { court, ball, body, hoop, phys, gravity, jumpV: Math.sqrt(2 * gravity * jumpH), wind: phys.wind ? rand(3, 4.5) : 0,
       obst: { move: rc.obst === 'movehoop', tramp: rc.obst === 'tramp', wall: rc.obst === 'wall', two: rc.obst === 'twoball', name: obst.name } };
     const w = this.world = new pl.World({ gravity: { x: 0, y: -gravity } });
@@ -1916,26 +2214,30 @@ class Game {
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
     this.roundT = 0; this.whistled = false; this.cam.watch = null; this.cam.z = 1;
-    this.bg = courtImage(court.key);
+    if (!this.isShadow) this.bg = courtImage(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
     this.bannerItems = [court.key === 'gym' ? '' : court.name, ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
     this.bannerLines = packLines(this.bannerItems, 36);
-    this.makeCrowd();
+    if (!this.isShadow) this.makeCrowd();
   }
-  randomRound(ids) {
-    const on = new Set(ids);
-    const roll = (cat, p) => { const l = MODES.filter(m => m.cat === cat && on.has(m.id)).map(m => m.id); return l.length && Math.random() < p ? pick(l) : null; };
+  randomRound(ids, always) {
+    const on = new Set(ids), lock = new Set(always || []);
+    const roll = (cat, p) => {
+      const L = MODES.filter(m => m.cat === cat && lock.has(m.id)).map(m => m.id);
+      if (L.length) return pick(L);   // a mode set to ALWAYS is in every round
+      const l = MODES.filter(m => m.cat === cat && on.has(m.id)).map(m => m.id); return l.length && Math.random() < p ? pick(l) : null;
+    };
     const same = (a, b) => ['court', 'ball', 'body', 'hoop', 'phys', 'obst'].every(k => a[k] === b[k]);
     let rc = CLASSIC_ROUND;
     for (let n = 0; n < 60; n++) {
       rc = { court: roll('COURTS', 0.6) || 'gym', ball: roll('BALLS', 0.45), body: roll('PLAYERS', 0.45), hoop: roll('HOOPS', 0.3), phys: roll('PHYSICS', 0.3), obst: roll('OBSTACLES', 0.35) };
       const changed = rc.court !== 'gym' || rc.ball || rc.body || rc.hoop || rc.phys || rc.obst;
-      if (!on.size || (changed && !same(rc, this.lastRc))) break;
+      if (!on.size || lock.size || (changed && !same(rc, this.lastRc))) break;
     }
     this.lastRc = rc;
     return rc;
   }
-  nextRound() { return this.randomRound(this.settings.modes); }
+  nextRound() { return this.randomRound(this.settings.modes, this.settings.always); }
   makeCrowd() {
     const r = rng(this.round * 131 + 7), people = [];
     const shirts = ['#7f8aa3', '#9a7f7f', '#86977f', '#a29579', '#8a7da3', '#a46a6c', '#6a7fa6', '#b0a58c'];
@@ -2197,7 +2499,7 @@ class Game {
     if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.teamPress(ev.team, this.state !== 'scored'); }
     else this.teamRelease(ev.team);
   }
-  // ALLEY-OOP MODE: the only way to score is catching a lob in the air and slamming it
+  // ALLEY-OOP MODE: no meter shots; baskets only count as slams (an alley-oop or a plain dunk)
   oopOnly() { return this.cvc && this.settings.cvcOop === 'on' && this.state !== 'showcase'; }
   // is this player's key down? (one key per team, or in 4 PLAYERS one key each)
   keyDown(p) { return this.four ? !!p.keyHeld : this.held[p.team]; }
@@ -2206,8 +2508,9 @@ class Game {
     this.sfx.jump();
   }
   playerPress(p, canShoot, quiet) {
-    if (canShoot && !this.oopOnly() && p.holding && !p.dunk && !p.hang) {
-      if (p.canDunk() || (p.grounded && p.canDunk(true) && Math.random() < 0.35)) p.startDunk(); else this.startMeter(p);
+    if (canShoot && p.holding && !p.dunk && !p.hang) {
+      // ALLEY-OOP MODE: no meter shots, but a plain dunk is fine too
+      if (p.canDunk() || (p.grounded && p.canDunk(true) && Math.random() < 0.35)) p.startDunk(); else if (!this.oopOnly()) this.startMeter(p);
     }
     p.press();
     if (!quiet) this.sfx.jump();
@@ -2324,7 +2627,12 @@ class Game {
         // a lob caught in the air is a slam from anywhere a kangaroo reaches, even if it grazed the rim on the way;
         // anything else (a putback, a steal, a catch on the way down) is just a catch
         const lob = !prev && b.lastThrower && b.lastThrower.team === p.team && this.time - b.throwTime < (rebound ? 1.2 : 2);
-        if (!p.grounded && lob && p.canDunk(true)) { p.startDunk(); if (p.dunk) this.popup(b.lastThrower === p ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', hp.x, hp.y + 1.2, '#ffd23f', 8, 1.2); }
+        if (!p.grounded && lob && p.canDunk(true)) {
+          p.startDunk();
+          const sky = this.time - (p.headJumpT || -9) < 1.6;   // caught it after jumping off somebody's head
+          if (p.dunk) this.popup(sky ? 'SKY WALK ALLEY-OOP!' : b.lastThrower === p ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', hp.x, hp.y + 1.2, sky ? '#ff4fa3' : '#ffd23f', sky ? 16 : 8, sky ? 1.6 : 1.2);
+          if (p.dunk && sky) { this.addShake(6); this.slowmo(0.4, 0.5); this.stat(p.team, 'skywalks'); }
+        }
       }
       else if (!p.grounded && this.forceDunk) p.startDunk();
       else if (!p.grounded && rebound && nearRim && (this.dunkOn('tip') || p.canDunk())) p.startDunk(this.pickDunk(p, (h.cx - p.x) * p.dir, true));
@@ -2349,6 +2657,8 @@ class Game {
   pair(A, B, sign) {
     if (A.kind === 'part' && A.part === 'foot' && B.kind !== 'ball') {
       A.player.feet += sign;
+      // standing on somebody (their head, their shoulders): a jump from there is a HEAD JUMP
+      if (B.kind === 'part') { if (sign > 0) A.player.standOn = B.player; else if (A.player.standOn === B.player) A.player.standOn = null; }
       if (sign > 0 && B.kind === 'floor') { const v = A.player.body.getLinearVelocity(); if (v.y < -5) this.dustQ.push([A.player, -v.y]); }
       return;
     }
@@ -2617,7 +2927,7 @@ class Game {
       const sp = Math.hypot(v.x, v.y);
       if (!b.waiting && sp < 0.3) b.stillT += dt; else b.stillT = 0;
       if ((b.stillT > 2.5 && p.y > 1.0) || b.stillT > 7) { b.body.setLinearVelocity({ x: rand(-2, 2), y: 3 }); b.stillT = 0; }
-      if (Math.abs(p.x) > 9 || p.y < -3 || p.y > 9) { b.body.setTransform({ x: b.spawnX, y: 5.8 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); b.prevY = 5.8; b.shotBy = null; }
+      if (Math.abs(p.x) > 9 || p.y < -3 || p.y > VY1 + 0.05) { b.body.setTransform({ x: b.spawnX, y: 5.8 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); b.prevY = 5.8; b.shotBy = null; }   // (above the roof = it tunneled through the ceiling and would sit up there for good)
     } else if (this.onFire(b.holder.team) && !REDUCED && Math.random() < 0.5) this.flame(b.body.getPosition());
     b.prevY = b.body.getPosition().y;
   }
@@ -3110,7 +3420,7 @@ let draft = null;
 })();
 function syncMenu() {
   for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
-  for (const b of menuEl.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(draft.modes.includes(b.dataset.mode)));
+  for (const b of menuEl.querySelectorAll('[data-mode]')) { const lk = draft.always.includes(b.dataset.mode); b.setAttribute('aria-pressed', String(lk || draft.modes.includes(b.dataset.mode))); if (lk) b.dataset.lock = '1'; else delete b.dataset.lock; }
 }
 function openMenu() {
   draft = JSON.parse(JSON.stringify(G.settings));
@@ -3123,8 +3433,14 @@ menuEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.id === 'done') { closeMenu(); return; }
   if (b.id === 'all-on') draft.modes = MODES.map(m => m.id);
-  else if (b.id === 'all-off') draft.modes = [];
-  else if (b.dataset.mode) { const id = b.dataset.mode; draft.modes = draft.modes.includes(id) ? draft.modes.filter(x => x !== id) : [...draft.modes, id]; }
+  else if (b.id === 'all-off') { draft.modes = []; draft.always = []; }
+  else if (b.dataset.mode) {
+    // off -> random -> ALWAYS (every round) -> off
+    const id = b.dataset.mode;
+    if (draft.always.includes(id)) { draft.always = draft.always.filter(x => x !== id); draft.modes = draft.modes.filter(x => x !== id); }
+    else if (draft.modes.includes(id)) draft.always = [...draft.always, id];
+    else draft.modes = [...draft.modes, id];
+  }
   else if (b.dataset.v) { const key = b.parentElement.dataset.key; draft[key] = key === 'target' || key === 'teamSize' ? Number(b.dataset.v) : b.dataset.v; }
   syncMenu();
 });

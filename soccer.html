@@ -1,0 +1,1779 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0b0d14">
+<title>Floppy Soccer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body { margin: 0; background: #0b0d14; overflow: hidden; color: #fff6e0; }
+  #game { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+  #err[hidden], #menu[hidden] { display: none; }
+  #err { position: fixed; inset: 0; display: grid; place-items: center; font: 700 16px Silkscreen, monospace; text-align: center; padding: 16px; }
+  #menu { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 10, 18, 0.72); overflow: auto; font-family: Silkscreen, "Courier New", monospace; }
+  .panel { box-sizing: border-box; width: min(780px, 100%); max-height: 100%; overflow: auto; background: #1b2031; border: 3px solid #141019; box-shadow: 0 6px 0 #141019, inset 0 0 0 3px #2b3350; padding: 18px 20px 20px; }
+  .panel h2 { margin: 0 0 14px; font-size: 28px; font-weight: 700; color: #ff8a2a; text-shadow: 0 3px 0 #7a2d0c; letter-spacing: 1px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+  .lbl { min-width: 118px; font-size: 13px; color: #b9c3dd; letter-spacing: 0.06em; }
+  .seg, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  #menu button { font: inherit; font-size: 13px; line-height: 1.2; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; box-shadow: 0 3px 0 #141019; padding: 7px 10px; cursor: pointer; }
+  #menu button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
+  #menu button[data-lock="1"] { background: #ffd23f; color: #141019; box-shadow: 0 0 0 2px #ff8a2a; }
+  #menu button[data-lock="1"]::after { content: " \2605 ALWAYS"; font-size: 10px; }
+  #menu button:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
+  #menu button:active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
+  .modes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; padding-top: 14px; border-top: 2px solid #2b3350; }
+  .note { margin: 6px 0 4px; font-size: 11px; color: #7d88a8; }
+  .group { margin-top: 10px; }
+  .group h3 { margin: 0 0 6px; font-size: 11px; font-weight: 400; color: #7d88a8; letter-spacing: 0.1em; }
+  .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
+  #menu #done { background: #43f07a; color: #141019; font-size: 20px; padding: 10px 28px; }
+  .hint { font-size: 11px; color: #7d88a8; }
+  #touchbar { position: fixed; left: 8px; bottom: 8px; display: none; gap: 8px; z-index: 5; }
+  body.touch #touchbar { display: flex; }
+  #touchbar button { font: 12px Silkscreen, "Courier New", monospace; color: #fff6e0; background: rgba(20, 16, 25, 0.72); border: 2px solid #fff6e0; border-radius: 6px; min-width: 44px; height: 44px; padding: 0 10px; }
+  #touchbar button[data-a="pause"] { display: none; } #touchbar[data-pause="1"] button[data-a="pause"] { display: block; }
+  #touchbar button[data-a="menu"] { display: none; } #touchbar[data-menu="1"] button[data-a="menu"] { display: block; }
+  #touchhint { position: fixed; left: 0; right: 0; bottom: 64px; display: none; justify-content: space-around; pointer-events: none; z-index: 4; font: 13px Silkscreen, "Courier New", monospace; color: #fff6e0; text-shadow: 0 2px 0 #141019; }
+  body.touch #touchhint:not(:empty) { display: flex; }
+  #touchhint span { background: rgba(20, 16, 25, 0.55); padding: 6px 10px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<canvas id="game" tabindex="0" aria-label="Floppy Soccer. Ragdoll soccer, two players a side. Red team presses W, blue team presses the Up arrow to hop and kick."></canvas>
+<div id="err" hidden>The physics engine didn't load. Check your connection and reload the page.</div>
+<div id="menu" hidden role="dialog" aria-labelledby="menu-title">
+  <div class="panel">
+    <h2 id="menu-title">GAME MODES</h2>
+    <div class="row"><span class="lbl">CPU LEVEL</span><div class="seg" data-key="level"><button type="button" id="opt-level-easy" data-v="easy">EASY</button><button type="button" id="opt-level-normal" data-v="normal">NORMAL</button><button type="button" id="opt-level-hard" data-v="hard">HARD</button><button type="button" id="opt-level-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
+    <div class="row"><span class="lbl">CPU VS CPU RED</span><div class="seg" data-key="cvcRed"><button type="button" id="opt-cvcred-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcred-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcred-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcred-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
+    <div class="row"><span class="lbl">CPU VS CPU BLUE</span><div class="seg" data-key="cvcBlue"><button type="button" id="opt-cvcblue-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcblue-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcblue-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcblue-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
+    <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-10" data-v="10">10</button></div></div>
+    <div class="modes-head"><span class="lbl">RANDOM MODES</span><span class="lbl" style="font-size:11px;opacity:.8">click once = random, twice = ALWAYS every round, thrice = off</span><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div>
+    <p class="note">After every goal, one or more of the modes you leave on kicks in. The first kickoff is always a normal stadium.</p>
+    <div id="mode-groups"></div>
+    <div class="modes-head"><span class="lbl">GOAL SOUNDS</span><button type="button" id="snd-on">ALL ON</button><button type="button" id="snd-off">ALL OFF</button></div>
+    <p class="note">Every goal plays one of the sounds you leave on. Click a sound to switch it (and hear it). M mutes everything.</p>
+    <div class="chips" id="sound-chips"></div>
+    <div class="foot"><button type="button" id="done">DONE</button><span class="hint">SAVED FOR NEXT TIME. ESC ALSO CLOSES.</span></div>
+  </div>
+</div>
+<script src="planck.min.js"></script>
+<script src="clips.js"></script>
+<script>
+(() => {
+'use strict';
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+if (!window.planck) { document.getElementById('err').hidden = false; return; }
+const pl = window.planck;
+
+// ---------------------------------------------------------------- constants
+const PPM = 20, ART_W = 320, ART_H = 180;
+const VX0 = -8, VY1 = 7.5;                 // world coords of the art canvas top-left
+const STEP = 1 / 60;
+const CAT_WORLD = 1, CAT_PLAYER = 2, CAT_BALL = 4;
+const GOAL_X = 6.95, BACK_X = 8, BAR_T = 0.14, ROOF_RISE = 0.45;
+let GOAL_H = 2.3;                          // set per round by the goal mode
+const GAME_SPEED = 0.95;   // the whole game runs a touch slower than real time
+const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 1.45, NECK_HZ = 2.6;
+// KICK_A: how far the kicking leg swings up (radians from hanging). FWD_HOP: every hop drifts a little toward the goal you attack.
+const KICK_A = 2.1, FWD_HOP = 1.1, MAX_BALL = 22, KICK_SPEED = 17;
+const INK = '#141019', CREAM = '#fff6e0', ORANGE = '#ff8a2a', GREEN = '#43f07a';
+const TEAM = [
+  { name: 'RED',  jersey: '#d93a3f', dark: '#8f222b', light: '#ff8173', num: '#ffffff', dir: 1 },
+  { name: 'BLUE', jersey: '#2f6bd8', dark: '#1b3d86', light: '#86b2ff', num: '#ffffff', dir: -1 },
+];
+const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------------------------------------------------------------- utils
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[(Math.random() * a.length) | 0];
+const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+const wrap = a => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+const rot = (v, a) => ({ x: v.x * Math.cos(a) - v.y * Math.sin(a), y: v.x * Math.sin(a) + v.y * Math.cos(a) });
+const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const ax = x => (x - VX0) * PPM, ay = y => (VY1 - y) * PPM;
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mix(a, b, t) { const A = hexRgb(a), B = hexRgb(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
+const shade = (c, f) => f < 0 ? mix(c, '#000000', -f) : mix(c, '#ffffff', f);
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// distance from point p to the segment a-b
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1e-9, t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1);
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
+}
+
+// 3x5 pixel font for jerseys and ad boards
+const F3 = {A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','!':'010010010000010','-':'000000111000000',' ':'000000000000000'};
+function tiny(g, s, x, y, col) { g.fillStyle = col; for (const ch of s) { const b = F3[ch] || F3[' ']; for (let i = 0; i < 15; i++) if (b[i] === '1') g.fillRect(x + i % 3, y + ((i / 3) | 0), 1, 1); x += 4; } }
+
+// ---------------------------------------------------------------- modes
+const MODES = [
+  { id: 'beach', cat: 'PITCHES', name: 'BEACH' },
+  { id: 'snow', cat: 'PITCHES', name: 'SNOWY PITCH' },
+  { id: 'rain', cat: 'PITCHES', name: 'RAINY NIGHT' },
+  { id: 'moon', cat: 'PITCHES', name: 'MOON' },
+  { id: 'park', cat: 'PITCHES', name: 'CITY PARK' },
+  { id: 'big', cat: 'BALLS', name: 'BIG BALL' },
+  { id: 'small', cat: 'BALLS', name: 'TINY BALL' },
+  { id: 'heavy', cat: 'BALLS', name: 'HEAVY BALL' },
+  { id: 'beachball', cat: 'BALLS', name: 'BEACH BALL' },
+  { id: 'bouncy', cat: 'BALLS', name: 'BOUNCY BALL' },
+  { id: 'tennis', cat: 'BALLS', name: 'TENNIS BALL' },
+  { id: 'football', cat: 'BALLS', name: 'AMERICAN FOOTBALL' },
+  { id: 'bighead', cat: 'PLAYERS', name: 'BIG HEADS' },
+  { id: 'longleg', cat: 'PLAYERS', name: 'LONG LEGS' },
+  { id: 'shortleg', cat: 'PLAYERS', name: 'SHORT LEGS' },
+  { id: 'heavyp', cat: 'PLAYERS', name: 'HEAVY PLAYERS' },
+  { id: 'biggoal', cat: 'GOALS', name: 'BIG GOALS' },
+  { id: 'smallgoal', cat: 'GOALS', name: 'SMALL GOALS' },
+  { id: 'lowgrav', cat: 'PHYSICS', name: 'LOW GRAVITY' },
+  { id: 'wind', cat: 'PHYSICS', name: 'WINDY' },
+  { id: 'superjump', cat: 'PHYSICS', name: 'SUPER JUMPS' },
+  { id: 'twoball', cat: 'EXTRAS', name: 'TWO BALLS' },
+];
+const MODE_CATS = ['PITCHES', 'BALLS', 'PLAYERS', 'GOALS', 'PHYSICS', 'EXTRAS'];
+// fric: boots on the ground. bounce: how much of the ball's bounce the ground keeps. roll: how fast a rolling ball slows down.
+const PITCHES = {
+  stadium: { key: 'stadium', name: '',            fric: 0.9,  gravity: 20, jumpH: 1.55, bounce: 0.9,  roll: 0.45, dust: '#7fbf5a' },
+  beach:   { key: 'beach',   name: 'BEACH',       fric: 1.2,  gravity: 20, jumpH: 1.45, bounce: 0.5,  roll: 1.4,  dust: '#f3dfae' },
+  snow:    { key: 'snow',    name: 'SNOWY PITCH', fric: 0.06, gravity: 20, jumpH: 1.55, bounce: 0.7,  roll: 0.15, dust: '#ffffff' },
+  rain:    { key: 'rain',    name: 'RAINY NIGHT', fric: 0.28, gravity: 20, jumpH: 1.55, bounce: 0.45, roll: 0.05, dust: '#9fd0ea' },
+  moon:    { key: 'moon',    name: 'MOON',        fric: 0.8,  gravity: 8,  jumpH: 2.3,  bounce: 0.95, roll: 0.3,  dust: '#c9c9d3' },
+  park:    { key: 'park',    name: 'CITY PARK',   fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 0.9,  roll: 0.5,  dust: '#8fbf6a' },
+};
+// kick: how hard a kick sends it. damp: air drag (the beach ball floats).
+const BALLS = {
+  classic:   { name: '',            r: 0.3,  density: 1.1,  rest: 0.7,  kick: 1,    damp: 0.05, look: 'classic' },
+  big:       { name: 'BIG BALL',    r: 0.62, density: 0.18, rest: 0.72, kick: 0.9,  damp: 0.12, look: 'classic' },
+  small:     { name: 'TINY BALL',   r: 0.17, density: 2.2,  rest: 0.72, kick: 1.05, damp: 0.05, look: 'classic' },
+  heavy:     { name: 'HEAVY BALL',  r: 0.3,  density: 9,    rest: 0.12, kick: 0.55, damp: 0.05, look: 'heavy' },
+  beachball: { name: 'BEACH BALL',  r: 0.5,  density: 0.06, rest: 0.85, kick: 1,    damp: 1.1,  look: 'beach' },
+  tennis:    { name: 'TENNIS BALL', r: 0.2,  density: 1.0,  rest: 0.8,  kick: 1.05, damp: 0.05, look: 'tennis' },
+  football:  { name: 'AMERICAN FOOTBALL', r: 0.34, density: 0.9, rest: 0.55, kick: 0.95, damp: 0.06, look: 'football' },
+  bouncy:    { name: 'BOUNCY BALL', r: 0.28, density: 0.9,  rest: 0.96, kick: 1.05, damp: 0.02, look: 'bouncy' },
+};
+const BODIES = {
+  normal:   { name: '',              head: 1,    leg: 1,    jump: 1,   mass: 1 },
+  bighead:  { name: 'BIG HEADS',     head: 1.75, leg: 1,    jump: 1,   mass: 1 },
+  longleg:  { name: 'LONG LEGS',     head: 1,    leg: 1.45, jump: 1,   mass: 1 },
+  shortleg: { name: 'SHORT LEGS',    head: 1.1,  leg: 0.6,  jump: 1,   mass: 1 },
+  heavyp:   { name: 'HEAVY PLAYERS', head: 1,    leg: 1,    jump: 0.7, mass: 1.7 },
+};
+const GOALS = {
+  normal:    { name: '',            h: 2.3 },
+  biggoal:   { name: 'BIG GOALS',   h: 3.3 },
+  smallgoal: { name: 'SMALL GOALS', h: 1.55 },
+};
+const PHYS = {
+  none:      { name: '',            grav: 1,   jump: 1,    wind: 0 },
+  lowgrav:   { name: 'LOW GRAVITY', grav: 0.4, jump: 1.6,  wind: 0 },
+  wind:      { name: 'WINDY',       grav: 1,   jump: 1,    wind: 1 },
+  superjump: { name: 'SUPER JUMPS', grav: 1,   jump: 1.75, wind: 0 },
+};
+const EXTRAS = { none: { name: '' }, twoball: { name: 'TWO BALLS' } };
+const CLASSIC_ROUND = { pitch: 'stadium', ball: null, body: null, goal: null, phys: null, extra: null };
+const MENU_ITEMS = [
+  { id: 'cpu', label: '1 PLAYER VS CPU' },
+  { id: '2p', label: '2 PLAYERS' },
+  { id: 'cvc', label: 'CPU VS CPU' },
+  { id: 'modes', label: 'GAME MODES' },
+  { id: 'switch', label: 'SWITCH GAME' },
+];
+const MENU_X = 14, MENU_W = 104, MENU_Y0 = 58, MENU_DY = 15, MENU_H = 12;
+// think: seconds between decisions. noise: how wrong its read of a press is. miss: chance of a random press or none.
+// look: 0 plays the ball where it is, 1 reads its whole flight. wait: IMPOSSIBLE-style patience for a better lean.
+const CPU_LEVELS = {
+  easy:       { think: 0.42, noise: 1.6, miss: 0.14, look: 0,   thresh: 0.9,  posW: 0.35, hold: 0.28, wait: 0 },
+  normal:     { think: 0.24, noise: 0.9, miss: 0.05, look: 0.6, thresh: 0.75, posW: 0.6,  hold: 0.24, wait: 0 },
+  hard:       { think: 0.1,  noise: 0.35, miss: 0.01, look: 1,  thresh: 0.6,  posW: 0.85, hold: 0.2,  wait: 1 },
+  impossible: { think: 0,    noise: 0,   miss: 0,    look: 1,   thresh: 0.5,  posW: 1,    hold: 0.14, wait: 3 },
+};
+
+// Meme clips (mp3s, base64 in clips.js), the same ones Floppy Hoops and Floppy Pong use. Here they go off on goals.
+const CLIP_SRC = window.FLOPPY_CLIPS || {};
+const SOUND_REEL = [
+  { id: 'bigsplash', name: 'ROCKET LEAGUE BIG SPLASH', clip: 'bigsplash', trim: [0, 3.3], gain: 1, goal: true },
+  { id: 'chaching', name: 'CHA-CHING', clip: 'chaching', trim: [0.15, 1.55], gain: 1.9, goal: true },
+  { id: 'daddyshome', name: "DADDY'S HOME", clip: 'daddyshome', trim: [0, 6.06], gain: 0.72, goal: true },
+  { id: 'splash', name: 'CHRIS SMOOVE SPLASH', clip: 'splash', trim: [0.06, 3.8], gain: 1.06, goal: true },
+  { id: 'skidipi', name: '2K SKIDIPI PAT PAT', clip: 'skidipi', trim: [0.13, 2.21], gain: 2.8, goal: true },
+  { id: 'greenlight', name: 'SQUID GAME GREEN LIGHT', clip: 'greenlight', trim: [0.04, 1.6], gain: 2.1, goal: true },
+  { id: 'ding', name: 'CORRECT ANSWER DING', clip: 'ding', trim: [0.06, 1.0], gain: 1, goal: true },
+  { id: 'coke', name: 'COKE BUTTER CHEESE', clip: 'coke', trim: [0, 1.43], gain: 1, goal: true },
+  { id: 'greengiant', name: 'HO HO HO GREEN GIANT', clip: 'greengiant', trim: [0.1, 2.6], gain: 0.86, goal: true },
+  { id: 'irish', name: 'IRISH SPRING GREEN GREEN', clip: 'irish', trim: [0.12, 2.01], gain: 2, goal: true },
+  { id: 'fnn', name: 'GREEN FNN', clip: 'fnn', trim: [0, 6.14], gain: 0.55, goal: true },
+  { id: 'thatsgreen', name: "THAT THING'S GREEN", clip: 'thatsgreen', trim: [0.03, 3.99], gain: 1, goal: true },
+  { id: 'greenfn', name: 'GREEN FN (MATCH WINNER)', clip: 'greenfn', trim: [0, 7.19], gain: 0.94 },
+  { id: 'pipe', name: 'METAL PIPE (CROSSBAR)' },
+];
+const SOUND_LIST = SOUND_REEL.filter(e => !e.clip || CLIP_SRC[e.clip]);
+const SOUND_BY_ID = Object.fromEntries(SOUND_REEL.map(e => [e.id, e]));
+
+// ---------------------------------------------------------------- sprites
+function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h); return [c, c.getContext('2d')]; }
+function outline(src) {
+  const [s, sg] = mk(src.width, src.height);
+  sg.drawImage(src, 0, 0); sg.globalCompositeOperation = 'source-in'; sg.fillStyle = INK; sg.fillRect(0, 0, s.width, s.height);
+  const [c, g] = mk(src.width + 2, src.height + 2);
+  for (const [dx, dy] of [[0, 1], [2, 1], [1, 0], [1, 2]]) g.drawImage(s, dx, dy);
+  g.drawImage(src, 1, 1);
+  return c;
+}
+function darken(src, a) { const [c, g] = mk(src.width, src.height); g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(12,8,24,${a})`; g.fillRect(0, 0, c.width, c.height); return c; }
+function painter(g) { return (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); }; }
+
+function headSprite(d, look, T) {
+  const pad = look.style === 'afro' ? 2 : look.style === 'mohawk' ? 2 : 0;
+  const W = d + pad * 2, H = d + pad * 2;
+  const [c, g] = mk(W, H); const P = painter(g);
+  const cx = W / 2, cy = H / 2, r = d / 2;
+  const skin = look.skin, skinD = shade(skin, -0.18), hair = look.hair;
+  const inHead = (x, y) => { const nx = Math.abs((x + 0.5 - cx) / r), ny = Math.abs((y + 0.5 - cy) / r); return nx ** 3 + ny ** 3 <= 1; };
+  if (look.style === 'afro') for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((x + 0.5 - cx + 1) ** 2 + (y + 0.5 - cy + 1.2) ** 2 <= (r + 2) ** 2) P(x, y, hair);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!inHead(x, y)) continue;
+    const nx = (x + 0.5 - cx) / r, ny = (y + 0.5 - cy) / r;
+    let h = false;
+    switch (look.style) {
+      case 'short': h = ny < -0.45 || (nx < -0.35 && ny < 0.05); break;
+      case 'buzz': h = ny < -0.62 || (nx < -0.55 && ny < -0.1); break;
+      case 'afro': h = ny < -0.35 || (nx < -0.25 && ny < 0.3); break;
+      case 'headband': h = ny < -0.5 || (nx < -0.4 && ny < 0); break;
+      case 'mohawk': h = ny < -0.65 && nx > -0.5 && nx < 0.35; break;
+      case 'long': h = ny < -0.4 || (nx < -0.2 && ny < 0.75); break;
+    }
+    P(x, y, h ? hair : skin);
+  }
+  if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
+  if (look.style === 'mohawk') for (let x = Math.round(cx - r * 0.45); x < Math.round(cx + r * 0.3); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
+  P(Math.round(cx - r * 0.2), Math.round(cy + r * 0.05), skinD);
+  const ex = Math.round(cx + r * 0.45), ey = Math.round(cy - r * 0.1);
+  P(ex, ey, INK); if (d >= 14) P(ex, ey + 1, INK);
+  P(ex - 1, ey - 2, INK); P(ex, ey - 2, INK);
+  const mY = Math.round(cy + r * 0.5);
+  P(Math.round(cx + r * 0.35), mY, shade(skin, -0.45)); P(Math.round(cx + r * 0.35) + 1, mY, shade(skin, -0.45));
+  return { c: outline(c), ox: cx + 1, oy: cy + 1 };
+}
+function torsoSprite(w, h, T, num) {
+  const [c, g] = mk(w, h); const P = painter(g);
+  const jEnd = Math.round(h * 0.66), mid = (w - 1) / 2;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let col;
+    if (y < jEnd) { col = y === jEnd - 1 || (y === 0 && Math.abs(x - mid) <= 1.01) ? T.dark : x === 1 ? T.light : T.jersey; }
+    else { col = x === w - 2 ? T.light : '#f4f4f4'; if (y === h - 1 && Math.abs(x - mid) < 0.6) continue; }
+    P(x, y, col);
+  }
+  const s = String(num), tw = s.length * 4 - 1;
+  if (jEnd >= 8) tiny(g, s, Math.round((w - tw) / 2), 2, T.num);
+  return { c: outline(c), ox: w / 2 + 1, oy: h / 2 + 1 };
+}
+// shorts, a bare knee, a team sock with a white band, and a boot with studs (the toe points forward)
+function legSprite(w, h, T, skin) {
+  const W = w + 3; const [c, g] = mk(W, h); const P = painter(g);
+  const x0 = 1, shortsEnd = Math.max(2, Math.round(h * 0.24)), sockTop = Math.round(h * 0.55), shoeTop = h - 3;
+  for (let y = 0; y < shoeTop; y++) for (let x = x0; x < x0 + w; x++) P(x, y, y < shortsEnd ? '#f4f4f4' : y < sockTop ? skin : y === sockTop + 1 ? '#ffffff' : T.jersey);
+  for (let y = shoeTop; y < h; y++) for (let x = x0 - 1; x < x0 + w + 2; x++) {
+    if (y === shoeTop && (x < x0 || x > x0 + w)) continue;
+    P(x, y, y === h - 1 ? ((x & 1) ? '#e9e9ef' : '#1b1b22') : '#22222a');
+  }
+  return { c: outline(c), ox: x0 + w / 2 + 1, oy: 1 };
+}
+function armSprite(w, h, T, skin) {
+  const [c, g] = mk(w + 1, h); const P = painter(g);
+  for (let y = 0; y < h; y++) {
+    const hand = y >= h - 3;
+    for (let x = 0; x < (hand ? w + 1 : w); x++) P(x, y, y < 4 ? T.jersey : skin);
+  }
+  return { c: outline(c), ox: w / 2 + 1, oy: 1 };
+}
+function ballSprite(d, look) {
+  const [c, g] = mk(d, d); const P = painter(g); const r = d / 2;
+  // a soccer ball: black patches, one in the middle and five around it
+  const spots = [[0, 0, 0.3]];
+  for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k * 2 * Math.PI / 5; spots.push([Math.cos(a) * 0.78, Math.sin(a) * 0.78, 0.24]); }
+  for (let y = 0; y < d; y++) for (let x = 0; x < d; x++) {
+    const dx = x + 0.5 - r, dy = y + 0.5 - r;
+    if (Math.hypot(dx, dy) > r) continue;
+    let col;
+    if (look === 'heavy') col = dx + dy > r * 0.7 ? '#2c2c35' : Math.hypot(dx + r * 0.3, dy + r * 0.3) < r * 0.25 ? '#6a6a78' : '#44444f';
+    else if (look === 'beach') { const k = Math.floor(((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI)) * 6) % 6; col = ['#ff4b4b', '#ffffff', '#2f7bf0', '#ffffff', '#ffd23a', '#ffffff'][k]; if (Math.hypot(dx, dy) < r * 0.24) col = '#ffffff'; }
+    else if (look === 'tennis') col = Math.abs(Math.abs(dx) - r * 0.55) < r * 0.14 && dy * dy < r * r * 0.8 ? '#ffffff' : '#d4ec3a';
+    else if (look === 'football') col = Math.abs(dy) < r * 0.12 && Math.abs(dx) < r * 0.45 ? '#ffffff' : dx + dy > r * 0.7 ? '#6b3a1c' : '#9a5a2c';
+    else if (look === 'bouncy') col = Math.abs(dy) < r * 0.22 ? '#ffe14f' : dx + dy > r * 0.6 ? '#c21e8c' : '#ff4fd1';
+    else {
+      const spot = spots.some(([sx, sy, sr]) => Math.hypot(dx - sx * r, dy - sy * r) < sr * r + 0.2);
+      col = spot ? '#23232b' : dx + dy > r * 0.75 ? '#cfd5e2' : '#ffffff';
+    }
+    P(x, y, col);
+  }
+  return { c: outline(c), ox: r + 1, oy: r + 1 };
+}
+
+// ---------------------------------------------------------------- audio
+const VOL = 0.8;
+class Sfx {
+  constructor() { this.ctx = null; this.muted = false; this.bufs = {}; this.clip = null; this.curves = {}; this.offline = false; }
+  init(offlineCtx) {
+    if (this.ctx) { if (this.ctx.state !== 'running' && !this.offline) this.ctx.resume().catch(() => {}); return; }
+    // On iPhones and iPads, web audio follows the silent switch unless the page asks for media playback.
+    const touchApple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    try { if (touchApple && navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* not supported */ }
+    try { this.ctx = offlineCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; return; }
+    this.offline = !!offlineCtx;
+    const c = this.ctx;
+    const comp = c.createDynamicsCompressor();
+    comp.threshold.value = -12; comp.knee.value = 10; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.25;
+    comp.connect(c.destination);
+    this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : VOL; this.master.connect(comp);
+    // the meme clips and the crowd share a bus and a little stadium reverb
+    this.bus = c.createGain(); this.bus.connect(this.master);
+    const rl = Math.floor(c.sampleRate * 2.4), ir = c.createBuffer(2, rl, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < rl; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rl, 3.5); }
+    const verb = c.createConvolver(); verb.buffer = ir;
+    this.wet = c.createGain(); this.wet.gain.value = 0.35; this.wet.connect(verb).connect(this.bus);
+    const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.noise = buf;
+    if (!this.offline && c.state !== 'running') c.resume().catch(() => {});
+    this.loadClips();
+  }
+  get running() { return !!this.ctx && (this.offline || this.ctx.state === 'running'); }
+  get ok() { return this.running && !this.muted; }
+  setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : VOL; }
+  send(node) { node.connect(this.bus); node.connect(this.wet); }
+  tone(type, f0, f1, dur, vol, when = 0, out) {
+    if (!this.ok) return;
+    const c = this.ctx, t = c.currentTime + when, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(out || this.master); o.start(t); o.stop(t + dur + 0.03);
+  }
+  hiss(dur, vol, type, f0, f1, q = 1, when = 0, out, attack = 0.01) {
+    if (!this.ok) return;
+    const c = this.ctx, t = c.currentTime + when, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = this.noise; s.loop = dur > 1.8; f.type = type; f.Q.value = q; f.frequency.setValueAtTime(f0, t); if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f).connect(g).connect(out || this.master); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.03);
+  }
+  bounce(i) { this.tone('sine', 150, 55, 0.11, 0.45 * i); this.hiss(0.03, 0.1 * i, 'highpass', 2500); }
+  kick(i) { this.tone('sine', 210, 50, 0.13, 0.8 * i); this.hiss(0.06, 0.35 * i, 'lowpass', 2400, 600); this.tone('square', 95, 60, 0.05, 0.05 * i); }
+  head(i) { this.tone('sine', 380, 190, 0.12, 0.4 * i); this.tone('triangle', 190, 120, 0.1, 0.2 * i); }
+  bar(i) { this.tone('triangle', 880, 860, 0.55, 0.25 * i); this.tone('square', 1320, 1300, 0.3, 0.04 * i); this.tone('triangle', 2210, 2190, 0.25, 0.06 * i); }
+  thud(i) { this.tone('sine', 110, 60, 0.08, 0.25 * i); }
+  jump() { this.tone('square', 210, 330, 0.06, 0.03); }
+  grab() { this.tone('triangle', 660, 880, 0.05, 0.1); }
+  whistle(long) {
+    if (!this.ok) return;
+    const c = this.ctx;
+    (long ? [[0, 0.22], [0.3, 0.22], [0.6, 0.9]] : [[0, 0.16], [0.22, 0.4]]).forEach(([at, dur]) => {
+      const t = c.currentTime + at, o = c.createOscillator(), l = c.createOscillator(), lg = c.createGain(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = 2900; l.frequency.value = 38; lg.gain.value = 160; l.connect(lg).connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.01); g.gain.setValueAtTime(0.13, t + dur - 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(this.master); o.start(t); l.start(t); o.stop(t + dur + 0.02); l.stop(t + dur + 0.02);
+    });
+  }
+  // the crowd goes up for a goal
+  roar() { if (!this.ok) return; this.hiss(2.6, 0.32, 'bandpass', 520, 900, 0.7, 0, this.bus, 0.25); this.hiss(2.0, 0.16, 'bandpass', 1500, 1100, 0.9, 0.05, this.bus, 0.3); }
+  ooh() { this.hiss(1.1, 0.14, 'bandpass', 700, 420, 1.2, 0, undefined, 0.15); }
+  buzzer() { this.tone('sawtooth', 185, 180, 1.0, 0.16); this.tone('square', 191, 188, 1.0, 0.07); }
+  jingle(team) { const n = team === 0 ? [523.3, 659.3, 784] : [392, 493.9, 587.3]; n.forEach((f, k) => this.tone('square', f, f, 0.12, 0.05, 0.08 + k * 0.08)); }
+  fanfare() { [523.3, 659.3, 784, 1046.5].forEach((f, k) => this.tone('square', f, f, k === 3 ? 0.5 : 0.14, 0.06, 0.9 + k * 0.13)); }
+  has(id) { const e = SOUND_BY_ID[id]; return !!e && (!e.clip || !!this.bufs[e.clip]); }
+  cue(id, when = 0) {
+    if (!this.ok || !this.has(id)) return;
+    const e = SOUND_BY_ID[id];
+    if (e.clip) this.playClip(e);
+    else if (id === 'pipe') this.metalPipe(when);
+  }
+  metalPipe(at = 0) {
+    // a steel pipe hitting concrete: ringing, out-of-tune partials, then it bounces and rattles
+    const c = this.ctx;
+    const hit = (dt, amp, len) => {
+      const t = c.currentTime + at + dt, f0 = 540 * rand(0.98, 1.02);
+      [[1, 0.5, 1], [2.756, 0.5, 0.8], [4.1, 0.12, 0.5], [5.404, 0.35, 0.6], [8.933, 0.22, 0.45], [13.34, 0.14, 0.3]].forEach(([r, a, d]) => {
+        const o = c.createOscillator(), g = c.createGain(), dur = 2.2 * d * len;
+        o.frequency.value = f0 * r * rand(0.996, 1.004);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a * amp, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); this.send(g); o.start(t); o.stop(t + dur + 0.02);
+      });
+      this.hiss(0.06, 0.5 * amp, 'highpass', 2500, 0, 0.7, at + dt, this.bus);
+    };
+    hit(0, 0.6, 1); hit(0.21, 0.32, 0.5); hit(0.36, 0.2, 0.35); hit(0.46, 0.12, 0.25); hit(0.53, 0.07, 0.2);
+  }
+  // one meme clip at a time: a new one cuts off whatever was playing
+  playClip(e) {
+    const b = this.bufs[e.clip]; if (!b) return;
+    this.stopClip();
+    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), [a, z] = e.trim || [0, b.duration], d = Math.max(0.05, Math.min(z, b.duration) - Math.min(a, b.duration - 0.05)), t = c.currentTime, v = e.gain || 1;
+    s.buffer = b; s.connect(g).connect(this.bus);
+    g.gain.setValueAtTime(v, t); g.gain.setValueAtTime(v, t + Math.max(0, d - 0.06)); g.gain.linearRampToValueAtTime(0.0001, t + d);
+    s.start(t, Math.min(a, Math.max(0, b.duration - 0.05)), d); this.clip = s;
+  }
+  stopClip() { if (this.clip) { try { this.clip.stop(); } catch (e) { /* already stopped */ } this.clip = null; } }
+  loadClips() {
+    // one clip per tick, so the first tap (which turns the sound on) never freezes a slow Chromebook
+    const todo = Object.entries(CLIP_SRC), next = () => {
+      const item = todo.shift(); if (!item) return; const [key, src] = item;
+      try { const bin = atob(src), a = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+        this.ctx.decodeAudioData(a.buffer).then(b => { this.bufs[key] = b; }, () => {});
+      } catch (e) { /* bad clip data */ } setTimeout(next, 0); };
+    next(); }
+}
+
+// ---------------------------------------------------------------- pitch backgrounds
+function paintPitch(key) {
+  const [c, g] = mk(ART_W, ART_H), rnd = rng(key.length * 9973 + key.charCodeAt(0) * 31);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const P = (x, y, col) => R(x, y, 1, 1, col);
+  const bands = (y0, y1, cols) => { const h = (y1 - y0) / cols.length; cols.forEach((col, i) => R(0, Math.round(y0 + i * h), ART_W, Math.ceil(h) + 1, col)); };
+  const ell = (cx, cy, rx, ry, col) => { for (let i = 0; i < 360; i++) { const a = i / 360 * Math.PI * 2; P(Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), col); } };
+  const line = (x0, y0, x1, y1, col) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1; for (let i = 0; i <= n; i++) P(Math.round(lerp(x0, x1, i / n)), Math.round(lerp(y0, y1, i / n)), col); };
+  // the pitch recedes: things further back (higher up the screen) sit closer to the middle
+  const dX = (dx, y) => 160 + dx * (1 + (y - 150) * 0.004);
+  const hline = (a, b, y, col) => { const x0 = Math.round(Math.min(dX(a, y), dX(b, y))), x1 = Math.round(Math.max(dX(a, y), dX(b, y))); R(x0, y, x1 - x0 + 1, 1, col); };
+  const lines = col => {
+    const top = 134, bot = 177;
+    R(0, top, ART_W, 1, col); R(0, bot, ART_W, 1, col);
+    for (let y = top; y <= bot; y++) P(160, y, col);
+    ell(160, 155.5, 30, 8, col); R(159, 155, 3, 2, col);
+    for (const s of [-1, 1]) {
+      line(dX(s * 139, top), top, dX(s * 139, bot), bot, col);          // goal line
+      line(dX(s * 96, 139), 139, dX(s * 96, 172), 172, col); hline(s * 96, s * 139, 139, col); hline(s * 96, s * 139, 172, col);   // box
+      line(dX(s * 121, 146), 146, dX(s * 121, 165), 165, col); hline(s * 121, s * 139, 146, col); hline(s * 121, s * 139, 165, col);
+      R(Math.round(dX(s * 108, 155)), 155, 2, 1, col);                    // penalty spot
+      for (let i = 0; i <= 12; i++) { const a = -Math.PI / 2 + i / 12 * Math.PI; P(Math.round(dX(s * 96, 155.5) - s * Math.cos(a) * 9), Math.round(155.5 + Math.sin(a) * 6), col); }
+    }
+  };
+  const turf = (a, b, lc) => {
+    R(0, 132, ART_W, 48, a);
+    for (let y = 132; y < 180; y++) for (let i = -12; i < 12; i += 2) { const x0 = Math.round(dX(i * 14, y)), x1 = Math.round(dX((i + 1) * 14, y)); R(x0, y, x1 - x0, 1, b); }
+    lines(lc);
+  };
+  const stands = (sky, seatA, seatB, roof, night) => {
+    bands(0, 30, sky);
+    if (night) for (let i = 0; i < 30; i++) P((rnd() * ART_W) | 0, (rnd() * 22) | 0, '#9aa6ff');
+    R(0, 24, ART_W, 6, roof); R(0, 29, ART_W, 1, INK);
+    for (let y = 30; y < 118; y++) R(0, y, ART_W, 1, (((y - 30) / 11) | 0) % 2 ? seatA : seatB);
+    for (let x = 52; x < ART_W; x += 72) R(x, 30, 3, 88, roof);
+    for (const x of [16, 304]) {
+      R(x - 1, 0, 3, 30, '#555b6e'); R(x - 8, 1, 17, 9, INK); R(x - 7, 2, 15, 7, night ? '#fffbe0' : '#fff2b8');
+      for (let k = 0; k < 3; k++) R(x - 6 + k * 5, 3, 3, 5, night ? '#ffffff' : '#fff9da');
+    }
+    R(0, 118, ART_W, 14, INK);
+    const ads = [['FLOPPY', ORANGE, '#1b2031'], ['SOCCER', '#ffffff', '#2f6bd8'], ['RANDOM', INK, '#43f07a'], ['GOAL!', '#ffd23f', '#d93a3f']];
+    for (let i = 0, x = 0; x < ART_W; i++) { const [t, fg, bgc] = ads[i % 4], w = 40; R(x + 1, 119, w - 2, 12, night ? shade(bgc, -0.25) : bgc); tiny(g, t, x + Math.round((w - (t.length * 4 - 1)) / 2), 122, fg); x += w; }
+  };
+  if (key === 'stadium') {
+    stands(['#3f6fb8', '#5584c8', '#6c98d4'], '#3a3f55', '#434963', '#20242f', false);
+    turf('#4fa044', '#5cb04f', '#f2f7ec');
+  } else if (key === 'rain') {
+    stands(['#05070f', '#080b18', '#0c1122'], '#1c1f2d', '#222637', '#0e1018', true);
+    for (const x of [16, 304]) for (let y = 10; y < 132; y++) { const w = (y - 10) * 0.45; R(Math.round(x - w / 2 + (x < 160 ? w * 0.4 : -w * 0.4)), y, Math.round(w), 1, 'rgba(255,246,200,0.05)'); }
+    turf('#2d6a36', '#347a3d', '#cfe3d2');
+    for (let i = 0; i < 16; i++) { const x = rnd() * ART_W, y = 137 + rnd() * 38, l = 6 + rnd() * 14; R(Math.round(x), Math.round(y), Math.round(l), 1, 'rgba(190,220,255,0.28)'); }
+  } else if (key === 'beach') {
+    bands(0, 106, ['#86cdf1', '#96d4f3', '#a8dcf5', '#bbe4f7']);
+    for (let y = -10; y <= 10; y++) for (let x = -10; x <= 10; x++) if (x * x + y * y <= 100) P(250 + x, 30 + y, '#ffe58a');
+    R(0, 106, ART_W, 22, '#3a9bd8'); R(0, 112, ART_W, 1, '#5cb1e3'); R(0, 120, ART_W, 1, '#5cb1e3'); R(0, 128, ART_W, 4, '#d7f0fb');
+    for (let i = 0; i < 44; i++) { const x = 92 + i * i / 140; R(Math.round(x) - 1, 132 - i, 3, 1, '#8a5a2e'); }
+    for (const a of [-2.6, -2.1, -0.5, -1.0, -1.6, 0.3]) for (let k = 0; k < 15; k++) R(Math.round(106 + Math.cos(a) * k), Math.round(88 + Math.sin(a) * k + k * k * 0.03), 2, 1, '#2f9a4a');
+    R(0, 132, ART_W, 48, '#edd39b');
+    for (let i = 0; i < 160; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#dcc083');
+    lines('#fff7e4');
+  } else if (key === 'snow') {
+    bands(0, 132, ['#bccde2', '#c8d7ea', '#d4e0f0', '#dfe8f4']);
+    for (let x = 0; x < ART_W; x++) { const h = 30 + Math.sin(x / 38) * 12 + Math.sin(x / 13 + 1) * 3; R(x, 132 - h, 1, h, '#f2f6fb'); P(x, Math.round(132 - h), '#aebfd6'); }
+    for (const x of [40, 58, 150, 236, 262, 290]) { const h = 22 + ((x * 7) % 9); for (let k = 0; k < h; k++) { const w = Math.round((k / h) * 4) + 1; R(x - w, 132 - h + k, w * 2 + 1, 1, '#3f6b5f'); if (k % 4 === 1) { P(x - w, 132 - h + k, '#f2f6fb'); P(x + w, 132 - h + k, '#f2f6fb'); } } }
+    R(0, 132, ART_W, 48, '#f4f7fb');
+    for (let y = 138; y < 180; y += 6) R(0, y, ART_W, 1, '#e5ecf5');
+    for (let i = 0; i < 40; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#9fc27d');
+    lines('#d9434a');
+  } else if (key === 'moon') {
+    R(0, 0, ART_W, 132, '#05060c');
+    for (let i = 0; i < 90; i++) P((rnd() * ART_W) | 0, (rnd() * 118) | 0, rnd() < 0.3 ? '#9aa6ff' : '#e8e8ff');
+    for (let y = -12; y <= 12; y++) for (let x = -12; x <= 12; x++) { if (x * x + y * y > 144) continue; const land = Math.sin(x * 0.5 + y * 0.3) + Math.cos(y * 0.45 - x * 0.2) > 0.9; P(70 + x, 34 + y, land ? '#3fae5a' : '#2f6fd6'); }
+    for (let x = 0, h = 8; x < ART_W; x++) { h = clamp(h + (rnd() - 0.5) * 2, 4, 14); R(x, 132 - h, 1, h, '#62626d'); }
+    R(0, 132, ART_W, 48, '#9d9da7');
+    for (let i = 0; i < 9; i++) { const cx = rnd() * ART_W, cy = 140 + rnd() * 34, rx = 4 + rnd() * 8, ry = rx * 0.3; for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) if ((x / rx) ** 2 + (y / ry) ** 2 <= 1) P(Math.round(cx + x), Math.round(cy + y), y < 0 ? '#84848e' : '#b3b3bd'); }
+    R(112, 98, 1, 34, '#d8d8e0'); R(113, 98, 12, 3, '#d93a3f'); R(113, 101, 12, 3, '#ffffff'); R(113, 104, 12, 3, '#2f6bd8');
+    lines('#cfcfd9');
+  } else if (key === 'park') {
+    bands(0, 132, ['#8dcbf0', '#9bd2f2', '#abd9f4', '#bce1f6']);
+    for (let x = 0; x < ART_W;) { const w = 16 + ((rnd() * 18) | 0), h = 24 + ((rnd() * 44) | 0); R(x, 118 - h, w, h, rnd() < 0.5 ? '#aab7ca' : '#b6c2d3'); for (let wy = 122 - h; wy < 112; wy += 7) for (let wx = x + 3; wx < x + w - 3; wx += 5) R(wx, wy, 2, 3, '#d1dae8'); x += w + 2; }
+    for (const [x, r] of [[26, 11], [70, 9], [130, 12], [206, 10], [252, 12], [300, 9]]) { for (let yy = -r; yy <= r; yy++) for (let xx = -r; xx <= r; xx++) if (xx * xx + yy * yy <= r * r) P(x + xx, 104 + yy, xx + yy > r * 0.5 ? '#4d8d4b' : '#5ea55a'); R(x - 1, 104 + r - 1, 2, 132 - (104 + r - 1), '#6d4a2e'); }
+    R(0, 118, ART_W, 14, '#77b85a');
+    for (let x = 0; x < ART_W; x += 6) R(x, 112, 1, 20, '#59606e');
+    R(0, 112, ART_W, 1, '#59606e'); R(0, 121, ART_W, 1, '#59606e');
+    turf('#6bb553', '#78c160', '#ffffff');
+    for (let i = 0; i < 80; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#c9a86f');
+  }
+  return c;
+}
+const PITCH_CACHE = {};
+const pitchImage = k => PITCH_CACHE[k] || (PITCH_CACHE[k] = paintPitch(k));
+
+// ---------------------------------------------------------------- ball
+class Ball {
+  constructor(game, x) {
+    const B = game.cfg.ball;
+    this.game = game; this.r = B.r; this.rest = B.rest; this.spawnX = x;
+    this.body = game.world.createBody({ type: 'dynamic', position: { x, y: 5.8 }, bullet: true, angularDamping: 0.4, linearDamping: B.damp });
+    this.fix = this.body.createFixture(new pl.Circle(B.r), { density: B.density, friction: 0.6, restitution: B.rest, filterCategoryBits: CAT_BALL, filterMaskBits: CAT_WORLD | CAT_PLAYER | CAT_BALL, userData: { kind: 'ball', ball: this } });
+    this.body.setGravityScale(0);
+    this.waiting = true; this.stillT = 0; this.touch = null; this.scored = false; this.barCD = 0;
+    this.spr = ballSprite(Math.max(6, Math.round(B.r * 2 * PPM)), B.look);
+  }
+}
+
+// a recorded transform, drawn like a physics body during instant replays
+class Pose {
+  constructor(x, y, a) { this.p = { x, y }; this.a = a; }
+  getPosition() { return this.p; }
+  getAngle() { return this.a; }
+}
+
+// ---------------------------------------------------------------- player
+// Torso and the standing leg are one rigid body that rocks on its feet, the same as Floppy Hoops' players;
+// a hop launches along the body's lean, so timing decides forward or backward. The other leg hangs from the hip
+// and swings up to kick while your key is down.
+class Player {
+  constructor(game, team, slot, look, x, drop = 0) {
+    this.game = game; this.team = team; this.slot = slot; this.look = look;
+    this.dir = TEAM[team].dir; this.id = team * 2 + slot;
+    const bm = game.cfg.body;
+    this.d = { legLen: 0.92 * bm.leg, legW: 0.2, torsoW: 0.46, torsoH: 0.78, headR: 0.3 * bm.head, armLen: 0.7, armW: 0.16 };
+    this.kickHeld = false; this.celebrate = false; this.jumpCD = 0; this.kickCD = 0; this.fallenT = 0; this.upT = 0;
+    this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.88, 1.12);
+    this.feet = 0; this.grounded = false; this.fallen = false;
+    this.wob = 0; this.swaySign = 1; this.airT = 0; this.airVy = 0; this.flailT = 0; this.flailCD = 0; this.flailK = 0; this.flailPh = 0; this.flailTick = 0;
+    this.armA = 0.2 * this.dir;
+    this.build(x); this.makeSprites();
+    if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
+  }
+  build(x) {
+    const w = this.game.world, d = this.d, dir = this.dir, gid = -(this.id + 1), dm = this.game.cfg.body.mass;
+    const fd = (ud, density, extra) => Object.assign({ density, friction: 0.5, restitution: 0.05, filterGroupIndex: gid, filterCategoryBits: CAT_PLAYER, filterMaskBits: CAT_WORLD | CAT_PLAYER | CAT_BALL, userData: Object.assign({ kind: 'part', player: this }, ud) }, extra || {});
+    const hipY = d.legLen + 0.02;
+    this.tc = { x: 0, y: d.torsoH / 2 - 0.05 };
+    this.shLocal = { x: 0, y: d.torsoH - 0.18 };
+    this.headLocal = { x: 0, y: d.torsoH - 0.05 + d.headR * 0.8 };
+    this.legX = [-dir * 0.07, dir * 0.07];     // [standing leg, kicking leg]
+    this.bootLocal = { x: dir * 0.04, y: -d.legLen + 0.14 };
+    const body = this.body = w.createBody({ type: 'dynamic', position: { x, y: hipY }, angularDamping: 0.4 });
+    body.createFixture(new pl.Box(d.torsoW / 2, d.torsoH / 2, this.tc, 0), fd({ part: 'torso' }, 30 * dm));
+    body.createFixture(new pl.Box(d.legW / 2, d.legLen / 2 - 0.03, { x: this.legX[0], y: -d.legLen / 2 + 0.03 }, 0), fd({ part: 'leg' }, 18 * dm));
+    // two feet (like Hoops) so the body has a base to rock on; the kicking leg hangs a few cm clear of the ground
+    for (let i = 0; i < 2; i++) body.createFixture(new pl.Circle({ x: this.legX[i] + dir * 0.03, y: -d.legLen + 0.09 }, 0.09), fd({ part: 'foot' }, 10 * dm, { friction: 1.0, restitution: 0.18 }));
+    const neckY = hipY + d.torsoH - 0.05;
+    this.head = w.createBody({ type: 'dynamic', position: { x, y: neckY + d.headR * 0.8 }, angularDamping: 1 });
+    this.head.createFixture(new pl.Circle(d.headR), fd({ part: 'head' }, 7 * dm, { restitution: 0.3 }));
+    this.neck = w.createJoint(new pl.WeldJoint({ frequencyHz: NECK_HZ, dampingRatio: 0.12 }, body, this.head, { x, y: neckY }));
+    const kx = x + this.legX[1];
+    const kl = this.kleg = w.createBody({ type: 'dynamic', position: { x: kx, y: hipY }, angularDamping: 0.3 });
+    kl.createFixture(new pl.Box(d.legW / 2, d.legLen / 2 - 0.06, { x: 0, y: -d.legLen / 2 + 0.02 }, 0), fd({ part: 'kick' }, 10 * dm));
+    kl.createFixture(new pl.Circle(this.bootLocal, 0.11), fd({ part: 'boot' }, 10 * dm, { friction: 0.8 }));
+    this.hip = w.createJoint(new pl.RevoluteJoint({ enableMotor: true, maxMotorTorque: 150, motorSpeed: 0, enableLimit: true,
+      lowerAngle: dir > 0 ? -0.6 : -2.5, upperAngle: dir > 0 ? 2.5 : 0.6 }, body, kl, { x: kx, y: hipY }));
+    this.parts = [body, this.head, kl];
+    // mass, balance height and rotational inertia about the feet
+    let M = 0, my = 0, I = 0;
+    for (const b of this.parts) {
+      const m = b.getMass(), wc = b.getWorldCenter(), lc = b.getLocalCenter();
+      M += m; my += m * wc.y;
+      I += b.getInertia() - m * (lc.x * lc.x + lc.y * lc.y) + m * ((wc.x - x) ** 2 + (wc.y - 0.02) ** 2);
+    }
+    this.M = M; this.h = my / M - 0.02; this.I = I;
+  }
+  makeSprites() {
+    const d = this.d, T = TEAM[this.team], L = this.look, px = v => Math.max(2, Math.round(v * PPM));
+    const s = this.spr = {
+      head: headSprite(px(d.headR * 2), L, T),
+      torso: torsoSprite(px(d.torsoW), px(d.torsoH), T, L.num),
+      leg: legSprite(px(d.legW), px(d.legLen), T, L.skin),
+      arm: armSprite(px(d.armW), px(d.armLen), T, L.skin),
+    };
+    s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy };
+    s.armB = { c: darken(s.arm.c, 0.3), ox: s.arm.ox, oy: s.arm.oy };
+  }
+  center() { return this.body.getWorldPoint(this.tc); }
+  get x() { return this.center().x; }
+  angle() { return wrap(this.body.getAngle()); }
+  footPoint(i) { return this.body.getWorldPoint({ x: this.legX[i] + this.dir * 0.03, y: -this.d.legLen }); }
+  footY() { return Math.min(this.footPoint(0).y, this.footPoint(1).y); }
+  bootPos() { return this.kleg.getWorldPoint(this.bootLocal); }
+  // how fast the kicking leg is swinging forward, relative to the body (rad/s)
+  swing() { return (this.kleg.getAngularVelocity() - this.body.getAngularVelocity()) * this.dir; }
+  drive(j, target, gain, maxSpeed, maxTorque) {
+    const e = wrap(target - j.getJointAngle());
+    j.setMaxMotorTorque(maxTorque); j.setMotorSpeed(clamp(e * gain, -maxSpeed, maxSpeed));
+  }
+  update(dt) {
+    const g = this.game, dir = this.dir, body = this.body;
+    this.jumpCD -= dt; this.kickCD -= dt; this.flailCD -= dt;
+    const th = this.angle(), om = body.getAngularVelocity();
+    const lowBody = this.center().y < this.d.torsoH * 0.5 + 0.35;
+    this.fallen = Math.abs(th) > 1.05;
+    const onFeet = this.feet > 0 || this.footY() < 0.12;
+    this.grounded = onFeet && Math.abs(th) < 1.0;
+    if (!onFeet) { this.airT += dt; this.airVy = Math.min(this.airVy, body.getLinearVelocity().y); }
+    else { if (this.airT > 0.15) this.landed(); this.airT = 0; this.airVy = 0; this.wob = Math.max(0, this.wob - dt * 0.36); }
+    // the arms just flop along: out wide in the air, up when celebrating
+    const armT = this.celebrate ? dir * (2.7 + 0.35 * Math.sin(g.time * 14 + this.id)) : !onFeet ? dir * (1.3 + 0.5 * Math.sin(g.time * 9 + this.id)) : dir * 0.22 - om * 0.08;
+    this.armA += (armT - this.armA) * Math.min(1, 10 * dt);
+    if (this.flailT > 0) {
+      // the physics has gone weird for a moment: the leg windmills and the body gets yanked around
+      this.flailT -= dt; this.flailPh += dt * 15;
+      this.drive(this.hip, dir * (1.0 + Math.sin(this.flailPh) * 1.4), 30, 30, 200);
+      if ((this.flailTick -= dt) <= 0) { this.flailTick = rand(0.1, 0.18); body.setAngularVelocity(om * 0.5 + rand(-1, 1) * (onFeet ? 3.5 : 6.5) * this.flailK); }
+      if (this.flailT <= 0) this.endFlail();
+      return;
+    }
+    // down: pop back up. Stuck on your head (or against a wall) for a moment counts too.
+    if (this.fallen) { this.fallenT += dt; if ((this.fallenT > 0.2 && lowBody) || (this.fallenT > 0.7 && this.jumpCD <= 0)) this.getUp(); } else this.fallenT = 0;
+    this.upT -= dt;
+    // key down: the leg whips forward and up, and stays up. Key up: it swings back down to hang.
+    if (this.kickHeld) this.drive(this.hip, dir * KICK_A, 40, 22, this.fallen ? 30 : 380);
+    else {
+      const tgt = this.celebrate && onFeet ? dir * (0.5 + 0.5 * Math.sin(g.time * 12 + this.id)) : !onFeet ? dir * 0.35 : 0;
+      const err = Math.abs(wrap(tgt - this.hip.getJointAngle()));
+      this.drive(this.hip, tgt, 14, 12, this.fallen ? 8 : err > 0.3 ? 160 : 60);
+    }
+    if (onFeet && Math.abs(th) < 1.45) {
+      // loose, underdamped spring toward a rocking target: overshoots and wobbles after every bump.
+      // The rocking starts when you land or get knocked and dies away over a couple of seconds, so a player
+      // left alone ends up standing still. It leans a little toward the goal you attack.
+      const k = smooth(this.wob), tgt = (this.swaySign * SWAY_A * Math.sin(g.time * this.swayW + this.swayPh) - dir * 0.08) * k;
+      const acc = (Math.abs(th) > 0.8 ? 1.8 : 1) * BAL_KP * (tgt - th) - BAL_KD * om;
+      body.applyTorque(this.I * acc - this.M * g.cfg.gravity * this.h * Math.sin(th) * 0.9, true);
+    } else if (!this.fallen || !lowBody) {
+      // in the air: slowly right yourself (harder just after getting up, and in low gravity)
+      const wt = clamp(-th * 2, -3, 3), rate = (this.upT > 0 ? 4 : 0.6) * Math.sqrt(20 / this.game.cfg.gravity);
+      body.setAngularVelocity(om + (wt - om) * Math.min(1, rate * dt));
+    }
+  }
+  // start (or top up) the rocking. A landing always rocks back first, then forward.
+  rock(a, back) {
+    if (a <= this.wob) return;
+    if (back && this.wob < 0.35) {
+      this.swaySign = this.dir; this.swayPh = -this.game.time * this.swayW;
+      this.body.setAngularVelocity(this.body.getAngularVelocity() + this.dir * 1.2 * a);
+    } else if (this.wob < 0.1) {
+      this.swaySign = 1;
+      const th = this.angle(), om = this.body.getAngularVelocity();
+      let psi = Math.asin(clamp(th / (SWAY_A * smooth(a)), -1, 1));
+      if (om < 0 || (Math.abs(th) < 0.02 && Math.random() < 0.5)) psi = Math.PI - psi;
+      this.swayPh = psi - this.game.time * this.swayW;
+    }
+    this.wob = a;
+  }
+  landed() {
+    const sp = -this.airVy, th = Math.abs(this.angle());
+    this.rock(clamp(0.75 + this.airT * 0.6, 0.75, 1), true);
+    if (sp > 8 && th > 0.7) this.maybeFlail(0.05 + (th - 0.7) * 0.12, 0.6);
+  }
+  maybeFlail(chance, k) { if (this.flailCD > 0 || Math.random() >= chance) return; this.flail(k); }
+  flail(k) {
+    if (this.flailT > 0) return;
+    this.flailT = lerp(0.55, 1.1, k); this.flailK = k; this.flailPh = rand(0, 6.28); this.flailTick = 0; this.flailCD = 4;
+    this.neck.setFrequency(1.1); this.rock(1);
+  }
+  endFlail() { this.flailT = 0; this.neck.setFrequency(NECK_HZ); }
+  press() {
+    this.kickHeld = true;
+    if (this.fallen) { if (this.center().y < 1.2 && this.jumpCD <= 0) this.getUp(); return; }   // mashing doesn't re-spin you
+    if (this.grounded && this.jumpCD <= 0) this.jump();
+  }
+  release() { this.kickHeld = false; }
+  // the hop a press would give right now (before the old velocity is mixed in)
+  hopVel(th = this.angle()) {
+    const v = this.game.cfg.jumpV, fwd = -Math.sin(th) * this.dir > 0;
+    return { x: -Math.sin(th) * v * JUMP_LEAN * (fwd ? 1.15 : 1) + this.dir * FWD_HOP, y: v * (0.8 + 0.2 * Math.cos(th)) };
+  }
+  jump() {
+    const th = this.angle(), hv = this.hopVel(th);
+    for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.2 + hv.x, y: hv.y }); }
+    this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.7 + th * 0.8 + rand(-0.5, 0.5));
+    this.jumpCD = 0.3;
+  }
+  getUp() {
+    const th = this.angle();
+    for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.3, y: 6.5 * Math.sqrt(this.game.cfg.gravity / 20) }); }
+    const g = this.game.cfg.gravity, hang = 2 * 6.5 * Math.sqrt(g / 20) / g;
+    this.body.setAngularVelocity(-th * 1.3 / hang);
+    this.fallenT = 0; this.jumpCD = 0.45; this.upT = 0.9; this.rock(0.8);
+  }
+  draw(r, pose) {
+    const s = this.spr, flip = this.dir < 0;
+    const body = pose ? pose.body : this.body, head = pose ? pose.head : this.head, leg = pose ? pose.leg : this.kleg, armA = pose ? pose.armA : this.armA;
+    r.local(s.armB, body, -this.dir * 0.06, this.shLocal.y, flip, 1, armA * 0.7 - this.dir * 0.3);
+    r.local(s.legB, body, this.legX[0], 0, flip);
+    r.local(s.torso, body, this.tc.x, this.tc.y, flip);
+    r.part(s.leg, leg, flip);
+    r.part(s.head, head, flip);
+    r.local(s.arm, body, this.dir * 0.04, this.shLocal.y, flip, 1, armA);
+  }
+}
+
+// ---------------------------------------------------------------- CPU
+// One key drives both teammates, so every decision is "would a press right now help the team?". A press hops
+// each grounded player along their lean and whips their kicking leg up. The CPU plays that out: where each hop
+// lands, and whether a boot, a head or a body meets the ball's flight on the way.
+function predictBall(g, b, T, dt, look) {
+  const p = b.body.getPosition(), v = b.body.getLinearVelocity(), r = b.r, G = g.cfg.gravity, rest = b.rest * g.cfg.pitch.bounce, damp = g.cfg.ball.damp;
+  let x = p.x, y = p.y, vx = v.x * look, vy = v.y * look;
+  const out = [];
+  const moving = look > 0 && !b.waiting;
+  for (let t = 0; t <= T + 1e-6; t += dt) {
+    out.push({ x, y });
+    if (!moving) continue;
+    vy -= G * dt; vx *= 1 - damp * dt; vy *= 1 - damp * dt;
+    x += vx * dt; y += vy * dt;
+    if (y < r) { y = r; vy = Math.abs(vy) * rest; if (vy < 0.8) vy = 0; vx *= 1 - g.cfg.pitch.roll * dt * 3; }
+    if (x > BACK_X - r) { x = BACK_X - r; vx = -Math.abs(vx) * 0.3; }
+    if (x < -BACK_X + r) { x = -BACK_X + r; vx = Math.abs(vx) * 0.3; }
+    if (y > VY1 - r) { y = VY1 - r; vy = -Math.abs(vy) * 0.3; }
+  }
+  return out;
+}
+class CPU {
+  constructor(game, team, level) {
+    this.g = game; this.team = team; this.level = level; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal;
+    this.down = false; this.t = 0; this.until = 0; this.think = rand(0, 0.3); this.pdt = level === 'impossible' ? 1 / 40 : 1 / 25;
+  }
+  set(down) { if (this.down === down) return; this.down = down; this.g.evq.push({ team: this.team, down }); }
+  tap(d) { this.set(true); this.until = this.t + d; }
+  // the ball that matters: the loose one closest to one of ours
+  targetBall(mine) {
+    let best = null, bd = 1e9;
+    for (const b of this.g.balls) { const bp = b.body.getPosition(); for (const p of mine) { const d = Math.abs(p.x - bp.x) + (b.waiting ? 3 : 0); if (d < bd) { bd = d; best = b; } } }
+    return best;
+  }
+  update(dt) {
+    const g = this.g, L = this.L;
+    this.t += dt;
+    if (!(g.state === 'play' || g.state === 'title')) { this.set(false); return; }
+    if (this.down) { if (this.t >= this.until) this.set(false); return; }
+    if ((this.think -= dt) > 0) return;
+    this.think = L.think * rand(0.7, 1.3);
+    const mine = g.players.filter(p => p.team === this.team);
+    if (Math.random() < L.miss) { if (Math.random() < 0.5) this.tap(rand(0.12, 0.3)); return; }
+    const b = this.targetBall(mine); if (!b) return;
+    const path = predictBall(g, b, 1.3, this.pdt, L.look);
+    const now = this.evaluate(mine, b, path, 0);
+    let s = now.score + gauss() * L.noise;
+    if (s <= L.thresh) return;
+    // patient levels hold off when the rocking is about to swing into a better hop
+    if (L.wait && now.contact < 3) {
+      let best = -1e9;
+      for (let k = 1; k <= L.wait; k++) best = Math.max(best, this.evaluate(mine, b, path, k * 0.1).score);
+      if (best > now.score * 1.25 + 0.3) return;
+    }
+    this.tap(now.hold);
+  }
+  evaluate(mine, b, path, dly) {
+    const g = this.g, L = this.L, G = g.cfg.gravity, dir = TEAM[this.team].dir, r = b.r, pdt = this.pdt;
+    const ballAt = t => path[Math.min(path.length - 1, Math.max(0, Math.round((t + dly) / pdt)))];
+    const order = mine.slice().sort((a, q) => (a.x - q.x) * dir);     // the one nearest our goal first
+    const bLand = ballAt(0.55);
+    let score = 0, bestContact = 0, settled = 0, hold = L.hold;
+    order.forEach((p, i) => {
+      const role = order.length > 1 && i === 0 ? 'back' : 'fwd';
+      if (p.grounded && p.wob < 0.12 && Math.abs(p.angle()) < 0.1) settled++;
+      if (p.fallen) { if (p.center().y < 1.2 && p.jumpCD <= dly) score += 1.2; return; }
+      const d = p.d, om = p.body.getAngularVelocity(), cur = p.body.getLinearVelocity(), hip0 = p.body.getPosition();
+      const th = p.grounded ? clamp(p.angle() + om * dly * 0.85, -0.9, 0.9) : p.angle();
+      const hop = p.grounded && p.jumpCD <= dly;
+      let hip = hip0, v0;
+      if (hop) { const hv = p.hopVel(th); v0 = { x: cur.x * 0.2 + hv.x, y: hv.y }; }
+      else {
+        v0 = { x: cur.x, y: cur.y - G * dly };
+        if (!p.grounded) hip = { x: hip0.x + cur.x * dly, y: Math.max(d.legLen, hip0.y + cur.y * dly - 0.5 * G * dly * dly) };
+      }
+      const standY = d.legLen + 0.02, air = !hop && !p.grounded;
+      let landX = hip.x, contact = 0;
+      for (let t = pdt; t <= 1.0; t += pdt) {
+        let x = hip.x + v0.x * t, y = hip.y + v0.y * t - 0.5 * G * t * t;
+        const flying = hop || air;
+        if (!flying) { x = hip.x; y = hip.y; }
+        if (flying && y < standY && t > 0.08) { landX = x; break; }
+        landX = x;
+        if (contact) continue;
+        const bb = ballAt(t), at = { x, y };
+        const a = Math.min(KICK_A, 16 * t), hipK = { x: x + Math.cos(th) * p.legX[1], y: y + Math.sin(th) * p.legX[1] };
+        const boot = rot(p.bootLocal, th + dir * a); boot.x += hipK.x; boot.y += hipK.y;
+        if (t < hold + 0.15 && (Math.hypot(boot.x - bb.x, boot.y - bb.y) < r + 0.24 || (a < KICK_A && segDist(bb, hipK, boot) < r + 0.14))) {
+          contact = a < KICK_A ? 4 : 1.8;
+          if (bb.x * dir > 2) contact += 1;                     // a shot
+          continue;
+        }
+        const hd = rot(p.headLocal, th); hd.x += at.x; hd.y += at.y;
+        if (Math.hypot(hd.x - bb.x, hd.y - bb.y) < r + d.headR + 0.05) { contact = bb.y > hd.y - 0.1 && (flying ? v0.x * dir > -1 : true) ? 2.2 : 0.4; continue; }
+        const tc = rot(p.tc, th); tc.x += at.x; tc.y += at.y;
+        if (flying && Math.abs(tc.x - bb.x) < r + d.torsoW / 2 + 0.05 && Math.abs(tc.y - bb.y) < r + d.torsoH / 2) {
+          const back = v0.x * dir < -0.5;
+          contact = back ? -(bb.x * dir < -3 ? 4 : 2) : 0.8;
+        }
+      }
+      score += contact; bestContact = Math.max(bestContact, contact);
+      // where this player should be when the hop comes down: the forward just behind the ball, the back
+      // one goal-side of it (and right on it when it's in our half)
+      const bx = bLand.x;
+      let tgt = role === 'fwd' ? bx - dir * 0.6 : bx * dir < -1 ? bx - dir * 1.0 : bx - dir * 3.2;
+      tgt = clamp(tgt, -6.4, 6.4);
+      const w = (role === 'fwd' ? 1 : 0.7) * L.posW;
+      if (hop || air) score += (Math.abs(hip0.x - tgt) - Math.abs(landX - tgt)) * w * 0.6;
+    });
+    // everyone standing still and straight: hop in place to get the rocking going
+    if (settled === order.length) score += 1;
+    return { score, contact: bestContact, hold };
+  }
+}
+function makeCPU(game, team, level) { return new CPU(game, team, level); }
+
+// ---------------------------------------------------------------- settings
+const SETTINGS_KEY = 'floppy-soccer-settings-v1';
+const LEVEL_IDS = Object.keys(CPU_LEVELS);
+function loadSettings() {
+  const def = { ver: 1, mode: '2p', level: 'normal', cvcRed: 'hard', cvcBlue: 'normal', target: 5, modes: MODES.map(m => m.id), always: [], soundsOff: [] };
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+    if (s && typeof s === 'object') return {
+      ver: 1, mode: ['cpu', '2p', 'cvc'].includes(s.mode) ? s.mode : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
+      cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'hard', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'normal',
+      target: [3, 5, 7, 10].includes(s.target) ? s.target : 5,
+      modes: Array.isArray(s.modes) ? s.modes.filter(id => MODES.some(m => m.id === id)) : def.modes,
+      always: Array.isArray(s.always) ? s.always.filter(id => MODES.some(m => m.id === id)) : [],
+      soundsOff: Array.isArray(s.soundsOff) ? s.soundsOff.filter(id => SOUND_BY_ID[id]) : [],
+    };
+  } catch (e) { /* storage unavailable */ }
+  return def;
+}
+function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
+
+// ---------------------------------------------------------------- game
+function makeLook(used) {
+  let num; do { num = pick([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 17, 19, 21, 22, 23, 30, 99]); } while (used.has(num));
+  used.add(num);
+  return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
+    style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk', 'long']), num };
+}
+const TEAM_X = [-5.2, -2.2];     // red's two players (rear, front); blue stands mirrored
+const newStats = () => [0, 1].map(() => ({ goals: 0, shots: 0, kicks: 0, headers: 0, saves: 0 }));
+function packLines(items, max) {
+  const out = [];
+  for (const it of items) { const last = out[out.length - 1]; if (last && (last + ' + ' + it).length <= max) out[out.length - 1] = last + ' + ' + it; else out.push(it); }
+  return out;
+}
+
+class Game {
+  constructor() {
+    this.sfx = new Sfx();
+    this.settings = loadSettings();
+    this.time = 0; this.realTime = 0; this.state = 'title'; this.stateT = 0; this.paused = false; this.menuOpen = false;
+    this.menuSel = 0; this.titleRollAt = 0; this.overSel = 0;
+    this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = this.settings.target; this.vsCpu = false; this.cvc = false;
+    this.stats = newStats(); this.goalLog = [];
+    this.held = [false, false]; this.evq = []; this.keysDown = new Set(); this.humanHeld = false;
+    this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
+    this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0;
+    this.cam = { z: 1, x: 0, y: 3.5, fx: 0, fy: 3.5, goalT: 0 };
+    this.parts = []; this.pops = []; this.sndQ = []; this.touchQ = []; this.dustQ = []; this.bumpQ = []; this.sndCD = {};
+    this.rec = []; this.recCount = 0; this.replay = null; this.pendingReplay = false; this.matchPoint = false;
+    this.netShake = [0, 0];
+    this.snow = Array.from({ length: 70 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(6, 16), w: rand(0, 6) }));
+    this.rain = Array.from({ length: 90 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(150, 220) }));
+    this.clouds = Array.from({ length: 4 }, (_, i) => ({ x: i * 90 + rand(0, 40), y: rand(10, 40), w: rand(22, 36), v: rand(1.5, 3.5) }));
+    this.gusts = Array.from({ length: 14 }, () => ({ x: rand(0, ART_W), y: rand(20, 128), l: rand(6, 16) }));
+    this.newRoster();
+    this.lastRc = CLASSIC_ROUND;
+    this.setupRound(CLASSIC_ROUND);
+    this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')];
+  }
+  newRoster() { const used = new Set(); this.roster = [0, 1, 2, 3].map(() => makeLook(used)); }
+  stat(team, key) { if (this.state === 'play') this.stats[team][key]++; }
+  soundOn(id) { return !this.settings.soundsOff.includes(id); }
+  // meme clips stay quiet behind the main menu
+  cue(id) { const e = SOUND_BY_ID[id]; if (e && this.soundOn(id) && !(e.clip && this.state === 'title')) this.sfx.cue(id); }
+  goalSound(winner) {
+    if (winner && this.soundOn('greenfn') && this.sfx.has('greenfn')) { this.cue('greenfn'); return; }
+    const pool = SOUND_LIST.filter(e => e.goal && this.soundOn(e.id) && this.sfx.has(e.id));
+    if (pool.length) this.cue(pick(pool).id);
+  }
+
+  setupRound(rc) {
+    const pitch = PITCHES[rc.pitch] || PITCHES.stadium, ball = BALLS[rc.ball || 'classic'], body = BODIES[rc.body || 'normal'], goal = GOALS[rc.goal || 'normal'];
+    const phys = PHYS[rc.pitch === 'moon' && rc.phys === 'lowgrav' ? 'none' : (rc.phys || 'none')], extra = EXTRAS[rc.extra || 'none'];
+    GOAL_H = goal.h;
+    const gravity = pitch.gravity * phys.grav, jumpH = pitch.jumpH * phys.jump * body.jump;
+    this.rc = rc;
+    this.cfg = { pitch, ball, body, goal, phys, gravity, jumpV: Math.sqrt(2 * gravity * jumpH), wind: phys.wind ? rand(3, 4.5) : 0, two: rc.extra === 'twoball' };
+    const w = this.world = new pl.World({ gravity: { x: 0, y: -gravity } });
+    w.on('begin-contact', c => this.onContact(c, 1));
+    w.on('end-contact', c => this.onContact(c, -1));
+    w.on('pre-solve', c => this.onPreSolve(c));
+    const ground = w.createBody();
+    const wf = kind => ({ friction: kind === 'floor' ? pitch.fric : 0.3, restitution: 0, filterCategoryBits: CAT_WORLD, userData: { kind } });
+    ground.createFixture(new pl.Edge({ x: -30, y: 0 }, { x: 30, y: 0 }), wf('floor'));
+    ground.createFixture(new pl.Edge({ x: -BACK_X, y: -3 }, { x: -BACK_X, y: 14 }), wf('wall'));
+    ground.createFixture(new pl.Edge({ x: BACK_X, y: -3 }, { x: BACK_X, y: 14 }), wf('wall'));
+    ground.createFixture(new pl.Edge({ x: -30, y: VY1 }, { x: 30, y: VY1 }), wf('ceil'));
+    // each goal: a crossbar reaching back to the wall, and a sloped roof net so nothing rests on top
+    for (const s of [-1, 1]) {
+      ground.createFixture(new pl.Box((BACK_X - GOAL_X) / 2, BAR_T / 2, { x: s * (GOAL_X + BACK_X) / 2, y: GOAL_H + BAR_T / 2 }, 0), wf('bar'));
+      ground.createFixture(new pl.Edge({ x: s * GOAL_X, y: GOAL_H + BAR_T }, { x: s * BACK_X, y: GOAL_H + BAR_T + ROOF_RISE }), wf('roof'));
+    }
+    this.players = [];
+    for (let t = 0; t < 2; t++) for (let s = 0; s < 2; s++) this.players.push(new Player(this, t, s, this.roster[t * 2 + s], t === 0 ? TEAM_X[s] : -TEAM_X[s], rand(0.7, 0.95)));
+    this.balls = this.cfg.two ? [new Ball(this, -1.3), new Ball(this, 1.3)] : [new Ball(this, 0)];
+    this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0;
+    this.roundT = 0; this.whistled = false; this.cam.goalT = 0; this.cam.z = 1; this.netShake = [0, 0];
+    this.bg = pitchImage(pitch.key);
+    this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
+    this.bannerItems = [pitch.name, ball.name, body.name, goal.name, phys.wind ? 'GUSTY WIND' : phys.name, extra.name].filter(Boolean);
+    this.bannerLines = packLines(this.bannerItems, 36);
+    this.makeCrowd();
+  }
+  randomRound(ids, always) {
+    const on = new Set(ids), lock = new Set(always || []);
+    const roll = (cat, p) => {
+      const L = MODES.filter(m => m.cat === cat && lock.has(m.id)).map(m => m.id);
+      if (L.length) return pick(L);   // a mode set to ALWAYS is in every round
+      const l = MODES.filter(m => m.cat === cat && on.has(m.id)).map(m => m.id); return l.length && Math.random() < p ? pick(l) : null;
+    };
+    const same = (a, b) => ['pitch', 'ball', 'body', 'goal', 'phys', 'extra'].every(k => a[k] === b[k]);
+    let rc = CLASSIC_ROUND;
+    for (let n = 0; n < 60; n++) {
+      rc = { pitch: roll('PITCHES', 0.5) || 'stadium', ball: roll('BALLS', 0.4), body: roll('PLAYERS', 0.35), goal: roll('GOALS', 0.25), phys: roll('PHYSICS', 0.25), extra: roll('EXTRAS', 0.15) };
+      const changed = rc.pitch !== 'stadium' || rc.ball || rc.body || rc.goal || rc.phys || rc.extra;
+      if (!on.size || lock.size || (changed && !same(rc, this.lastRc))) break;
+    }
+    this.lastRc = rc;
+    return rc;
+  }
+  nextRound() { return this.randomRound(this.settings.modes, this.settings.always); }
+  makeCrowd() {
+    const r = rng(this.round * 131 + 7), people = [];
+    const shirts = ['#7f8aa3', '#9a7f7f', '#86977f', '#a29579', '#8a7da3', '#d93a3f', '#2f6bd8', '#ff8173', '#86b2ff', '#b0a58c', '#ffd23f'];
+    for (let row = 0; row < 8; row++) {
+      const yb = 40 + row * 11;
+      for (let x = 2 + ((r() * 5) | 0); x < ART_W - 4; x += 6 + ((r() * 4) | 0)) {
+        if (r() < 0.12) continue;
+        // red fans on the left, blue on the right, a mix in the middle
+        const side = x / ART_W, fan = r() < 0.55 ? (r() < side ? '#2f6bd8' : '#d93a3f') : shirts[(r() * shirts.length) | 0];
+        people.push({ x, yb, shirt: fan, skin: ['#d9b89a', '#c49a78', '#a47b5c', '#7d5a42'][(r() * 4) | 0], ph: r() * 6.28 });
+      }
+    }
+    this.crowd = people;
+  }
+
+  // ------------------------------------------------ flow
+  newGame(opts = {}) {
+    const s = this.settings, mode = opts.mode || s.mode;
+    this.score = [0, 0]; this.round = 1; this.target = opts.target || s.target; this.vsCpu = mode === 'cpu'; this.cvc = mode === 'cvc';
+    this.stats = newStats(); this.goalLog = []; this.replay = null; this.pendingReplay = false; this.matchPoint = false;
+    this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND);
+    const lv = opts.levels || [s.cvcRed, s.cvcBlue];
+    this.cpuLevels = this.cvc ? lv : this.vsCpu ? [null, opts.level || s.level] : [null, null];
+    this.cpus = this.vsCpu ? [makeCPU(this, 1, opts.level || s.level)] : this.cvc ? [makeCPU(this, 0, lv[0]), makeCPU(this, 1, lv[1])] : [];
+    this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false;
+    this.state = 'play'; this.stateT = 0; this.paused = false;
+  }
+  startGame() { this.startTransition(ORANGE, () => this.newGame()); }
+  // ------------------------------------------------ main menu (a CPU match plays behind it, re-rolling every mode)
+  toTitle() {
+    this.sfx.stopClip();
+    this.paused = false; this.trans = null; this.state = 'title'; this.stateT = 0;
+    this.replay = null; this.pendingReplay = false; this.matchPoint = false; this.score = [0, 0];
+    this.newRoster(); this.setupRound(this.randomRound(MODES.map(m => m.id)));
+    this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')]; this.vsCpu = false; this.cvc = false;
+    this.held = [false, false]; this.keysDown.clear(); this.humanHeld = false; this.titleRollAt = 0;
+  }
+  rollTitle() {
+    this.titleRollAt = 0;
+    this.startTransition(pick([TEAM[0].jersey, TEAM[1].jersey, ORANGE]), () => { this.newRoster(); this.setupRound(this.randomRound(MODES.map(m => m.id))); }, true);
+  }
+  menuMove(d) { this.menuSel = (this.menuSel + d + MENU_ITEMS.length) % MENU_ITEMS.length; this.sfx.grab(); }
+  menuPick() {
+    const id = MENU_ITEMS[this.menuSel].id;
+    this.sfx.init();
+    if (id === 'cpu' || id === '2p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
+    else if (id === 'modes') openMenu();
+    else if (id === 'switch') location.href = 'index.html';
+  }
+  overMove(d) { if (this.state !== 'over') return; this.overSel = (this.overSel + d + 2) % 2; this.sfx.grab(); }
+  overPick(i) {
+    if (this.state !== 'over' || this.stateT < 1.2 || this.trans) return;
+    if (i === 0) this.startTransition(TEAM[this.winner].jersey, () => this.newGame());
+    else this.startTransition(ORANGE, () => this.toTitle());
+  }
+  startTransition(color, cb, keep) {
+    if (this.trans && !this.trans.keep) return;
+    this.trans = { t: 0, dur: 0.9, cb, color, fired: false, keep: !!keep };
+    if (!keep) { this.state = 'transition'; this.stateT = 0; }
+  }
+  gameOver(team) {
+    this.state = 'over'; this.stateT = 0; this.winner = team; this.overSel = 0;
+    this.sfx.buzzer(); this.sfx.fanfare(); this.excite = 1;
+    for (const p of this.players) p.celebrate = p.team === team;
+    for (let i = 0; i < 120; i++) this.addPart(rand(-8, 8), rand(7.4, 9), rand(-1, 1), rand(-2, 0), 5, rand(2, 4), pick([TEAM[team].jersey, TEAM[team].light, '#ffffff', '#ffd23f']), pick([1, 2]), 'confetti');
+  }
+  teamName(t) {
+    if (this.cvc) return (this.cpuLevels[t] || 'cpu').toUpperCase();
+    return this.vsCpu ? (t === 0 ? 'YOU' : 'CPU') : TEAM[t].name;
+  }
+
+  // ------------------------------------------------ input
+  humanKey(code, down) {
+    if (down) {
+      this.sfx.init();
+      if (this.state === 'over') { this.overPick(0); return; }
+    }
+    if (this.cvc) return;   // CPU VS CPU is spectator-only
+    if (down) {
+      if (this.paused || (this.state !== 'play' && this.state !== 'scored')) return;
+      this.keysDown.add(code);
+    } else this.keysDown.delete(code);
+    if (this.vsCpu) {
+      const now = [...this.keysDown].some(c => c === 'KeyW' || c === 'ArrowUp');
+      if (now !== this.humanHeld) { this.humanHeld = now; this.evq.push({ team: 0, down: now }); }
+    } else if (code === 'KeyW' || code === 'ArrowUp') this.evq.push({ team: code === 'KeyW' ? 0 : 1, down });
+  }
+  releaseAll() { for (const code of [...this.keysDown]) this.humanKey(code, false); }
+  handleEvent(ev) {
+    this.held[ev.team] = ev.down;
+    if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.teamPress(ev.team); }
+    else for (const p of this.players) if (p.team === ev.team) p.release();
+  }
+  teamPress(t) {
+    let hop = false;
+    for (const p of this.players) if (p.team === t) { if (p.grounded && p.jumpCD <= 0) hop = true; p.press(); }
+    if (hop) this.sfx.jump();
+  }
+
+  // ------------------------------------------------ events from physics
+  onContact(c, sign) {
+    const A = c.getFixtureA().getUserData() || {}, B = c.getFixtureB().getUserData() || {};
+    if (sign > 0 && A.kind === 'part' && B.kind === 'part' && A.player !== B.player) this.bumpQ.push([A.player, B.player]);
+    this.pair(A, B, sign); this.pair(B, A, sign);
+  }
+  pair(A, B, sign) {
+    if (A.kind === 'part' && A.part === 'foot' && B.kind !== 'ball') {
+      A.player.feet += sign;
+      if (sign > 0 && B.kind === 'floor') { const v = A.player.body.getLinearVelocity(); if (v.y < -5) this.dustQ.push([A.player, -v.y]); }
+      return;
+    }
+    if (sign < 0 || A.kind !== 'ball') return;
+    const b = A.ball, v = b.body.getLinearVelocity(), sp = Math.hypot(v.x, v.y);
+    if (B.kind === 'floor' || B.kind === 'wall' || B.kind === 'ceil' || B.kind === 'roof') this.sndQ.push(['bounce', sp]);
+    else if (B.kind === 'bar') this.sndQ.push(['bar', sp, b]);
+    else if (B.kind === 'part') this.touchQ.push([B.player, B.part, b, sp]);
+  }
+  onPreSolve(c) {
+    const A = c.getFixtureA().getUserData() || {}, B = c.getFixtureB().getUserData() || {};
+    const bu = A.kind === 'ball' ? A : B.kind === 'ball' ? B : null;
+    if (!bu) return;
+    const o = bu === A ? B : A, b = bu.ball;
+    if (o.kind === 'part') c.setRestitution(Math.min(b.rest, 0.45));
+    else if (o.kind === 'floor') c.setRestitution(b.rest * this.cfg.pitch.bounce);
+    else if (o.kind === 'bar') c.setRestitution(Math.max(0.5, b.rest));
+    else if (o.kind === 'roof') c.setRestitution(0.3);
+  }
+  playImpact(kind, sp) {
+    if ((this.sndCD[kind] || 0) > this.time) return;
+    const i = clamp(sp / 12, 0, 1);
+    if (i < 0.08) return;
+    this.sndCD[kind] = this.time + 0.06;
+    this.sfx[kind](i);
+  }
+  // a ball flying at this player's own goal, close to it, that they get a piece of
+  checkSave(p, b) {
+    const bv = b.body.getLinearVelocity(), bp = b.body.getPosition(), own = -p.dir;
+    if (this.state === 'play' && bv.x * own > 6 && Math.abs(bp.x - own * GOAL_X) < 2.6 && bp.y < GOAL_H + 0.4 && (!b.saveT || this.time - b.saveT > 1)) {
+      b.saveT = this.time; this.stat(p.team, 'saves');
+      this.popup(pick(['SAVE!', 'SAVED!', 'WHAT A SAVE!']), bp.x - own * 0.8, bp.y + 1.2, TEAM[p.team].light, 8, 1.1);
+    }
+  }
+  // a boot swinging through the ball: it goes the way the boot was moving, hard
+  kick(p, b) {
+    if (p.kickCD > 0) return;
+    const sw = p.swing(); if (sw < 3) return;
+    this.checkSave(p, b);
+    const bp = b.body.getPosition(), fv = p.kleg.getLinearVelocityFromWorldPoint(bp), k = clamp(sw / 16, 0.35, 1), B = this.cfg.ball;
+    let vx = (fv.x * 1.2 + p.dir * 3 * k) * B.kick, vy = (fv.y * 1.1 + 2.2 * k) * B.kick;
+    const sp = Math.hypot(vx, vy), cap = KICK_SPEED * B.kick;
+    if (sp > cap) { vx *= cap / sp; vy *= cap / sp; }
+    const cur = b.body.getLinearVelocity();
+    if (Math.hypot(vx, vy) > Math.hypot(cur.x, cur.y) * 0.6) b.body.setLinearVelocity({ x: vx, y: vy });
+    b.body.setAngularVelocity(-p.dir * 12 * k);
+    p.kickCD = 0.18;
+    b.touch = { p, part: 'kick', t: this.time, x: bp.x, bicycle: Math.abs(p.angle()) > 1.9 };
+    this.stat(p.team, 'kicks');
+    if (vx * p.dir > 8 && bp.x * p.dir > -2) this.stat(p.team, 'shots');
+    this.sfx.kick(clamp(Math.hypot(vx, vy) / 14, 0.3, 1));
+    if (Math.hypot(vx, vy) > 13) { this.addShake(2); for (let i = 0; i < 6; i++) this.addPart(bp.x, bp.y, rand(-2, 2), rand(0, 3), 10, rand(0.2, 0.4), '#ffffff', 1); }
+  }
+  header(p, b, sp) {
+    this.checkSave(p, b);
+    const hp = p.head.getPosition(), hv = p.head.getLinearVelocity(), bp = b.body.getPosition();
+    let nx = bp.x - hp.x, ny = bp.y - hp.y; const n = Math.hypot(nx, ny) || 1; nx /= n; ny /= n;
+    const push = Math.max(0, hv.x * nx + hv.y * ny);
+    b.touch = { p, part: 'head', t: this.time, x: bp.x };
+    if (push > 1.5 || ny > 0.4) {
+      const cur = b.body.getLinearVelocity(), k = 2 + push * 0.8;
+      let vx = cur.x + nx * k + p.dir * 1.5, vy = cur.y + ny * k;
+      const s = Math.hypot(vx, vy), cap = 15 * this.cfg.ball.kick; if (s > cap) { vx *= cap / s; vy *= cap / s; }
+      b.body.setLinearVelocity({ x: vx, y: vy });
+    }
+    if (ny > 0.3 && (push > 1 || sp > 3)) this.stat(p.team, 'headers');
+    this.playImpact('head', Math.max(sp, push * 3));
+  }
+  onTouch(p, part, b, sp) {
+    const bp = b.body.getPosition();
+    if (part === 'kick' || part === 'boot') {
+      if (p.swing() >= 3 && p.kickCD <= 0) { this.kick(p, b); return; }
+      this.checkSave(p, b);
+      b.touch = { p, part: 'leg', t: this.time, x: bp.x };
+      this.playImpact('thud', sp);
+    } else if (part === 'head') this.header(p, b, sp);
+    else { this.checkSave(p, b); b.touch = { p, part: 'body', t: this.time, x: bp.x }; this.playImpact('thud', sp); }
+  }
+
+  // ------------------------------------------------ scoring + fx
+  won(t) { return this.score[t] >= this.target; }
+  onGoal(team, b, side) {
+    b.scored = true;
+    const lt = b.touch, bv = b.body.getLinearVelocity(), sp = Math.hypot(bv.x, bv.y);
+    const own = lt && lt.p.team !== team && this.time - lt.t < 5;
+    const kind = own ? 'OWN GOAL!' : lt && lt.part === 'head' && this.time - lt.t < 2 ? 'HEADER!' : lt && lt.bicycle && this.time - lt.t < 2 ? 'BICYCLE KICK!'
+      : lt && Math.abs(lt.x - side * GOAL_X) > 9 ? 'FROM DISTANCE!' : sp > 14 ? 'WHAT A STRIKE!' : '';
+    this.netShake[side > 0 ? 1 : 0] = 1;
+    this.excite = 1; this.addShake(6); this.slowmo(0.35, 0.7); if (!REDUCED) this.flash = 0.18;
+    this.sfx.roar(); this.sfx.whistle(); this.sfx.jingle(team);
+    const gx = side * (GOAL_X + 0.5);
+    for (let i = 0; i < 50; i++) this.addPart(gx, rand(0.3, GOAL_H), -side * rand(0, 5), rand(1, 7), 14, rand(0.5, 1.1), pick([TEAM[team].jersey, TEAM[team].light, '#ffffff', '#ffd23f']), pick([1, 2]));
+    this.popup('GOAL!', -side * 0.2 + side * 2.2, 4.4, '#ffd23f', 24, 2.2);
+    if (kind) this.popup(kind, side * 2.0, 3.2, own ? '#ff8173' : TEAM[team].light, 8, 2.1);
+    this.cam.fx = side * 5.4; this.cam.fy = 2.0; this.cam.goalT = 1.7;
+    b.body.setLinearVelocity({ x: bv.x * 0.35, y: bv.y * 0.35 });
+    if (this.state === 'play') {
+      this.stat(team, 'goals');
+      this.score[team]++; this.scorePop[team] = 1; this.state = 'scored'; this.stateT = 0; this.scorer = team;
+      this.goalLog.push({ team, own: !!own, kind, t: this.roundT });
+      const winner = this.won(team);
+      this.goalSound(winner);
+      this.pendingReplay = winner;
+      this.replayLabel = winner ? 'MATCH WINNER' : kind.replace('!', '');
+      this.scoreRec = this.recCount;
+      for (const p of this.players) p.celebrate = p.team === team;
+    } else if (this.state === 'title') this.titleRollAt = this.time + 2.2;
+  }
+  checkMatchPoint() { this.matchPoint = [0, 1].some(t => this.score[t] === this.target - 1); }
+  afterScore() {
+    const w = [0, 1].find(t => this.won(t));
+    if (w !== undefined) this.gameOver(w);
+    else { const t = this.scorer; this.startTransition(TEAM[t].jersey, () => { this.round++; this.setupRound(this.nextRound()); this.state = 'play'; this.stateT = 0; this.checkMatchPoint(); }); }
+  }
+  slowmo(scale, dur) { this.tsTarget = scale; this.tsT = dur; }
+  addShake(a) { this.shakeA = Math.max(this.shakeA, REDUCED ? a * 0.25 : a); }
+  addPart(x, y, vx, vy, g, life, col, sz, kind) { if (this.parts.length < 500) this.parts.push({ x, y, vx, vy, g, life, max: life, col, sz, kind }); }
+  popup(text, x, y, col, size, dur) { this.pops.push({ text, x: clamp(x, -6.4, 6.4), y: clamp(y, 1.2, 6.4), col, size, dur, t: 0 }); }
+
+  // ------------------------------------------------ instant replay (the match winner)
+  recordFrame() {
+    if (this.state !== 'play' && this.state !== 'scored') return;
+    const pose = b => { const p = b.getPosition(); return [p.x, p.y, b.getAngle()]; };
+    this.rec.push({
+      pl: this.players.map(p => [...pose(p.body), ...pose(p.head), ...pose(p.kleg), p.armA]),
+      b: this.balls.map(b => { const p = b.body.getPosition(); return [p.x, p.y, b.body.getAngle()]; }),
+      ns: this.netShake.slice(),
+    });
+    if (this.rec.length > 300) this.rec.shift();
+    this.recCount++;
+  }
+  startReplay() {
+    const frames = this.rec.slice(), si = frames.length - 1 - (this.recCount - this.scoreRec);
+    if (si < 0 || frames.length < 10) { this.finishReplay(); return; }
+    this.replay = { frames, a: Math.max(0, si - 150), z: Math.min(frames.length - 1, si + 45) };
+    this.replay.pos = this.replay.a;
+    this.state = 'replay'; this.stateT = 0; this.cam.goalT = 0; this.cam.z = 1;
+  }
+  finishReplay() { this.replay = null; this.state = 'scored'; this.stateT = 2.6; }
+
+  // ------------------------------------------------ simulation
+  fixed(dt) {
+    this.time += dt; this.stateT += dt; this.roundT += dt;
+    for (const c of this.cpus) c.update(dt);
+    for (const ev of this.evq) this.handleEvent(ev);
+    this.evq.length = 0;
+    for (const p of this.players) p.update(dt);
+    if (this.roundT > 0.3 && !this.whistled) { this.whistled = true; if (this.state === 'play') this.sfx.whistle(); }
+    for (const b of this.balls) {
+      if (b.waiting) {
+        if (this.roundT > 0.95) { b.waiting = false; b.body.setGravityScale(1); b.body.setLinearVelocity({ x: rand(-0.6, 0.6), y: 0 }); }
+        else { b.body.setTransform({ x: b.spawnX, y: 5.8 + Math.sin(this.time * 4) * 0.05 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); }
+      } else if (this.cfg.wind) b.body.applyForceToCenter({ x: b.body.getMass() * this.cfg.wind * this.windCur, y: 0 }, true);
+    }
+    this.world.step(dt, 8, 3);
+    this.afterStep(dt);
+  }
+  ballStep(b, dt) {
+    const p = b.body.getPosition(), v = b.body.getLinearVelocity();
+    b.barCD -= dt;
+    if (b.waiting) return;
+    // rolling along the ground slows it down (sand a lot, snow and rain hardly at all)
+    if (p.y < b.r + 0.05 && Math.abs(v.y) < 1.2) b.body.setLinearVelocity({ x: v.x * (1 - this.cfg.pitch.roll * dt), y: v.y });
+    const sp = Math.hypot(v.x, v.y);
+    if (sp > MAX_BALL) b.body.setLinearVelocity({ x: v.x * MAX_BALL / sp, y: v.y * MAX_BALL / sp });
+    // in the net: under the crossbar and past the goal line
+    if (!b.scored && (this.state === 'play' || this.state === 'title') && Math.abs(p.x) > GOAL_X + b.r * 0.5 && p.y < GOAL_H) {
+      const side = p.x > 0 ? 1 : -1;
+      this.onGoal(side > 0 ? 0 : 1, b, side);
+    }
+    if (!b.scored && sp < 0.3) b.stillT += dt; else b.stillT = 0;
+    // stuck somewhere nobody can reach (or just sitting there): give it a nudge back into play
+    if ((b.stillT > 2.5 && p.y > 1.2) || b.stillT > 6) { b.body.setLinearVelocity({ x: -Math.sign(p.x || rand(-1, 1)) * rand(1, 3), y: 4 }); b.stillT = 0; }
+    if (Math.abs(p.x) > 9 || p.y < -3 || p.y > 9) { b.body.setTransform({ x: b.spawnX, y: 5.8 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); }
+    if (!REDUCED && sp > 15) this.addPart(p.x + rand(-0.1, 0.1), p.y + rand(-0.1, 0.1), 0, 0, 0, 0.18, 'rgba(255,255,255,0.7)', 2);
+  }
+  afterStep(dt) {
+    for (const [k, sp, b] of this.sndQ) {
+      if (k === 'bar') {
+        this.playImpact('bar', sp); this.netShake[b.body.getPosition().x > 0 ? 1 : 0] = Math.max(this.netShake[b.body.getPosition().x > 0 ? 1 : 0], 0.4);
+        if (sp > 7 && b.barCD <= 0 && (this.state === 'play' || this.state === 'title')) {
+          b.barCD = 1.5; this.addShake(3); this.sfx.ooh();
+          const bp = b.body.getPosition(); this.popup('CROSSBAR!', bp.x - Math.sign(bp.x) * 1.5, GOAL_H + 1.3, '#ffd23f', 8, 1.2);
+          if (sp > 10 && this.state === 'play') this.cue('pipe');
+        }
+      } else this.playImpact(k, sp);
+    }
+    this.sndQ.length = 0;
+    for (const [p, sp] of this.dustQ) {
+      const f = p.footPoint(0);
+      for (let i = 0; i < Math.min(8, sp); i++) this.addPart(f.x + rand(-0.3, 0.3), 0.05, rand(-1.5, 1.5), rand(0.3, 1.4), -1, rand(0.3, 0.6), this.cfg.pitch.dust, pick([1, 2]));
+    }
+    this.dustQ.length = 0;
+    // bodies slamming into each other get knocked into a rock, and a really hard hit can set someone flailing
+    const seen = new Set();
+    for (const [a, o] of this.bumpQ) {
+      const key = Math.min(a.id, o.id) * 8 + Math.max(a.id, o.id);
+      if (seen.has(key)) continue; seen.add(key);
+      const va = a.body.getLinearVelocity(), vo = o.body.getLinearVelocity(), rel = Math.hypot(va.x - vo.x, va.y - vo.y);
+      for (const q of [a, o]) {
+        if (rel > 2.5) q.rock(Math.min(1, rel / 7));
+        if (rel > 9) q.maybeFlail((rel - 9) * 0.012 * (q.grounded ? 1 : 1.3), clamp((rel - 8) / 5, 0.35, 1));
+      }
+    }
+    this.bumpQ.length = 0;
+    for (const [p, part, b, sp] of this.touchQ) this.onTouch(p, part, b, sp);
+    this.touchQ.length = 0;
+    // a boot swinging through a ball it was already touching (no new contact) still kicks it
+    for (const p of this.players) {
+      if (p.kickCD > 0 || p.swing() < 4) continue;
+      const hipK = this.world && p.kleg.getPosition(), boot = p.bootPos();
+      for (const b of this.balls) {
+        if (b.waiting) continue;
+        const bp = b.body.getPosition();
+        if (Math.hypot(bp.x - boot.x, bp.y - boot.y) < b.r + 0.16 || segDist(bp, hipK, boot) < b.r + 0.13) { this.kick(p, b); break; }
+      }
+    }
+    for (const b of this.balls) this.ballStep(b, dt);
+    // the scoring team celebrates with little hops
+    if (this.state === 'scored' || this.state === 'over') for (const p of this.players) if (p.celebrate && p.grounded && p.jumpCD <= 0 && Math.random() < 0.04) { p.jump(); p.jumpCD = 0.5; }
+
+    for (let i = this.parts.length - 1; i >= 0; i--) {
+      const q = this.parts[i];
+      q.life -= dt; if (q.life <= 0) { this.parts.splice(i, 1); continue; }
+      q.vy -= q.g * dt; if (q.kind === 'confetti') { q.vx *= 0.98; q.vx += Math.sin(this.time * 5 + i) * 0.05; }
+      q.x += q.vx * dt; q.y += q.vy * dt;
+      if (q.y < 0.02 && q.kind !== 'confetti') { q.y = 0.02; q.vy *= -0.3; }
+    }
+    for (let i = this.pops.length - 1; i >= 0; i--) if ((this.pops[i].t += dt) > this.pops[i].dur) this.pops.splice(i, 1);
+    this.excite = Math.max(0, this.excite - dt * 0.35);
+    this.scorePop = this.scorePop.map(s => Math.max(0, s - dt * 2.5));
+    this.netShake = this.netShake.map(s => Math.max(0, s - dt * 1.2));
+    const key = this.cfg.pitch.key;
+    if (key === 'snow') for (const f of this.snow) { f.y += f.s * dt; f.x += Math.sin(this.time + f.w) * 4 * dt; if (f.y > ART_H) { f.y = -2; f.x = rand(0, ART_W); } }
+    if (key === 'rain') for (const f of this.rain) { f.y += f.s * dt; f.x -= f.s * 0.18 * dt; if (f.y > 150 + rand(-18, 28)) { if (Math.random() < 0.3) this.addPart(f.x / PPM + VX0, 0.03, rand(-0.6, 0.6), rand(0.4, 1), 6, 0.2, '#bfe0ff', 1); f.y = rand(-20, 0); f.x = rand(0, ART_W + 30); } }
+    for (const c of this.clouds) { c.x += c.v * dt; if (c.x > ART_W + 30) c.x = -c.w - 10; }
+    if (this.cfg.wind) { if ((this.windT -= dt) <= 0) { this.windDir *= -1; this.windT = rand(2.5, 4.5); } this.windCur += (this.windDir - this.windCur) * Math.min(1, 2 * dt); }
+    if (this.cfg.wind) for (const s of this.gusts) { s.x += this.cfg.wind * this.windCur * 22 * dt; if (s.x > ART_W + 20) s.x = -20; if (s.x < -20) s.x = ART_W + 20; }
+    if (this.state === 'over' && Math.random() < 0.6) this.addPart(rand(-8, 8), 7.6, rand(-1, 1), 0, 5, 3, pick([TEAM[this.winner].jersey, TEAM[this.winner].light, '#ffffff', '#ffd23f']), pick([1, 2]), 'confetti');
+
+    if (this.state === 'title' && !this.trans && ((this.titleRollAt && this.time > this.titleRollAt) || this.roundT > 24)) this.rollTitle();
+    if (this.state === 'scored') {
+      if (this.pendingReplay && this.stateT > 1.6) { this.pendingReplay = false; this.startReplay(); }
+      else if (!this.pendingReplay && this.stateT > 2.6) this.afterScore();
+    }
+    this.recordFrame();
+  }
+  frame(rdt) {
+    this.realTime += rdt;
+    if (this.tsT > 0) { this.tsT -= rdt; this.timeScale = this.tsTarget; } else this.timeScale = Math.min(1, this.timeScale + rdt * 2.5);
+    if (this.state === 'replay' && this.replay) { this.replay.pos += rdt * 60 * 0.5; if (this.replay.pos >= this.replay.z) this.finishReplay(); }
+    if (this.trans) {
+      const tr = this.trans; tr.t += rdt;
+      if (!tr.fired && tr.t >= tr.dur / 2) { tr.fired = true; tr.cb(); }
+      if (tr.t >= tr.dur) this.trans = null;
+    }
+    this.shakeA = Math.max(0, this.shakeA - rdt * 22);
+    this.flash = Math.max(0, this.flash - rdt * 1.6);
+    // the goal camera: a quick push in on the net, then back out
+    const C = this.cam, on = C.goalT > 0 && this.state !== 'replay';
+    C.goalT = Math.max(0, C.goalT - rdt);
+    C.z += ((on ? 1.8 : 1) - C.z) * Math.min(1, rdt * (on ? 4 : 3));
+    if (C.z < 1.002 && !on) C.z = 1;
+    C.x += (C.fx - C.x) * Math.min(1, rdt * 7); C.y += (C.fy - C.y) * Math.min(1, rdt * 7);
+  }
+}
+
+// ---------------------------------------------------------------- rendering
+const low = mk(ART_W, ART_H), lowC = low[0], lg = low[1];
+let S = 1, OX = 0, OY = 0, SHX = 0, SHY = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(cv.clientWidth * DPR); cv.height = Math.round(cv.clientHeight * DPR);
+  const gut = 16 * DPR;
+  S = Math.max(0.5, Math.min((cv.width - 2 * gut) / ART_W, (cv.height - 2 * gut) / ART_H));
+  OX = Math.round((cv.width - ART_W * S) / 2); OY = Math.round((cv.height - ART_H * S) / 2);
+}
+const SX = x => OX + ax(x) * S + SHX, SY = y => OY + ay(y) * S + SHY;
+const AX = a => OX + a * S, AY = a => OY + a * S;
+function artRect(x, y, w, h, col, shake) {
+  const x0 = Math.round(OX + x * S + (shake ? SHX : 0)), y0 = Math.round(OY + y * S + (shake ? SHY : 0));
+  const x1 = Math.round(OX + (x + w) * S + (shake ? SHX : 0)), y1 = Math.round(OY + (y + h) * S + (shake ? SHY : 0));
+  ctx.fillStyle = col; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+}
+function txt(str, x, y, size, col, opt = {}) {
+  ctx.font = `${opt.bold ? 700 : 400} ${Math.max(7, Math.round(size * S))}px Silkscreen, "Courier New", monospace`;
+  ctx.textAlign = opt.align || 'center'; ctx.textBaseline = 'middle';
+  const o = Math.max(1, Math.round(S * (opt.ow || 1)));
+  ctx.fillStyle = opt.outline || INK;
+  ctx.fillText(str, x, y + o * 2);
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) ctx.fillText(str, x + dx * o, y + dy * o);
+  ctx.fillStyle = col; ctx.fillText(str, x, y);
+}
+const RENDER = {
+  part(spr, body, flip, sx = 1, sy = 1) {
+    const p = body.getPosition();
+    ctx.save(); ctx.translate(SX(p.x), SY(p.y)); ctx.rotate(-body.getAngle()); if (sx !== 1 || sy !== 1) ctx.scale(sx, sy); if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(spr.c, -spr.ox * S, -spr.oy * S, spr.c.width * S, spr.c.height * S);
+    ctx.restore();
+  },
+  local(spr, body, lx, ly, flip, sx = 1, rl = 0) {
+    const p = body.getPosition();
+    ctx.save(); ctx.translate(SX(p.x), SY(p.y)); ctx.rotate(-body.getAngle()); if (sx !== 1) ctx.scale(sx, 1); ctx.translate(lx * PPM * S, -ly * PPM * S); if (rl) ctx.rotate(-rl); if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(spr.c, -spr.ox * S, -spr.oy * S, spr.c.width * S, spr.c.height * S);
+    ctx.restore();
+  },
+};
+
+// the net behind the goal line, drawn under the players
+function drawNetBack(g, G, i, shake) {
+  const s = i ? 1 : -1, t = G.time;
+  const fx = Math.round(ax(s * GOAL_X)), bx = s > 0 ? ART_W - 1 : 0, top = Math.round(ay(GOAL_H)), roofB = Math.round(ay(GOAL_H + BAR_T + ROOF_RISE));
+  const x0 = Math.min(fx, bx), x1 = Math.max(fx, bx), wob = k => shake > 0.01 ? Math.round(Math.sin(t * 38 + k) * shake * 2.5) * s : 0;
+  g.fillStyle = 'rgba(10,12,20,0.18)'; g.fillRect(x0, top, x1 - x0 + 1, 150 - top);
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let y = top + 2; y < 150; y += 3) g.fillRect(x0 + 1 + Math.max(0, wob(y)), y, x1 - x0 - 1, 1);
+  for (let x = x0 + 2; x < x1; x += 3) { const w = wob(x * 0.5); g.fillRect(x + w, top, 1, 150 - top); }
+  // roof net, sloping up toward the back
+  for (let x = x0; x <= x1; x++) { const k = s > 0 ? (x - fx) / (bx - fx) : (fx - x) / (fx - bx), y = Math.round(lerp(top - 3, roofB, k)); g.fillRect(x, y, 1, 1); if ((x & 1) === 0) g.fillRect(x, y + 1, 1, top - 3 - y > 0 ? top - 3 - y : 0); }
+  g.fillStyle = '#c9ced8'; g.fillRect(bx - (s > 0 ? 1 : 0), top - 4, 2, 154 - top);   // back post
+}
+function drawGoalFront(G, i) {
+  const s = i ? 1 : -1, fx = Math.round(ax(s * GOAL_X)), bx = s > 0 ? ART_W : 0, top = Math.round(ay(GOAL_H + BAR_T));
+  const x0 = Math.min(fx, bx), w = Math.abs(bx - fx);
+  artRect(fx - 2, top - 1, 4, 152 - top, INK, true); artRect(fx - 1, top, 2, 150 - top, '#ffffff', true);
+  artRect(x0 - 1, top - 1, w + 2, 5, INK, true); artRect(x0, top, w, 3, '#ffffff', true); artRect(x0, top + 2, w, 1, '#c9ced8', true);
+}
+function drawLow(G, fr) {
+  const g = lg, t = G.time, key = G.cfg.pitch.key;
+  g.drawImage(G.bg, 0, 0);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  if (key === 'stadium' || key === 'rain') {
+    const ex = G.excite;
+    for (const q of G.crowd) {
+      const hop = ex > 0.05 && Math.sin(t * 12 + q.ph) > 0.3 - ex ? Math.round(ex * 2) : 0;
+      const y = q.yb - hop, dim = key === 'rain';
+      R(q.x, y - 4, 4, 4, dim ? shade(q.shirt, -0.45) : q.shirt); R(q.x + 1, y - 7, 3, 3, dim ? shade(q.skin, -0.45) : q.skin);
+      if (hop > 1) { R(q.x - 1, y - 8, 1, 3, q.skin); R(q.x + 4, y - 8, 1, 3, q.skin); }
+    }
+    if (key === 'stadium') for (const c of G.clouds) { const x = Math.round(c.x), y = Math.round(c.y * 0.4); R(x, y, c.w, 3, 'rgba(255,255,255,0.5)'); }
+  } else if (key === 'park' || key === 'beach') {
+    for (const c of G.clouds) { const x = Math.round(c.x), y = Math.round(c.y); R(x, y, c.w, 5, '#ffffff'); R(x + 4, y - 3, c.w * 0.5, 3, '#ffffff'); R(x + c.w * 0.45, y - 5, c.w * 0.35, 5, '#ffffff'); }
+  } else if (key === 'moon') {
+    const r = rng(99);
+    for (let i = 0; i < 24; i++) { const x = (r() * ART_W) | 0, y = (r() * 90) | 0; if (Math.sin(t * 3 + i * 2.1) > 0.7) R(x, y, 1, 1, '#ffffff'); }
+  }
+  if (G.cfg.wind) for (const s of G.gusts) R(Math.round(s.x), Math.round(s.y), Math.round(s.l * Math.abs(G.windCur)), 1, 'rgba(255,255,255,0.5)');
+  const ns = fr ? fr.ns : G.netShake;
+  drawNetBack(g, G, 0, ns[0]); drawNetBack(g, G, 1, ns[1]);
+  const shadow = (x, h, w) => { const k = clamp(1 - h / 5, 0.25, 1), ww = Math.round(w * k); g.fillStyle = `rgba(0,0,0,${(0.22 * k).toFixed(2)})`; g.fillRect(Math.round(ax(x) - ww / 2), 149, ww, 2); };
+  if (fr) {
+    G.players.forEach((p, i) => { const a = fr.pl[i]; shadow(a[0], Math.max(0, a[1] - p.d.legLen - 0.02), 14); });
+    fr.b.forEach((x, i) => shadow(x[0], x[1], Math.round(G.balls[i].r * 34)));
+  } else {
+    for (const p of G.players) shadow(p.x, Math.max(0, p.footY()), 14);
+    for (const b of G.balls) { const bp = b.body.getPosition(); shadow(bp.x, bp.y, Math.round(b.r * 34)); }
+  }
+}
+function drawWeather(G) {
+  const key = G.cfg.pitch.key;
+  if (key === 'snow') for (const f of G.snow) artRect(Math.round(f.x), Math.round(f.y), 1, 1, '#ffffff');
+  if (key === 'rain') { ctx.fillStyle = 'rgba(190,215,255,0.55)'; for (const f of G.rain) { const x = Math.round(f.x), y = Math.round(f.y); for (let k = 0; k < 5; k++) artRect(x - Math.round(k * 0.18 * 5) / 5 * 1, y - k, 1, 1, 'rgba(190,215,255,0.5)'); } }
+}
+function drawScoreboard(G) {
+  for (let t = 0; t < 2; t++) {
+    const T = TEAM[t], x = t === 0 ? 129 : 165, pop = G.scorePop[t];
+    artRect(x - 1, 3, 28, 21, INK); artRect(x, 4, 26, 19, T.jersey); artRect(x, 21, 26, 2, T.dark);
+    txt(String(G.score[t]), AX(x + 13), AY(13.5 - pop * 2), 16 + pop * 6, '#ffffff', { bold: true });
+    const name = G.teamName(t), long = name.length > 5;
+    txt(name, AX(long ? (t === 0 ? x + 26 : x) : x + 13), AY(30), 8, T.light, { ow: 0.8, align: long ? (t === 0 ? 'right' : 'left') : 'center' });
+  }
+  txt('-', AX(160), AY(13), 8, CREAM);
+}
+function drawHUD(G) {
+  if (G.state === 'title') return;
+  drawScoreboard(G);
+  if (G.cfg.wind) txt(G.windCur > 0 ? 'WIND >>' : '<< WIND', AX(160), AY(40), 8, '#dff3ff', { ow: 0.7 });
+  if (G.state === 'play' && G.roundT < 2.8) {
+    ctx.globalAlpha = clamp((2.8 - G.roundT) / 0.5, 0, 1);
+    if (G.round === 1) {
+      txt(`KICK OFF  /  FIRST TO ${G.target}`, AX(160), AY(48), 8, CREAM);
+      txt(G.cvc ? 'CPU VS CPU' : G.vsCpu ? 'W OR UP ARROW: HOP AND KICK' : 'RED: W       BLUE: UP ARROW', AX(160), AY(58), 8, ORANGE);
+    } else { txt(`KICK OFF ${G.round}`, AX(160), AY(48), 8, CREAM); G.bannerLines.forEach((l, i) => txt(l, AX(160), AY(58 + i * 10), 8, ORANGE)); }
+    ctx.globalAlpha = 1;
+  }
+  if (G.state === 'play' && G.matchPoint && G.roundT > 0.3 && G.roundT < 3.2 && Math.sin(G.realTime * 9) > -0.5) txt('MATCH POINT', AX(160), AY(96), 16, '#ffd23f', { bold: true });
+}
+function drawWorldText(G) {
+  if (G.state === 'replay') return;
+  for (const q of G.pops) {
+    const k = q.t < 0.1 ? lerp(0.3, 1.25, q.t / 0.1) : q.t < 0.2 ? lerp(1.25, 1, (q.t - 0.1) / 0.1) : 1;
+    ctx.globalAlpha = clamp((q.dur - q.t) / 0.3, 0, 1);
+    txt(q.text, SX(q.x), SY(q.y + q.t * 0.5), q.size * k, q.col, q.size >= 24 ? { bold: true, ow: 1.4 } : {});
+    ctx.globalAlpha = 1;
+  }
+}
+function wobblyWord(w, cx, y, size, col, deep, t) {
+  ctx.font = `700 ${Math.round(size * S)}px Silkscreen, "Courier New", monospace`;
+  const widths = [...w].map(ch => ctx.measureText(ch).width), total = widths.reduce((a, b) => a + b, 0);
+  let x = AX(cx) - total / 2;
+  [...w].forEach((ch, i) => {
+    const mx = x + widths[i] / 2, bob = Math.sin(t * 2.4 + i * 0.7) * 1.5 * S;
+    ctx.save(); ctx.translate(mx, AY(y) + bob); ctx.rotate(Math.sin(t * 1.9 + i * 1.3) * 0.09);
+    txt(ch, 0, 2.5 * S, size, deep, { ow: 1.2, bold: true }); txt(ch, 0, 0, size, col, { ow: 1.2, bold: true });
+    ctx.restore(); x += widths[i];
+  });
+}
+function drawTitle(G) {
+  if (G.menuOpen) { ctx.fillStyle = 'rgba(8,10,18,0.5)'; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); return; }
+  const t = G.realTime;
+  ctx.fillStyle = 'rgba(12,14,24,0.86)'; ctx.fillRect(AX(6), AY(6), 118 * S, 168 * S);
+  artRect(6, 6, 118, 1, '#2b3350'); artRect(6, 173, 118, 1, '#2b3350'); artRect(6, 6, 1, 168, '#2b3350'); artRect(123, 6, 1, 168, '#2b3350');
+  wobblyWord('FLOPPY', 65, 22, 16, ORANGE, '#7a2d0c', t);
+  wobblyWord('SOCCER', 65, 41, 16, CREAM, '#6b5f49', t);
+  MENU_ITEMS.forEach((it, i) => {
+    const y = MENU_Y0 + i * MENU_DY, sel = i === G.menuSel;
+    artRect(MENU_X - 1, y - 1, MENU_W + 2, MENU_H + 2, INK);
+    artRect(MENU_X, y, MENU_W, MENU_H, sel ? ORANGE : '#262b3d');
+    if (sel) {
+      artRect(MENU_X, y + MENU_H - 2, MENU_W, 2, '#c4621a');
+      const nudge = Math.round(Math.sin(t * 8));
+      for (let k = 0; k < 3; k++) { artRect(MENU_X + 3 + nudge, y + 3 + k, 1 + k, 1, INK); artRect(MENU_X + 3 + nudge, y + 7 - k, 1 + k, 1, INK); }
+    }
+    txt(it.label, AX(MENU_X + MENU_W / 2 + 2), AY(y + MENU_H / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
+  });
+  txt('RED: W   BLUE: UP', AX(65), AY(146), 8, '#b9c3dd', { ow: 0.6 });
+  txt('HOP + KICK', AX(65), AY(155), 8, '#b9c3dd', { ow: 0.6 });
+  txt('ARROWS OR W/S + ENTER', AX(65), AY(166), 8, '#7d88a8', { ow: 0.6 });
+  const lines = packLines(G.bannerItems.length ? G.bannerItems : ['CLASSIC STADIUM'], 30).slice(0, 3);
+  const cx = 222, y0 = 172 - (lines.length - 1) * 9;
+  txt('NOW PLAYING', AX(cx), AY(y0 - 10), 8, '#b9c3dd', { ow: 0.7 });
+  lines.forEach((l, i) => txt(l, AX(cx), AY(y0 + i * 9), 8, ORANGE, { ow: 0.8 }));
+}
+const OVER_BTNS = [{ x: 90, y: 136, w: 68, h: 16 }, { x: 166, y: 136, w: 64, h: 16 }];
+function drawOver(G) {
+  const a = clamp(G.stateT / 0.6, 0, 1);
+  ctx.fillStyle = `rgba(8,10,18,${0.62 * a})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
+  const T = TEAM[G.winner], k = 1 + Math.max(0, 0.4 - G.stateT) * 1.5;
+  const title = G.vsCpu ? (G.winner === 0 ? 'YOU WIN!' : 'CPU WINS!') : `${T.name} WINS!`;
+  txt(title, AX(160), AY(28), 24 * k, T.light, { ow: 1.4 });
+  txt(`${G.score[0]}  -  ${G.score[1]}`, AX(160), AY(50), 16, CREAM);
+  txt(G.teamName(0), AX(112), AY(66), 8, TEAM[0].light, { ow: 0.8 }); txt(G.teamName(1), AX(208), AY(66), 8, TEAM[1].light, { ow: 0.8 });
+  [['GOALS', 'goals'], ['SHOTS', 'shots'], ['KICKS', 'kicks'], ['HEADERS', 'headers'], ['SAVES', 'saves']].forEach(([label, key], i) => {
+    const y = 77 + i * 9;
+    txt(label, AX(160), AY(y), 8, '#b9c3dd', { ow: 0.7 });
+    txt(String(G.stats[0][key]), AX(112), AY(y), 8, CREAM, { ow: 0.7 }); txt(String(G.stats[1][key]), AX(208), AY(y), 8, CREAM, { ow: 0.7 });
+  });
+  if (G.stateT < 1.2) return;
+  const labels = ['PLAY AGAIN', 'MENU'], cols = [['#43b04a', '#2d7a33'], ['#d63a3f', '#8f222b']];
+  OVER_BTNS.forEach((r, i) => {
+    const sel = i === G.overSel, bob = sel ? Math.round(Math.sin(G.realTime * 7)) : 0;
+    if (sel) artRect(r.x - 3, r.y - 3 + bob, r.w + 6, r.h + 6, ORANGE);
+    artRect(r.x - 1, r.y - 1 + bob, r.w + 2, r.h + 2, INK);
+    artRect(r.x, r.y + bob, r.w, r.h, cols[i][0]); artRect(r.x, r.y + r.h - 3 + bob, r.w, 3, cols[i][1]);
+    txt(labels[i], AX(r.x + r.w / 2), AY(r.y + 7 + bob), 8, '#ffffff', { ow: 0.8 });
+  });
+  txt('ARROWS TO PICK, ENTER TO GO', AX(160), AY(128), 8, '#7d88a8', { ow: 0.6 });
+}
+function drawPause() {
+  ctx.fillStyle = 'rgba(8,10,18,0.6)'; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
+  txt('PAUSED', AX(160), AY(80), 24, CREAM);
+  txt('PRESS P TO KEEP PLAYING', AX(160), AY(104), 8, ORANGE);
+  txt('Q FOR MAIN MENU', AX(160), AY(116), 8, '#b9c3dd');
+}
+function drawTrans(G) {
+  const tr = G.trans; if (!tr) return;
+  const half = tr.dur / 2, p = tr.t < half ? tr.t / half : 1 - (tr.t - half) / half, out = tr.t < half;
+  for (let i = 0; i < 15; i++) {
+    const c = clamp(p * 1.5 - (out ? i : 14 - i) * 0.035, 0, 1); if (c <= 0) continue;
+    const w = c * ART_W;
+    artRect(out ? 0 : ART_W - w, i * 12, w, 12, i % 2 ? shade(tr.color, -0.25) : tr.color);
+  }
+}
+function drawReplayOverlay(G) {
+  artRect(0, 0, ART_W, 9, 'rgba(0,0,0,0.85)'); artRect(0, 171, ART_W, 9, 'rgba(0,0,0,0.85)');
+  if (Math.sin(G.realTime * 6) > 0) artRect(5, 2, 5, 5, '#e0393e');
+  txt('REPLAY', AX(13), AY(4.5), 8, CREAM, { align: 'left', ow: 0.6 });
+  txt(G.replayLabel, AX(160), AY(158), 16, ORANGE, { bold: true });
+  txt('W OR UP ARROW TO SKIP', AX(316), AY(175.5), 8, '#b9c3dd', { align: 'right', ow: 0.6 });
+}
+function render(G) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, cv.width, cv.height);
+  const replay = G.state === 'replay' && G.replay;
+  const fr = replay ? G.replay.frames[Math.min(G.replay.frames.length - 1, Math.floor(G.replay.pos))] : null;
+  const sa = replay ? 0 : G.shakeA * S; SHX = sa ? rand(-sa, sa) : 0; SHY = sa ? rand(-sa, sa) : 0;
+  ctx.save(); ctx.beginPath(); ctx.rect(OX, OY, ART_W * S, ART_H * S); ctx.clip();
+  // the goal camera: zoom in around a point on the pitch, never showing past the edges
+  const C = G.cam, zoom = !fr && C.z > 1.001;
+  if (zoom) {
+    const Z = C.z, px = clamp(ax(C.x), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(C.y), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
+    ctx.save(); ctx.translate(OX + ART_W * S / 2, OY + ART_H * S / 2); ctx.scale(Z, Z); ctx.translate(-(OX + px * S), -(OY + py * S));
+  }
+  drawLow(G, fr);
+  ctx.drawImage(lowC, OX + SHX, OY + SHY, ART_W * S, ART_H * S);
+  if (fr) {
+    G.players.forEach((p, i) => {
+      const a = fr.pl[i];
+      p.draw(RENDER, { body: new Pose(a[0], a[1], a[2]), head: new Pose(a[3], a[4], a[5]), leg: new Pose(a[6], a[7], a[8]), armA: a[9] });
+    });
+    fr.b.forEach((x, i) => RENDER.part(G.balls[i].spr, new Pose(x[0], x[1], x[2]), false));
+    drawGoalFront(G, 0); drawGoalFront(G, 1);
+    drawWeather(G);
+    drawHUD(G);
+    drawReplayOverlay(G);
+  } else {
+    for (const p of G.players) p.draw(RENDER);
+    for (const b of G.balls) RENDER.part(b.spr, b.body, false);
+    drawGoalFront(G, 0); drawGoalFront(G, 1);
+    for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
+    ctx.globalAlpha = 1;
+    drawWeather(G);
+    drawWorldText(G);
+    if (zoom) ctx.restore();
+    drawHUD(G);
+    if (G.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${G.flash.toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
+    if (G.state === 'over') drawOver(G);
+    if (G.paused) drawPause();
+  }
+  if (G.state === 'title') { drawTrans(G); drawTitle(G); } else drawTrans(G);
+  const sy = G.state === 'title' ? 8 : G.state === 'replay' ? 4.5 : 172;
+  if (G.sfx.muted) txt('SOUND OFF  (M)', AX(316), AY(sy), 8, '#7d88a8', { align: 'right', ow: 0.6 });
+  else if (!G.sfx.running && Math.sin(G.realTime * 4) > -0.4) txt('CLICK FOR SOUND', AX(316), AY(sy), 8, ORANGE, { align: 'right', ow: 0.6 });
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- game modes panel
+const G = new Game();
+const menuEl = document.getElementById('menu');
+let draft = null;
+(function buildMenu() {
+  const wrapEl = document.getElementById('mode-groups');
+  for (const cat of MODE_CATS) {
+    const grp = document.createElement('div'); grp.className = 'group';
+    const h = document.createElement('h3'); h.textContent = cat; grp.appendChild(h);
+    const chips = document.createElement('div'); chips.className = 'chips';
+    for (const m of MODES.filter(m => m.cat === cat)) {
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'mode-' + m.id; b.dataset.mode = m.id; b.textContent = m.name;
+      chips.appendChild(b);
+    }
+    grp.appendChild(chips); wrapEl.appendChild(grp);
+  }
+  const sc = document.getElementById('sound-chips');
+  for (const e of SOUND_LIST) { const b = document.createElement('button'); b.type = 'button'; b.id = 'snd-' + e.id; b.dataset.snd = e.id; b.textContent = e.name; sc.appendChild(b); }
+})();
+function syncMenu() {
+  for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
+  for (const b of menuEl.querySelectorAll('[data-mode]')) { const lk = draft.always.includes(b.dataset.mode); b.setAttribute('aria-pressed', String(lk || draft.modes.includes(b.dataset.mode))); if (lk) b.dataset.lock = '1'; else delete b.dataset.lock; }
+  for (const b of menuEl.querySelectorAll('[data-snd]')) b.setAttribute('aria-pressed', String(!draft.soundsOff.includes(b.dataset.snd)));
+}
+function openMenu() {
+  draft = JSON.parse(JSON.stringify(G.settings));
+  syncMenu(); menuEl.hidden = false; G.menuOpen = true;
+  document.getElementById('done').focus({ preventScroll: true });
+  menuEl.querySelector('.panel').scrollTop = 0;
+}
+function closeMenu() { if (draft) { G.settings = draft; saveSettings(draft); } menuEl.hidden = true; G.menuOpen = false; G.sfx.stopClip(); cv.focus(); }
+menuEl.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  G.sfx.init();
+  if (b.id === 'done') { closeMenu(); return; }
+  if (b.id === 'all-on') draft.modes = MODES.map(m => m.id);
+  else if (b.id === 'all-off') { draft.modes = []; draft.always = []; }
+  else if (b.id === 'snd-on') draft.soundsOff = [];
+  else if (b.id === 'snd-off') draft.soundsOff = SOUND_LIST.map(x => x.id);
+  else if (b.dataset.mode) {
+    // off -> random -> ALWAYS (every round) -> off
+    const id = b.dataset.mode;
+    if (draft.always.includes(id)) { draft.always = draft.always.filter(x => x !== id); draft.modes = draft.modes.filter(x => x !== id); }
+    else if (draft.modes.includes(id)) draft.always = [...draft.always, id];
+    else draft.modes = [...draft.modes, id];
+  }
+  else if (b.dataset.snd) {
+    const id = b.dataset.snd, off = draft.soundsOff.includes(id);
+    draft.soundsOff = off ? draft.soundsOff.filter(x => x !== id) : [...draft.soundsOff, id];
+    if (off) G.sfx.cue(id); else G.sfx.stopClip();
+  }
+  else if (b.dataset.v) { const key = b.parentElement.dataset.key; draft[key] = key === 'target' ? Number(b.dataset.v) : b.dataset.v; }
+  syncMenu();
+});
+
+// ---------------------------------------------------------------- boot
+// ?debug: window.floppy is the game, floppyStep(n) runs n physics steps (then draws once unless noDraw)
+if (location.search.includes('debug')) {
+  window.floppy = G;
+  window.floppyStep = (n, noDraw) => { for (let i = 0; i < n; i++) { G.frame(STEP); if (!G.paused && G.state !== 'replay') G.fixed(STEP); } if (!noDraw) render(G); };
+}
+resize();
+window.addEventListener('resize', resize);
+const KEYS = new Set(['KeyW', 'ArrowUp']);
+const playKey = code => code === 'KeyW' || code === 'ArrowUp';
+window.addEventListener('keydown', e => {
+  if (G.menuOpen) { if (e.code === 'Escape') closeMenu(); return; }
+  const code = e.code;
+  if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'Space') e.preventDefault();
+  if (code === 'KeyM') { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); return; }
+  if (G.state === 'title') {
+    if (e.repeat) return;
+    G.sfx.init();
+    if (code === 'KeyW' || code === 'ArrowUp') G.menuMove(-1);
+    else if (code === 'KeyS' || code === 'ArrowDown') G.menuMove(1);
+    else if (code === 'Enter' || code === 'Space') G.menuPick();
+    return;
+  }
+  if (G.state === 'replay') { if (!e.repeat && (playKey(code) || code === 'Enter' || code === 'Space')) G.finishReplay(); return; }
+  if (G.state === 'over') {
+    if (e.repeat) return;
+    if (code === 'ArrowLeft' || code === 'KeyA') G.overMove(-1);
+    else if (code === 'ArrowRight' || code === 'KeyD') G.overMove(1);
+    else if (code === 'Enter' || code === 'Space') G.overPick(G.overSel);
+    else if (playKey(code)) G.overPick(0);
+    else if (code === 'KeyQ' || code === 'Escape') G.overPick(1);
+    return;
+  }
+  if (playKey(code)) { if (!e.repeat) G.humanKey(code, true); }
+  else if (code === 'KeyP' || code === 'Escape') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
+  else if (code === 'KeyQ') { if (G.paused) G.toTitle(); }
+});
+window.addEventListener('keyup', e => { if (KEYS.has(e.code)) { e.preventDefault(); G.humanKey(e.code, false); } });
+window.addEventListener('blur', () => { G.releaseAll(); if (G.state === 'play' || G.state === 'scored') G.paused = true; });
+function artPoint(e) { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) * DPR - OX) / S, y: ((e.clientY - r.top) * DPR - OY) / S }; }
+function menuHit(p) {
+  for (let i = 0; i < MENU_ITEMS.length; i++) { const y = MENU_Y0 + i * MENU_DY; if (p.x >= MENU_X && p.x <= MENU_X + MENU_W && p.y >= y && p.y <= y + MENU_H) return i; }
+  return -1;
+}
+const overHit = p => OVER_BTNS.findIndex(r => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2);
+cv.addEventListener('pointermove', e => {
+  if (G.state === 'over' && G.stateT > 1.2) { const i = overHit(artPoint(e)); if (i >= 0) G.overSel = i; cv.style.cursor = i >= 0 ? 'pointer' : ''; return; }
+  if (G.state !== 'title' || G.menuOpen) { cv.style.cursor = ''; return; }
+  const i = menuHit(artPoint(e));
+  if (i >= 0 && i !== G.menuSel) G.menuSel = i;
+  cv.style.cursor = i >= 0 ? 'pointer' : '';
+});
+cv.addEventListener('pointerdown', e => {
+  cv.focus(); G.sfx.init();
+  if (G.state === 'title' && !G.menuOpen) {
+    const i = menuHit(artPoint(e));
+    if (i >= 0) { G.menuSel = i; G.menuPick(); }
+  } else if (G.state === 'over') { const i = overHit(artPoint(e)); if (i >= 0) { G.overSel = i; G.overPick(i); } }
+  else if (G.state === 'replay') G.finishReplay();
+});
+// ---------------------------------------------------------------- touch (touchscreen Chromebooks in tablet mode)
+// During a match a finger on the screen works like holding a key: vs the CPU the whole screen is your key,
+// two players each hold their own half. Touch users also get FULL SCREEN / PAUSE / MENU buttons.
+const TOUCH_ZONE = x => !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
+const TOUCH_HINT = () => G.cvc ? '' : G.vsCpu ? '<span>HOLD ANYWHERE TO HOP AND KICK</span>' : '<span>RED: HOLD THE LEFT SIDE</span><span>BLUE: HOLD THE RIGHT SIDE</span>';
+const touchKeys = new Map();   // pointerId -> key code it is holding
+const touchBar = document.createElement('div'), touchHint = document.createElement('div');
+touchBar.id = 'touchbar'; touchHint.id = 'touchhint';
+touchBar.innerHTML = '<button data-a="full" aria-label="Full screen">&#x26F6;</button><button data-a="pause" aria-label="Pause">II</button><button data-a="menu">MENU</button>';
+document.body.append(touchBar, touchHint);
+const touchOn = () => document.body.classList.add('touch');
+function touchPress(code, down) {
+  const held = [...touchKeys.values()].includes(code);
+  if (down && !held) G.humanKey(code, true);
+  if (!down && !held) G.humanKey(code, false);
+}
+cv.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') return;
+  touchOn();
+  if (G.paused || !(G.state === 'play' || G.state === 'scored')) return;
+  const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width);
+  touchPress(code, true); touchKeys.set(e.pointerId, code);
+  if (cv.setPointerCapture) try { cv.setPointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+});
+const touchUp = e => { const code = touchKeys.get(e.pointerId); if (code === undefined) return; touchKeys.delete(e.pointerId); touchPress(code, false); };
+cv.addEventListener('pointerup', touchUp); cv.addEventListener('pointercancel', touchUp);
+touchBar.addEventListener('pointerdown', e => e.stopPropagation());
+touchBar.addEventListener('click', e => {
+  const a = e.target.closest('button') && e.target.closest('button').dataset.a;
+  if (a === 'full') {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  } else if (a === 'pause') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
+  else if (a === 'menu') { G.paused = false; G.toTitle(); }
+  cv.focus();
+});
+setInterval(() => {
+  const playing = G.state === 'play' || G.state === 'scored';
+  touchBar.dataset.menu = G.paused ? '1' : '';
+  touchBar.dataset.pause = playing || G.paused ? '1' : '';
+  const hint = G.state === 'play' && !G.paused && G.roundT < 3.5 && G.round <= 2 ? TOUCH_HINT() : '';
+  if (touchHint.dataset.text !== hint) { touchHint.dataset.text = hint; touchHint.innerHTML = hint; }
+}, 150);
+if (document.fonts && document.fonts.load) document.fonts.load('400 16px Silkscreen').catch(() => {});
+
+let last = performance.now(), acc = 0;
+function loop(now) {
+  const rdt = Math.min(0.05, (now - last) / 1000); last = now;
+  G.frame(rdt);
+  if (!G.paused && G.state !== 'replay') {
+    acc += rdt * G.timeScale * GAME_SPEED;
+    let n = 0;
+    while (acc >= STEP && n < 5) { G.fixed(STEP); acc -= STEP; n++; }
+    if (n >= 5) acc = 0;
+  }
+  render(G);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+<script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
+</body>
+</html>
