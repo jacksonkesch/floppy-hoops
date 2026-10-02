@@ -1327,6 +1327,7 @@ class Game {
     if (green || sp > 16 || (this.state === 'play' && this.streak[team] >= 1)) this.sfx.cheer();
     this.ripple(b.body.getPosition().x, b.body.getPosition().y, clamp(sp / 12, 0.6, 1.5));
     if (this.state === 'play' || this.state === 'title') this.wave = { x0: side > 0 ? ART_W : 0, dx: -side, t: 0 };
+    this.flash = { side, until: this.realTime + 1.8 };   // the goal frame flashes gold
     const gx = side * (GOAL_X + 0.5);
     for (let i = 0; i < 50; i++) this.addPart(gx, rand(0.3, GOAL_H), -side * rand(0, 5), rand(1, 7), 14, rand(0.5, 1.1), pick([TEAM[team].jersey, TEAM[team].light, '#ffffff', '#ffd23f']), pick([1, 2]));
     this.popup('GOAL!', -side * 0.2 + side * 2.2, 4.4, '#ffd23f', 24, 2.2);
@@ -1601,26 +1602,38 @@ function drawNetBack(g, G, i, shake, rps) {
   const fx = Math.round(ax(s * GOAL_X)), bx = s > 0 ? ART_W - 1 : 0, top = Math.round(ay(GOAL_H)), roofB = Math.round(ay(GOAL_H + BAR_T + ROOF_RISE));
   const x0 = Math.min(fx, bx), x1 = Math.max(fx, bx), wob = k => shake > 0.01 ? Math.round(Math.sin(t * 38 + k) * shake * 2.5) * s : 0;
   g.fillStyle = 'rgba(10,12,20,0.18)'; g.fillRect(x0, top, x1 - x0 + 1, 150 - top);
-  g.fillStyle = 'rgba(255,255,255,0.55)';
+  // the inside gets darker toward the back post, so the goal looks deep
+  for (let x = x0; x <= x1; x += 2) { const k = s > 0 ? (x - fx) / (bx - fx) : (fx - x) / (fx - bx); g.fillStyle = `rgba(8,10,18,${(0.04 + 0.2 * clamp(k, 0, 1)).toFixed(2)})`; g.fillRect(x, top, 2, 150 - top); }
   // a ripple spreads out from where the ball hit the net and bends the strands as it passes
   const rp = rps.filter(r => r.side === s).map(r => ({ x: ax(r.x), y: ay(r.y), k: r.a * Math.exp(-r.t * 2.2) * 3.4, t: r.t }));
   const disp = (px, py) => { let d = 0; for (const r of rp) { const dd = Math.hypot(px - r.x, py - r.y); d += r.k * Math.exp(-dd * dd / 420) * Math.sin(r.t * 26 - dd * 0.35); } return Math.round(d); };
-  if (rp.length) {
-    for (let y = top + 2; y < 150; y += 3) for (let x = x0 + 1; x < x1; x += 5) g.fillRect(x, y + disp(x + 2, y), Math.min(5, x1 - x), 1);
-    for (let x = x0 + 2; x < x1; x += 3) for (let y = top; y < 150; y += 5) g.fillRect(x + disp(x, y + 2), y, 1, Math.min(5, 150 - y));
-  } else {
-    for (let y = top + 2; y < 150; y += 3) g.fillRect(x0 + 1 + Math.max(0, wob(y)), y, x1 - x0 - 1, 1);
-    for (let x = x0 + 2; x < x1; x += 3) { const w = wob(x * 0.5); g.fillRect(x + w, top, 1, 150 - top); }
+  // a diamond mesh: brighter and bigger at the front, finer and dimmer toward the back
+  const near = 'rgba(255,255,255,0.7)', far = 'rgba(225,235,255,0.36)';
+  let cur = '';
+  for (let y = top + 1; y < 150; y++) for (let x = x0 + 1; x < x1; x++) {
+    const m = ((x + y) % 5 + 5) % 5, n = ((x - y) % 5 + 5) % 5;
+    if (m !== 0 && n !== 0) continue;
+    const k = s > 0 ? (x - fx) / (bx - fx) : (fx - x) / (fx - bx), col = k < 0.5 ? near : far;
+    if (col !== cur) { g.fillStyle = col; cur = col; }
+    g.fillRect(x + (rp.length ? 0 : wob(y)), y + (rp.length ? disp(x, y) : 0), 1, 1);
   }
+  g.fillStyle = 'rgba(255,255,255,0.55)';
   // roof net, sloping up toward the back
   for (let x = x0; x <= x1; x++) { const k = s > 0 ? (x - fx) / (bx - fx) : (fx - x) / (fx - bx), y = Math.round(lerp(top - 3, roofB, k)); g.fillRect(x, y, 1, 1); if ((x & 1) === 0) g.fillRect(x, y + 1, 1, top - 3 - y > 0 ? top - 3 - y : 0); }
-  g.fillStyle = '#c9ced8'; g.fillRect(bx - (s > 0 ? 1 : 0), top - 4, 2, 154 - top);   // back post
+  g.fillStyle = '#7d869a'; g.fillRect(bx - (s > 0 ? 3 : 0), top - 4, 3, 154 - top); g.fillStyle = '#c9ced8'; g.fillRect(bx - (s > 0 ? 2 : 0), top - 4, 1, 154 - top);   // back post
 }
 function drawGoalFront(G, i) {
   const s = i ? 1 : -1, fx = Math.round(ax(s * GOAL_X)), bx = s > 0 ? ART_W : 0, top = Math.round(ay(GOAL_H + BAR_T));
-  const x0 = Math.min(fx, bx), w = Math.abs(bx - fx);
-  artRect(fx - 2, top - 1, 4, 152 - top, INK, true); artRect(fx - 1, top, 2, 150 - top, '#ffffff', true);
-  artRect(x0 - 1, top - 1, w + 2, 5, INK, true); artRect(x0, top, w, 3, '#ffffff', true); artRect(x0, top + 2, w, 1, '#c9ced8', true);
+  const x0 = Math.min(fx, bx), w = Math.abs(bx - fx), hot = !!G.flash && G.flash.side === s && G.realTime < G.flash.until && Math.sin(G.realTime * 16) > 0;
+  // the post: round and shaded, lit from the top left, with a dark outline
+  artRect(fx - 3, top - 1, 6, 153 - top, INK, true); artRect(fx - 2, top, 4, 151 - top, hot ? '#ffd23f' : '#ffffff', true);
+  artRect(fx + 1, top, 1, 151 - top, hot ? '#e0a21a' : '#aeb6c6', true); artRect(fx - 2, top, 1, 151 - top, hot ? '#fff3b0' : '#ffffff', true);
+  artRect(fx - 4, 149, 8, 3, INK, true); artRect(fx - 3, 149, 6, 2, '#c9ced8', true);   // the foot of the post
+  // the crossbar: thick, with a highlight on top and a shadow under it that falls on the net
+  artRect(x0 - 1, top - 2, w + 2, 7, INK, true); artRect(x0, top - 1, w, 1, '#ffffff', true); artRect(x0, top, w, 2, hot ? '#ffd23f' : '#ffffff', true);
+  artRect(x0, top + 2, w, 1, '#aeb6c6', true); artRect(x0, top + 3, w, 1, '#7d869a', true);
+  artRect(x0, top + 4, w, 3, 'rgba(0,0,0,0.22)', true);
+  artRect(fx - 3, top - 2, 6, 1, '#ffffff', true);   // the corner catches the light
 }
 function drawLow(G, fr) {
   const g = lg, t = G.time, key = G.cfg.pitch.key;
