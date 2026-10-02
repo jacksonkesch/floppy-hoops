@@ -82,6 +82,14 @@ const STEP = 1 / 60;
 const CAT_WORLD = 1, CAT_PLAYER = 2, CAT_BALL = 4, CAT_NET = 8, CAT_BAR = 16;
 const MASK_BALL = CAT_WORLD | CAT_PLAYER | CAT_NET;
 const NET_HW = 0.05, NET_CAP = 0.07;
+// the looks a spike can have, like the dunk styles in Hoops. A green spike is always the green METEOR.
+const SPIKE_FX = {
+  fire:   { name: 'FIREBALL',  cols: ['#ff8a2a', '#ffd23f', '#ff4a2a', '#fff3b0'] },
+  bolt:   { name: 'LIGHTNING', cols: ['#ffffff', '#9fe8ff', '#6ab7ff', '#fff3b0'] },
+  comet:  { name: 'COMET',     cols: ['#ff5d8f', '#ffd23f', '#43f07a', '#6ab7ff', '#c77dff'] },
+  meteor: { name: 'METEOR',    cols: ['#3ddc5a', '#b9ffc4', '#ffffff', '#43f07a'] },
+};
+const GREEN_VY = 2.2;                     // m/s: how close to the top of a jump a spike has to be hit to be green
 const SERVE_DROP = 1.3;                    // seconds into a point before the serve ball drops
 const BALL_G = 0.55;                       // the ball falls at 55% of the players' gravity: floaty
 const GAME_SPEED = 0.95;   // the whole game runs a touch slower than real time
@@ -158,13 +166,13 @@ const COURTS = {
 };
 // g: how fast it falls (x the normal floaty ball), hit: how hard hits send it, rest: bounce off walls and the net
 const BALLS = {
-  classic:   { name: '',           r: 0.3,  density: 1.2, g: 1,    hit: 1,    rest: 0.6,  look: 'volley' },
-  bigball:   { name: 'BIG BALL',   r: 0.58, density: 0.5, g: 0.9,  hit: 1,    rest: 0.6,  look: 'volley' },
-  tinyball:  { name: 'TINY BALL',  r: 0.18, density: 2,   g: 1.05, hit: 1.05, rest: 0.6,  look: 'volley' },
-  heavy:     { name: 'HEAVY BALL', r: 0.3,  density: 6,   g: 1.5,  hit: 0.95, rest: 0.25, look: 'heavy' },
-  beachball: { name: 'BEACH BALL', r: 0.45, density: 0.2, g: 0.5,  hit: 0.95, rest: 0.7,  look: 'beach' },
-  bouncy:    { name: 'SUPER BALL', r: 0.26, density: 1.2, g: 1.1,  hit: 1.3,  rest: 0.95, look: 'bouncy' },
-  twoball:   { name: 'TWO BALLS',  r: 0.3,  density: 1.2, g: 1,    hit: 1,    rest: 0.6,  look: 'volley', two: true },
+  classic:   { name: '',           r: 0.8,  density: 0.17, g: 1,    hit: 1,    rest: 0.6,  look: 'volley' },
+  bigball:   { name: 'BIG BALL',   r: 1.15, density: 0.08, g: 0.9,  hit: 1,    rest: 0.6,  look: 'volley' },
+  tinyball:  { name: 'TINY BALL',  r: 0.45, density: 0.3,   g: 1.05, hit: 1.05, rest: 0.6,  look: 'volley' },
+  heavy:     { name: 'HEAVY BALL', r: 0.7,  density: 1,   g: 1.5,  hit: 0.95, rest: 0.25, look: 'heavy' },
+  beachball: { name: 'BEACH BALL', r: 1.1,  density: 0.03, g: 0.5,  hit: 0.95, rest: 0.7,  look: 'beach' },
+  bouncy:    { name: 'SUPER BALL', r: 0.6,  density: 0.2, g: 1.1,  hit: 1.3,  rest: 0.95, look: 'bouncy' },
+  twoball:   { name: 'TWO BALLS',  r: 0.65, density: 0.2, g: 1,    hit: 1,    rest: 0.6,  look: 'volley', two: true },
 };
 const BODIES = {
   normal:  { name: '',              head: 1,   arm: 1,   leg: 1, scale: 1,    jump: 1,    mass: 1 },
@@ -654,7 +662,7 @@ class Ball {
   constructor(game, team) {
     const B = game.cfg.ball, srv = game.players.find(p => p.team === team && p.slot === 0);
     this.game = game; this.r = B.r; this.team = team;
-    this.spawn = { x: srv.x + srv.dir * 0.3, y: srv.headY0 + srv.d.headR + 2.3 };
+    this.spawn = { x: srv.x + srv.dir * 0.3, y: srv.headY0 + srv.d.headR + 3.9 * srv.k };   // hangs above a jump's reach, then drops: the server times a jump serve
     this.body = game.world.createBody({ type: 'dynamic', position: this.spawn, bullet: true, angularDamping: 0.3 });
     this.body.createFixture(new pl.Circle(B.r), { density: B.density, friction: 0.3, restitution: B.rest, filterCategoryBits: CAT_BALL, filterMaskBits: MASK_BALL, userData: { kind: 'ball', ball: this } });
     this.body.setGravityScale(0);
@@ -662,7 +670,7 @@ class Ball {
     this.serve = true;      // the serving team's first touch is the serve (a sure lob over the net)
     this.dead = false;      // it already scored: it bounces around but can't score again
     this.lastTeam = -1; this.teamTouches = 0; this.touchN = 0; this.lastHitT = -9; this.spikeT = -9; this.blocked = false; this.stillT = 0;
-    this.trail = [];
+    this.trail = []; this.fx = null;   // fx: the flashy look of the spike that's carrying the ball
     this.spr = ballSprite(Math.max(5, Math.round(B.r * 2 * PPM)), B.look);
   }
 }
@@ -1061,7 +1069,7 @@ class Game {
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
     this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0;
     this.cam = { z: 1, x: 0, y: 3.75, focus: null };
-    this.parts = []; this.pops = []; this.sndQ = []; this.dustQ = []; this.bumpQ = []; this.hitQ = []; this.floorQ = []; this.sndCD = {};
+    this.parts = []; this.rings = []; this.pops = []; this.sndQ = []; this.dustQ = []; this.bumpQ = []; this.hitQ = []; this.floorQ = []; this.sndCD = {};
     this.pointPop = null; this.server = Math.random() < 0.5 ? 0 : 1;
     this.snow = Array.from({ length: 70 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(6, 16), w: rand(0, 6) }));
     this.clouds = Array.from({ length: 4 }, (_, i) => ({ x: i * 90 + rand(0, 40), y: rand(14, 50), w: rand(22, 36), v: rand(1.5, 3.5) }));
@@ -1109,7 +1117,7 @@ class Game {
     for (let t = 0; t < 2; t++) for (let s = 0; s < 2; s++) this.players.push(new Player(this, t, s, this.roster[t * 3 + s], (t === 0 ? 1 : -1) * TEAM_X[s], rand(0.7, 0.95)));
     this.serveTeam = this.server;
     this.balls = ball.two ? [new Ball(this, this.server), new Ball(this, 1 - this.server)] : [new Ball(this, this.server)];
-    this.parts.length = 0; this.pops.length = 0; this.hitQ.length = 0; this.floorQ.length = 0;
+    this.parts.length = 0; this.rings.length = 0; this.pops.length = 0; this.hitQ.length = 0; this.floorQ.length = 0;
     this.roundT = 0; this.whistled = false; this.cam.focus = null; this.pointPop = null; this.rally = 0;
     this.bg = courtImage(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
@@ -1228,18 +1236,36 @@ class Game {
   // net with the ball above it and on the net side, it's a SPIKE: flat and hard down into the other court (a BLOCK
   // when it's the other team's spike coming back). The serving team's first touch is always a good serve.
   // (The CPU calls this too, to see where its hits would go, with rnd = () => 0.5.)
-  hitOut(p, b, ref, bp, bv, pv, air, rnd) {
+  hitOut(p, b, ref, bp, bv, pv, air, rnd, green = false) {
     const m = this.cfg.hitMul, g = this.cfg.ballG, dir = p.dir, top = this.netTop();
     if (b.serve && p.team === b.team) {
-      const tx = -dir * lerp(2.4, 6, rnd()), apex = Math.max(bp.y + 1.2, top + 2.8, lerp(5.8, 7, rnd()));
+      // a JUMP SERVE, always over the net. Hit it at the top of the jump (the green zone) for a hard, flat serve
+      // that dips in deep; any other jump serve is a floater lob.
+      const net = top + b.r + NET_CAP + 0.3;
+      if (green) {
+        let vxs = lerp(12.5, 15, rnd()), vy = 0;
+        const tx = dir * lerp(2.8, 6, rnd());
+        for (let i = 0; i < 8; i++) {
+          const T = Math.abs(tx - bp.x) / vxs, t0 = Math.abs(bp.x) / vxs;
+          vy = (b.r - bp.y + 0.5 * g * T * T) / T;
+          const yAt = bp.y + vy * t0 - 0.5 * g * t0 * t0;
+          if (yAt < net) vy += (net - yAt) / t0;
+          const tl = (vy + Math.sqrt(vy * vy + 2 * g * Math.max(0, bp.y - b.r))) / g;
+          if (Math.abs(bp.x + dir * vxs * tl) < 6.6) break;
+          vxs *= 0.92;
+        }
+        return { v: { x: dir * vxs, y: vy }, serve: true, green: true };
+      }
+      const tx = dir * lerp(2.4, 6, rnd()), apex = Math.max(bp.y + 1.2, top + 2.8, lerp(5.8, 7, rnd()));
       const vy = Math.sqrt(2 * g * (apex - bp.y)), T = vy / g + Math.sqrt(2 * Math.max(0.1, apex - b.r) / g);
       return { v: { x: (tx - bp.x) / T, y: vy }, serve: true };
     }
     let nx = bp.x - ref.x, ny = bp.y - ref.y; const d = Math.hypot(nx, ny) || 1; nx /= d; ny /= d;
     if (air && Math.abs(bp.x) < 2.6 * this.cfg.body.scale && bp.y > top + 0.55 && nx * dir > 0.12) {
-      const vx = dir * lerp(9.5, 12, rnd()) * m, t = Math.max(0.03, Math.abs(bp.x) / Math.abs(vx));
+      // a GREEN spike (hit at the top of the jump, in the green zone of the meter) is much faster and steeper
+      const vx = dir * (green ? lerp(14.5, 16.5, rnd()) : lerp(8.5, 10.5, rnd())) * m, t = Math.max(0.03, Math.abs(bp.x) / Math.abs(vx));
       const need = (top + b.r + NET_CAP + 0.25 - bp.y + 0.5 * g * t * t) / t;
-      return { v: { x: vx, y: Math.max(-lerp(1.5, 4, rnd()) * m, need) }, spike: true };
+      return { v: { x: vx, y: Math.max(-(green ? lerp(6, 8.5, rnd()) : lerp(1.5, 4, rnd())) * m, need) }, spike: true, green };
     }
     const rx = bv.x - pv.x, ry = bv.y - pv.y, approach = Math.max(0, -(rx * nx + ry * ny)), push = Math.max(0, pv.x * nx + pv.y * ny);
     const sp = clamp(4.5 + 0.25 * approach + 0.6 * push, 6, 10.5) * m;
@@ -1248,11 +1274,19 @@ class Game {
     if (ny > -0.35) vy = Math.max(vy, 5.5 * m);
     return { v: { x: vx, y: vy } };
   }
+  // The spike meter: the green zone is the top of the jump (the body hardly moving up or down). A human has to
+  // time the hit for it; the CPU gets it by chance, more often the higher its level.
+  greenTiming(p) {
+    if (p.grounded) return false;
+    const cpu = this.cpus.find(c => c.team === p.team);
+    if (cpu) return Math.random() < ({ easy: 0.05, normal: 0.2, hard: 0.45, impossible: 1 }[cpu.level] || 0.2);
+    return Math.abs(p.body.getLinearVelocity().y) < GREEN_VY;
+  }
   hit(p, part, b, bv) {
     const bp = b.body.getPosition(), ref = this.partRef(p, part, bp);
     const pb = part === 'head' ? p.head : part === 'arm' ? p.arms[0] : p.body, pv = pb.getLinearVelocityFromWorldPoint(ref);
     if (b.waiting) { b.waiting = false; b.body.setGravityScale(this.cfg.ballG / this.cfg.gravity); }   // jumped early: that's the serve
-    const res = this.hitOut(p, b, ref, bp, bv, pv, !p.grounded, Math.random);
+    const res = this.hitOut(p, b, ref, bp, bv, pv, !p.grounded, Math.random, this.greenTiming(p));
     b.body.setLinearVelocity(res.v); b.body.setAngularVelocity(-res.v.x * 1.5 + rand(-2, 2));
     p.hitCD = 0.12; b.lastHitT = this.time; b.serve = false;
     const playing = this.state === 'play';
@@ -1268,10 +1302,21 @@ class Game {
     if (playing) this.stats[p.team].touches++;
     const sp = Math.hypot(res.v.x, res.v.y);
     this.sndQ.push([res.spike ? 'spike' : 'hit', sp]);
+    if (res.serve && res.green && playing) {
+      const hp = p.head.getPosition();
+      this.popup('GREEN SERVE!', hp.x, hp.y + 1.1, '#3ddc5a', 10, 1.2); this.hype(); this.addShake(4);
+      for (let i = 0; i < 12; i++) this.addPart(bp.x, bp.y, rand(-4, 4), rand(-3, 3), 10, rand(0.25, 0.5), '#3ddc5a', 1);
+    }
     if (res.spike) {
       const hp = p.head.getPosition();
       b.spikeT = this.time; b.blocked = blocked;
-      this.popup(blocked ? 'BLOCK!' : 'SPIKE!', hp.x, hp.y + 1.1, TEAM[p.team].light, 8, 0.9);
+      b.fx = { key: res.green && !blocked ? 'meteor' : pick(['fire', 'bolt', 'comet']), until: this.time + (res.green ? 1.4 : 0.9), big: !!res.green };
+      this.rings.push({ x: bp.x, y: bp.y, t: 0, col: SPIKE_FX[b.fx.key].cols[0] });
+      if (res.green && !blocked) { this.rings.push({ x: bp.x, y: bp.y, t: -0.08, col: '#ffffff' }); this.cam.focus = { x: bp.x, y: bp.y, until: this.time + 0.3 }; this.slowmo(0.2, 0.16); this.net.shake = 1; }
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + rand(-0.2, 0.2); this.addPart(bp.x, bp.y, Math.cos(a) * 7, Math.sin(a) * 7, 0, rand(0.15, 0.3), pick(SPIKE_FX[b.fx.key].cols), 2); }
+      const gr = res.green && !blocked;
+      this.popup(blocked ? 'BLOCK!' : gr ? 'GREEN SPIKE!' : 'SPIKE!', hp.x, hp.y + 1.1, gr ? '#3ddc5a' : TEAM[p.team].light, gr ? 10 : 8, gr ? 1.2 : 0.9);
+      if (gr) { if (playing) this.hype(); for (let i = 0; i < 12; i++) this.addPart(bp.x, bp.y, rand(-4, 4), rand(-3, 3), 10, rand(0.25, 0.5), '#3ddc5a', 1); }
       if (playing) this.stats[p.team][blocked ? 'blocks' : 'spikes']++;
       this.addShake(4); this.slowmo(0.5, 0.12);
       for (let i = 0; i < 10; i++) this.addPart(bp.x, bp.y, rand(-3, 3), rand(-2, 3), 10, rand(0.2, 0.45), pick(['#ffd23f', '#ffffff', ORANGE]), 1);
@@ -1435,7 +1480,18 @@ class Game {
       if (b.stillT > 1.2) { b.body.setLinearVelocity({ x: rand(-2, 2), y: 3 }); b.stillT = 0; }
       if (!b.dead && (Math.abs(bp.x) > 8.6 || bp.y < -1)) this.pointTo(bp.x < 0 ? 1 : 0, b, { x: clamp(bp.x, -7.5, 7.5), y: 0 });
       if (this.time - b.spikeT < 0.6 || sp > 11) b.trail.push({ x: bp.x, y: bp.y }); else if (b.trail.length) b.trail.shift();
-      if (b.trail.length > 8) b.trail.shift();
+      if (b.trail.length > (b.fx && b.fx.big && this.time < b.fx.until ? 14 : 8)) b.trail.shift();
+      // the flashy spike: sparks stream off the ball while the spike is still carrying it
+      if (b.fx && this.time < b.fx.until && !b.waiting) {
+        const F = SPIKE_FX[b.fx.key], n = b.fx.big ? 3 : 2, ang = Math.atan2(v.y, v.x);
+        for (let i = 0; i < n; i++) {
+          const off = rand(-b.r * 0.7, b.r * 0.7), back = rand(0, b.r);
+          let x = bp.x - Math.cos(ang) * back - Math.sin(ang) * off, y = bp.y - Math.sin(ang) * back + Math.cos(ang) * off;
+          if (b.fx.key === 'bolt') { x += rand(-0.35, 0.35); y += rand(-0.35, 0.35); }
+          const up = b.fx.key === 'fire' || b.fx.key === 'meteor' ? rand(0.5, 2.2) : rand(-0.5, 0.5);
+          this.addPart(x, y, -v.x * 0.08 + rand(-0.8, 0.8), up + rand(-0.8, 0.8), b.fx.key === 'fire' ? -1.5 : 0, rand(0.25, b.fx.big ? 0.7 : 0.5), pick(F.cols), b.fx.big ? pick([2, 3]) : pick([1, 2]));
+        }
+      } else if (b.fx) b.fx = null;
     }
     this.net.shake = Math.max(0, this.net.shake - dt * 2.5);
     for (let i = this.parts.length - 1; i >= 0; i--) {
@@ -1445,6 +1501,7 @@ class Game {
       q.x += q.vx * dt; q.y += q.vy * dt;
       if (q.y < 0.02 && q.kind !== 'confetti') { q.y = 0.02; q.vy *= -0.3; }
     }
+    for (let i = this.rings.length - 1; i >= 0; i--) if ((this.rings[i].t += dt) > 0.45) this.rings.splice(i, 1);
     for (let i = this.pops.length - 1; i >= 0; i--) if ((this.pops[i].t += dt) > this.pops[i].dur) this.pops.splice(i, 1);
     if (this.pointPop) this.pointPop.t += dt;
     this.excite = Math.max(0, this.excite - dt * 0.35);
@@ -1557,7 +1614,8 @@ function drawTrail(b) {
   const n = b.trail.length;
   for (let i = 0; i < n - 1; i++) {
     const q = b.trail[i], s = Math.max(1, b.r * PPM * (0.3 + 0.8 * i / n)) * S;
-    ctx.globalAlpha = 0.25 + 0.4 * i / n; ctx.fillStyle = '#fff3b0';
+    const F = b.fx && SPIKE_FX[b.fx.key];
+    ctx.globalAlpha = 0.25 + 0.4 * i / n; ctx.fillStyle = F ? F.cols[i % F.cols.length] : '#fff3b0';
     ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s));
   }
   ctx.globalAlpha = 1;
@@ -1607,6 +1665,16 @@ function drawWorldText(G) {
     if (!b.waiting) continue;
     const bp = b.body.getPosition(), bob = Math.sin(G.realTime * 8) * 1.5;
     txt('SERVE', SX(bp.x), SY(bp.y + b.r + 0.45) + bob * S, 8, TEAM[b.team].light, { ow: 0.8 });
+  }
+  if (G.state === 'play' && !G.cvc) for (const p of G.players) {
+    if (p.grounded || p.fallen || G.cpus.some(c => c.team === p.team) || !G.balls.some(b => (!b.waiting || b.team === p.team) && b.body.getPosition().x * p.dir < 0 && b.body.getPosition().y > 1.2)) continue;
+    // the spike meter: left is rising, right is falling, the green middle is the top of the jump
+    const hp = p.head.getPosition(), vy = p.body.getLinearVelocity().y, jv = G.cfg.jumpV, w = 1.3, x0 = SX(hp.x - w / 2), x1 = SX(hp.x + w / 2), y0 = SY(hp.y + 0.85), h = 5 * S, gz = GREEN_VY / (2 * jv) * (x1 - x0);
+    const pos = clamp(0.5 - vy / (2 * jv), 0, 1), on = Math.abs(vy) < GREEN_VY;
+    ctx.fillStyle = INK; ctx.fillRect(x0 - S, y0 - S, x1 - x0 + 2 * S, h + 2 * S);
+    ctx.fillStyle = '#7a2f2f'; ctx.fillRect(x0, y0, x1 - x0, h);
+    ctx.fillStyle = on ? '#8dff9f' : '#3ddc5a'; ctx.fillRect((x0 + x1) / 2 - gz, y0, gz * 2, h);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x0 + pos * (x1 - x0) - S * 0.6, y0 - S * 1.5, S * 1.2, h + S * 3);
   }
   for (const q of G.pops) {
     const k = q.t < 0.1 ? lerp(0.3, 1.25, q.t / 0.1) : q.t < 0.2 ? lerp(1.25, 1, (q.t - 0.1) / 0.1) : 1;
@@ -1714,6 +1782,11 @@ function render(G) {
   ctx.drawImage(lowC, OX + SHX, OY + SHY, ART_W * S, ART_H * S);
   for (const p of G.players) p.draw(RENDER);
   for (const b of G.balls) { drawTrail(b); RENDER.part(b.spr, b.body, false); }
+  for (const r of G.rings) {   // the shockwave ring at the spike's contact
+    if (r.t < 0) continue;
+    const k = r.t / 0.45, rad = SX(r.x + 0.3 + k * 2.2) - SX(r.x);
+    ctx.globalAlpha = 1 - k; ctx.strokeStyle = r.col; ctx.lineWidth = Math.max(1, (1 - k) * 3 * S); ctx.beginPath(); ctx.arc(SX(r.x), SY(r.y), rad, 0, 6.2832); ctx.stroke(); ctx.globalAlpha = 1;
+  }
   for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
   ctx.globalAlpha = 1;
   drawWorldText(G);

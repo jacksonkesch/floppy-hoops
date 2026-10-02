@@ -110,6 +110,21 @@ const BELL_T = 0.8;          // the bell rings this long into a round; keys do n
 const TIRED_T = 22;          // after this long in a round, legs start going wobbly (no endless rounds)
 const FLIP_T = 0.15, FLIP_DX = 0.4;   // the other boxer clearly on the other side for this long = turn round (and the punch/guard keys swap)
 const PUNCH_T = 0.28;     // how long the arm stays out after a punch press (the key can stay down)
+// PUNCH STYLES (picked per punch in pickStyle). mult: damage multiplier; rec: extra recovery (heavier = slower); step/hop/spin: body lunge / lean.
+// wind = seconds of telegraphed wind-up pose before the strike. pose(k) = [shoulder angle, elbow angle] for k 0..1 through the strike.
+const PUNCH_STYLES = {
+  jab:      { mult: 1,    rec: 0,    wind: 0,    step: 0,   word: '',          col: '#fff6e0' },
+  cross:    { mult: 1.12, rec: 0.04, wind: 0.06, step: 1.5, word: 'CROSS',     col: '#ffd23f' },
+  hook:     { mult: 1.15, rec: 0.05, wind: 0.07, step: 0.6, spin: 0.5, word: 'HOOK', col: '#ffb13d' },
+  uppercut: { mult: 1.15, rec: 0.06, wind: 0.08, step: 0.5, hop: 1.6, word: 'UPPERCUT', col: '#ff8a3d' },
+  overhand: { mult: 1.25, rec: 0.12, wind: 0.10, step: 1.8, spin: 0.4, word: 'OVERHAND', col: '#ff6a5a' },
+  backfist: { mult: 1.3,  rec: 0.2,  wind: 0.11, step: 1.0, spin: 2.0, word: 'BACKFIST', col: '#c79bff' },
+  flurry:   { mult: 0.85, rec: -0.05, wind: 0,   step: 0.4, word: '1-2!',      col: '#8be9ff' },
+};
+const STYLE_WIND = {   // pose during the wind-up: [shoulder, elbow]
+  cross: [0.7, 1.1], hook: [1.0, 1.7], uppercut: [-0.3, 0.7], overhand: [2.9, 0.6], backfist: [0.3, 2.0] };
+const STYLE_STRIKE = { // pose at the start -> end of the strike [sh0, el0, sh1, el1]
+  cross: [1.82, 0.05, 1.82, 0.05], hook: [1.0, 1.2, 2.0, 0.05], uppercut: [0.2, 0.9, 2.6, 0.1], overhand: [2.9, 0.4, 1.6, 0.05], backfist: [0.3, 2.0, 2.3, 0.05] };
 const HP_MAX = 100;
 // ---- SKILL: haymaker meter, guard / perfect block, combos + super, dodge + counter
 const HOLD_T = 0.22;         // punch held this long (after the jab) and the haymaker meter starts
@@ -677,9 +692,15 @@ class Boxer {
         this.drive(sh, dir * -0.35, 14, 10, 150 * weak); this.drive(el, dir * 0.55, 12, 10, 60 * weak);
       } else if (t < this.punchUntil) {
         // jab (as in the real game): the arm snaps fully straight out at head height, then comes back to the guard
-        const rk = c.rocket ? 1.5 : 1;
-        this.drive(sh, dir * 1.82, 34 * rk, 20 * rk, 320 * weak);
-        this.drive(el, dir * 0.05, 26 * rk, 22 * rk, 110 * weak);
+        const rk = c.rocket ? 1.5 : 1, ST = PUNCH_STYLES[this.style], e = t - (this.punchUntil - PUNCH_T);
+        if (ST && ST.wind > 0 && STYLE_STRIKE[this.style]) {
+          const W = STYLE_WIND[this.style], P = STYLE_STRIKE[this.style];
+          if (e < ST.wind) { this.drive(sh, dir * W[0], 22, 14, 260 * weak); this.drive(el, dir * W[1], 20, 14, 100 * weak); }   // wind-up: telegraphed
+          else { const k = smooth(clamp((e - ST.wind) / 0.1, 0, 1)); this.drive(sh, dir * lerp(P[0], P[2], k), 38 * rk, 24 * rk, 360 * weak); this.drive(el, dir * lerp(P[1], P[3], k), 30 * rk, 24 * rk, 120 * weak); }
+        } else {
+          this.drive(sh, dir * 1.82, 34 * rk, 20 * rk, 320 * weak);
+          this.drive(el, dir * 0.05, 26 * rk, 22 * rk, 110 * weak);
+        }
         if (c.rocket && !g.isShadow) { const p = this.glovePos(0); g.addPart(p.x, p.y, -dir * rand(1, 4), rand(-1, 1.5), 9, rand(0.2, 0.45), pick(['#ffb02a', '#ff5a1f', '#ffe9a8']), pick([1, 2])); }
       } else if (this.guarding()) {
         // guard held: both gloves (well, the glove) tight in front of the face
@@ -699,12 +720,33 @@ class Boxer {
     if (t < this.jabReady) { this.buf = t; return false; }   // still recovering from the last jab: remembered for a moment
     return this.fireJab();
   }
-  fireJab() {
-    const g = this.game, t = g.time;
+  // pick a punch style from the gap to the other boxer (random, weighted), never the same one twice in a row
+  pickStyle() {
+    const op = this.game.boxers[1 - this.team]; if (!op) return 'jab';
+    const dx = Math.abs(op.head.getPosition().x - this.head.getPosition().x), a = op.head.getPosition().y - this.head.getPosition().y;
+    let w;
+    if (dx < 1.1) w = { jab: 30, uppercut: 28, hook: 24, flurry: 14, backfist: 4 };
+    else if (dx < 1.9) w = { jab: 36, hook: 18, flurry: 14, overhand: 14, cross: 12, backfist: 6 };
+    else w = { cross: 38, overhand: 24, jab: 26, backfist: 12 };
+    if (a < -0.4) { w.overhand = (w.overhand || 0) + 20; w.uppercut = 0; }
+    if (this.lastStyle) w[this.lastStyle] = (w[this.lastStyle] || 0) * 0.3;
+    let r = Math.random() * Object.values(w).reduce((x, y) => x + y, 0);
+    for (const k in w) { r -= w[k]; if (r <= 0) return k; }
+    return 'jab';
+  }
+  fireJab(forced) {
+    const g = this.game, t = g.time, dir = this.dir;
     if (this.ko || this.fallen || this.superFly || this.charging || t < this.hayUntil) return false;
-    this.punchUntil = t + PUNCH_T; this.jabReady = t + PUNCH_T + JAB_REC; this.buf = -9;
-    this.atk = { kind: 'jab', mult: 1, until: t + PUNCH_T + 0.05, used: false };
+    const style = forced || this.pickStyle(), S = PUNCH_STYLES[style];
+    this.lastStyle = style; this.styleT = t; this.style = style;
+    this.punchUntil = t + PUNCH_T; this.jabReady = t + PUNCH_T + JAB_REC + S.rec; this.buf = -9;
+    this.atk = { kind: 'jab', style, mult: S.mult, until: t + PUNCH_T + 0.05, used: false };
     if (g.state === 'play') g.stats[this.team].punches++;
+    this.flurryAt = style === 'flurry' ? t + PUNCH_T + 0.02 : 0;
+    // body language: lunge / lean / spin
+    if (S.step) for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x + dir * S.step, y: lv.y + (S.hop || 0) }); }
+    if (S.spin) this.body.setAngularVelocity(this.body.getAngularVelocity() + dir * S.spin);
+    if (S.word && !g.isShadow && g.state === 'play') { const hp = this.head.getPosition(); g.popup(S.word, hp.x, hp.y + 0.9, S.col, 8, 0.55); }
     return true;
   }
   jump() {
@@ -794,6 +836,7 @@ class Boxer {
       this.body.setAngularVelocity(this.body.getAngularVelocity() - dir * 1.6);
     }
     if (this.atk && t > this.atk.until) this.atk = null;
+    if (this.flurryAt) { if (this.stun > 0 || this.fallen || this.ko || this.superFly) this.flurryAt = 0; else if (t >= this.flurryAt) { this.flurryAt = 0; if (live) this.fireJab('jab'); } }
     // a jab that was pressed during the last bit of recovery goes out now
     if (this.buf > 0 && t >= this.jabReady) { if (t - this.buf < 0.16 && live && this.stun <= 0) this.fireJab(); this.buf = -9; }
     // held on past the jab: the haymaker meter starts
@@ -1356,6 +1399,17 @@ class Game {
     if (kind === 'hay' && !blk) {
       this.addShake(10); this.slowmo(0.3, 0.2); this.excite = 1; this.flash = Math.max(this.flash, REDUCED ? 0 : 0.12);
       for (let i = 0; i < 16; i++) this.addPart(h.x, h.y, dir * rand(0, 6) + rand(-2, 2), rand(-1, 4), 8, rand(0.3, 0.6), pick([GREEN, '#ffffff', '#b6ffd0']), pick([2, 3]));
+    }
+    const sty = atk && atk.style;
+    if (sty && sty !== 'jab' && !blk) {   // style flavour on a solid hit
+      const S = PUNCH_STYLES[sty];
+      if (sty === 'uppercut') { this.addShake(4); this.slowmo(0.4, 0.1); }
+      else if (sty === 'overhand') { this.addShake(6); this.slowmo(0.3, 0.14); this.flash = Math.max(this.flash, REDUCED ? 0 : 0.08); }
+      else if (sty === 'backfist') { this.addShake(7); this.slowmo(0.3, 0.16); this.flash = Math.max(this.flash, REDUCED ? 0 : 0.1); }
+      else if (sty === 'hook') { this.addShake(3); vic.body.setAngularVelocity(vic.body.getAngularVelocity() - dir * 0.8); }
+      else if (sty === 'cross') this.addShake(3);
+      if (head && sty !== 'flurry') this.popup(S.word + '!', h.x - dir * 0.3, py + 0.35, S.col, 16, 0.7);
+      for (let i = 0; i < 8; i++) this.addPart(h.x, h.y, dir * rand(0, 5) + rand(-2, 2), sty === 'uppercut' ? rand(2, 6) : rand(-1, 3), 8, rand(0.25, 0.5), pick([S.col, '#ffffff']), pick([1, 2]));
     }
     if (counter) this.popup('COUNTER!', h.x - dir * 0.2, py + 0.5, '#8be9ff', 16, 0.9);
     if (boosted) this.popup('DOUBLE POWER!', h.x - dir * 0.2, py + 0.9, '#ffd23f', 8, 0.9);
