@@ -86,6 +86,21 @@ const GAME_SPEED = 0.95;   // the whole game runs a touch slower than real time
 const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 1.45, NECK_HZ = 2.6;
 // KICK_A: how far the kicking leg swings up (radians from hanging). FWD_HOP: every hop drifts a little toward the goal you attack.
 const KICK_A = 2.1, FWD_HOP = 1.1, MAX_BALL = 22, KICK_SPEED = 17;
+const GREEN_VY = 3.6;      // m/s: how close to the top of a hop a kick or header has to be struck to be green
+const GREEN_TT = [0.1, 0.55];   // goalie dive: the shot reaches the goal line within this many seconds = green
+const MAG = 0.03;          // Magnus curl: acceleration = MAG * spin * speed, perpendicular to the flight
+const FIRE_SECS = 20;
+const STYLES = {
+  normal: { name: '', short: '', col: '#ffffff' },
+  bicycle: { name: 'BICYCLE KICK!', short: 'BICYCLE', col: '#ffd23f' },
+  dive: { name: 'DIVING HEADER!', short: 'DIVE HEAD', col: '#5ee6ff' },
+  scorpion: { name: 'SCORPION KICK!', short: 'SCORPION', col: '#ff5ad9' },
+  rabona: { name: 'RABONA!', short: 'RABONA', col: '#b57bff' },
+  volley: { name: 'VOLLEY!', short: 'VOLLEY', col: '#ff9a3a' },
+};
+const GREEN_CHANCE = { easy: 0.05, normal: 0.14, hard: 0.28, impossible: 0.55 };
+const DIVE_CHANCE = { easy: 0.35, normal: 0.6, hard: 0.8, impossible: 0.92 };
+const DIVE_GREEN = { easy: 0.1, normal: 0.3, hard: 0.55, impossible: 0.8 };
 const INK = '#141019', CREAM = '#fff6e0', ORANGE = '#ff8a2a', GREEN = '#43f07a';
 const TEAM = [
   { name: 'RED',  jersey: '#d93a3f', dark: '#8f222b', light: '#ff8173', num: '#ffffff', dir: 1 },
@@ -386,6 +401,7 @@ class Sfx {
   }
   // the crowd goes up for a goal
   roar() { if (!this.ok) return; this.hiss(2.6, 0.32, 'bandpass', 520, 900, 0.7, 0, this.bus, 0.25); this.hiss(2.0, 0.16, 'bandpass', 1500, 1100, 0.9, 0.05, this.bus, 0.3); }
+  cheer() { if (!this.ok) return; this.hiss(3.4, 0.42, 'bandpass', 600, 1100, 0.7, 0, this.bus, 0.2); this.hiss(2.8, 0.22, 'bandpass', 1700, 1200, 0.9, 0.05, this.bus, 0.25); }
   ooh() { this.hiss(1.1, 0.14, 'bandpass', 700, 420, 1.2, 0, undefined, 0.15); }
   buzzer() { this.tone('sawtooth', 185, 180, 1.0, 0.16); this.tone('square', 191, 188, 1.0, 0.07); }
   jingle(team) { const n = team === 0 ? [523.3, 659.3, 784] : [392, 493.9, 587.3]; n.forEach((f, k) => this.tone('square', f, f, 0.12, 0.05, 0.08 + k * 0.08)); }
@@ -533,11 +549,12 @@ class Ball {
     this.body = game.world.createBody({ type: 'dynamic', position: { x, y: 5.8 }, bullet: true, angularDamping: 0.4, linearDamping: B.damp });
     this.fix = this.body.createFixture(new pl.Circle(B.r), { density: B.density, friction: 0.6, restitution: B.rest, filterCategoryBits: CAT_BALL, filterMaskBits: CAT_WORLD | CAT_PLAYER | CAT_BALL, userData: { kind: 'ball', ball: this } });
     this.body.setGravityScale(0);
-    this.waiting = true; this.stillT = 0; this.touch = null; this.scored = false; this.barCD = 0;
+    this.waiting = true; this.stillT = 0; this.touch = null; this.fx = null; this.scored = false; this.barCD = 0;
     this.spr = ballSprite(Math.max(6, Math.round(B.r * 2 * PPM)), B.look);
   }
 }
 
+const NO_RIPPLES = [];
 // a recorded transform, drawn like a physics body during instant replays
 class Pose {
   constructor(x, y, a) { this.p = { x, y }; this.a = a; }
@@ -560,6 +577,7 @@ class Player {
     this.feet = 0; this.grounded = false; this.fallen = false;
     this.wob = 0; this.swaySign = 1; this.airT = 0; this.airVy = 0; this.flailT = 0; this.flailCD = 0; this.flailK = 0; this.flailPh = 0; this.flailTick = 0;
     this.armA = 0.2 * this.dir;
+    this.styleT = 0; this.styleHip = null; this.styleArm = null; this.spinT = 0; this.diveT = 0; this.diveCD = 0; this.diveGreen = false; this.popAt = 0; this.greenAt = 0;
     this.build(x); this.makeSprites();
     if (drop) for (const b of this.parts) { const q = b.getPosition(); b.setTransform({ x: q.x, y: q.y + drop }, b.getAngle()); }
   }
@@ -622,7 +640,7 @@ class Player {
   }
   update(dt) {
     const g = this.game, dir = this.dir, body = this.body;
-    this.jumpCD -= dt; this.kickCD -= dt; this.flailCD -= dt;
+    this.jumpCD -= dt; this.kickCD -= dt; this.flailCD -= dt; this.styleT -= dt; this.spinT -= dt; this.diveT -= dt; this.diveCD -= dt;
     const th = this.angle(), om = body.getAngularVelocity();
     const lowBody = this.center().y < this.d.torsoH * 0.5 + 0.35;
     this.fallen = Math.abs(th) > 1.05;
@@ -631,7 +649,8 @@ class Player {
     if (!onFeet) { this.airT += dt; this.airVy = Math.min(this.airVy, body.getLinearVelocity().y); }
     else { if (this.airT > 0.15) this.landed(); this.airT = 0; this.airVy = 0; this.wob = Math.max(0, this.wob - dt * 0.36); }
     // the arms just flop along: out wide in the air, up when celebrating
-    const armT = this.celebrate ? dir * (2.7 + 0.35 * Math.sin(g.time * 14 + this.id)) : !onFeet ? dir * (1.3 + 0.5 * Math.sin(g.time * 9 + this.id)) : dir * 0.22 - om * 0.08;
+    let armT = this.celebrate ? dir * (2.7 + 0.35 * Math.sin(g.time * 14 + this.id)) : !onFeet ? dir * (1.3 + 0.5 * Math.sin(g.time * 9 + this.id)) : dir * 0.22 - om * 0.08;
+    if (this.diveT > 0) armT = dir * 2.9; else if (this.styleT > 0 && this.styleArm !== null) armT = this.styleArm;
     this.armA += (armT - this.armA) * Math.min(1, 10 * dt);
     if (this.flailT > 0) {
       // the physics has gone weird for a moment: the leg windmills and the body gets yanked around
@@ -645,7 +664,8 @@ class Player {
     if (this.fallen) { this.fallenT += dt; if ((this.fallenT > 0.2 && lowBody) || (this.fallenT > 0.7 && this.jumpCD <= 0)) this.getUp(); } else this.fallenT = 0;
     this.upT -= dt;
     // key down: the leg whips forward and up, and stays up. Key up: it swings back down to hang.
-    if (this.kickHeld) this.drive(this.hip, dir * KICK_A, 40, 22, this.fallen ? 30 : 380);
+    if (this.styleT > 0 && this.styleHip !== null) this.drive(this.hip, this.styleHip, 40, 24, this.fallen ? 30 : 380);
+    else if (this.kickHeld) this.drive(this.hip, dir * KICK_A, 40, 22, this.fallen ? 30 : 380);
     else {
       const tgt = this.celebrate && onFeet ? dir * (0.5 + 0.5 * Math.sin(g.time * 12 + this.id)) : !onFeet ? dir * 0.35 : 0;
       const err = Math.abs(wrap(tgt - this.hip.getJointAngle()));
@@ -658,7 +678,7 @@ class Player {
       const k = smooth(this.wob), tgt = (this.swaySign * SWAY_A * Math.sin(g.time * this.swayW + this.swayPh) - dir * 0.08) * k;
       const acc = (Math.abs(th) > 0.8 ? 1.8 : 1) * BAL_KP * (tgt - th) - BAL_KD * om;
       body.applyTorque(this.I * acc - this.M * g.cfg.gravity * this.h * Math.sin(th) * 0.9, true);
-    } else if (!this.fallen || !lowBody) {
+    } else if (this.spinT <= 0 && (!this.fallen || !lowBody)) {
       // in the air: slowly right yourself (harder just after getting up, and in low gravity)
       const wt = clamp(-th * 2, -3, 3), rate = (this.upT > 0 ? 4 : 0.6) * Math.sqrt(20 / this.game.cfg.gravity);
       body.setAngularVelocity(om + (wt - om) * Math.min(1, rate * dt));
@@ -707,6 +727,22 @@ class Player {
     for (const b of this.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: lv.x * 0.2 + hv.x, y: hv.y }); }
     this.body.setAngularVelocity(this.body.getAngularVelocity() * 0.7 + th * 0.8 + rand(-0.5, 0.5));
     this.jumpCD = 0.3;
+  }
+  // goalie dive: launch the whole body at the point the shot will cross the goal line, stretched out flat
+  dive(ix, iy, tt, green) {
+    const g = this.game.cfg.gravity, c = this.center();
+    tt = clamp(tt, 0.2, 0.7);
+    let vx = (ix - c.x) / tt, vy = (iy + (green ? 0 : rand(-0.8, 0.8)) - c.y) / tt + 0.5 * g * tt;
+    const cap = green ? 12.5 : 8.5, sp = Math.hypot(vx, vy); if (sp > cap) { vx *= cap / sp; vy *= cap / sp; }
+    vy = Math.max(vy, 2.5);
+    for (const b of this.parts) b.setLinearVelocity({ x: vx, y: vy });
+    this.body.setAngularVelocity(-(vx > 0 ? 1 : -1) * 5.5);
+    this.spinT = 0.5; this.diveT = 0.8; this.diveCD = 1.8; this.diveGreen = green; this.jumpCD = Math.max(this.jumpCD, 0.4);
+  }
+  // a kick style's pose: the kicking leg's target angle, the arms, and a kick to the body's lean
+  stylePose(hip, arm, spin, t) {
+    this.styleHip = hip; this.styleArm = arm; this.styleT = t; this.spinT = Math.max(this.spinT, t * 0.8);
+    this.body.setAngularVelocity(this.body.getAngularVelocity() + spin);
   }
   getUp() {
     const th = this.angle();
@@ -871,7 +907,7 @@ function makeLook(used) {
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk', 'long']), num };
 }
 const TEAM_X = [-5.2, -2.2];     // red's two players (rear, front); blue stands mirrored
-const newStats = () => [0, 1].map(() => ({ goals: 0, shots: 0, kicks: 0, headers: 0, saves: 0 }));
+const newStats = () => [0, 1].map(() => ({ goals: 0, shots: 0, kicks: 0, headers: 0, saves: 0, greens: 0, fastest: 0, styles: {} }));
 function packLines(items, max) {
   const out = [];
   for (const it of items) { const last = out[out.length - 1]; if (last && (last + ' + ' + it).length <= max) out[out.length - 1] = last + ' + ' + it; else out.push(it); }
@@ -892,7 +928,8 @@ class Game {
     this.cam = { z: 1, x: 0, y: 3.5, fx: 0, fy: 3.5, goalT: 0 };
     this.parts = []; this.pops = []; this.sndQ = []; this.touchQ = []; this.dustQ = []; this.bumpQ = []; this.sndCD = {};
     this.rec = []; this.recCount = 0; this.replay = null; this.pendingReplay = false; this.matchPoint = false;
-    this.netShake = [0, 0];
+    this.netShake = [0, 0]; this.rings = []; this.ripples = []; this.wave = null; this.streak = [0, 0]; this.fireT = [0, 0]; this.celeb = null;
+    this.replayTag = ''; this.scoreBall = 0;
     this.snow = Array.from({ length: 70 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(6, 16), w: rand(0, 6) }));
     this.rain = Array.from({ length: 90 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(150, 220) }));
     this.clouds = Array.from({ length: 4 }, (_, i) => ({ x: i * 90 + rand(0, 40), y: rand(10, 40), w: rand(22, 36), v: rand(1.5, 3.5) }));
@@ -907,6 +944,8 @@ class Game {
   soundOn(id) { return !this.settings.soundsOff.includes(id); }
   // meme clips stay quiet behind the main menu
   cue(id) { const e = SOUND_BY_ID[id]; if (e && this.soundOn(id) && !(e.clip && this.state === 'title')) this.sfx.cue(id); }
+  hype() { const pool = SOUND_LIST.filter(e => e.goal && this.soundOn(e.id) && this.sfx.has(e.id)); if (pool.length) this.cue(pick(pool).id); }
+  cpuOf(t) { return this.cpus.find(c => c.team === t); }
   goalSound(winner) {
     if (winner && this.soundOn('greenfn') && this.sfx.has('greenfn')) { this.cue('greenfn'); return; }
     const pool = SOUND_LIST.filter(e => e.goal && this.soundOn(e.id) && this.sfx.has(e.id));
@@ -939,7 +978,7 @@ class Game {
     for (let t = 0; t < 2; t++) for (let s = 0; s < 2; s++) this.players.push(new Player(this, t, s, this.roster[t * 2 + s], t === 0 ? TEAM_X[s] : -TEAM_X[s], rand(0.7, 0.95)));
     this.balls = this.cfg.two ? [new Ball(this, -1.3), new Ball(this, 1.3)] : [new Ball(this, 0)];
     this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0;
-    this.roundT = 0; this.whistled = false; this.cam.goalT = 0; this.cam.z = 1; this.netShake = [0, 0];
+    this.roundT = 0; this.whistled = false; this.cam.goalT = 0; this.cam.z = 1; this.netShake = [0, 0]; this.rings = []; this.ripples = []; this.wave = null;
     this.bg = pitchImage(pitch.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
     this.bannerItems = [pitch.name, ball.name, body.name, goal.name, phys.wind ? 'GUSTY WIND' : phys.name, extra.name].filter(Boolean);
@@ -983,7 +1022,7 @@ class Game {
   newGame(opts = {}) {
     const s = this.settings, mode = opts.mode || s.mode;
     this.score = [0, 0]; this.round = 1; this.target = opts.target || s.target; this.vsCpu = mode === 'cpu'; this.cvc = mode === 'cvc';
-    this.stats = newStats(); this.goalLog = []; this.replay = null; this.pendingReplay = false; this.matchPoint = false;
+    this.stats = newStats(); this.goalLog = []; this.streak = [0, 0]; this.fireT = [0, 0]; this.celeb = null; this.replay = null; this.pendingReplay = false; this.matchPoint = false;
     this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND);
     const lv = opts.levels || [s.cvcRed, s.cvcBlue];
     this.cpuLevels = this.cvc ? lv : this.vsCpu ? [null, opts.level || s.level] : [null, null];
@@ -1028,6 +1067,7 @@ class Game {
     this.state = 'over'; this.stateT = 0; this.winner = team; this.overSel = 0;
     this.sfx.buzzer(); this.sfx.fanfare(); this.excite = 1;
     for (const p of this.players) p.celebrate = p.team === team;
+    this.celeb = { type: pick(['flip', 'slide', 'pile']) };
     for (let i = 0; i < 120; i++) this.addPart(rand(-8, 8), rand(7.4, 9), rand(-1, 1), rand(-2, 0), 5, rand(2, 4), pick([TEAM[team].jersey, TEAM[team].light, '#ffffff', '#ffd23f']), pick([1, 2]), 'confetti');
   }
   teamName(t) {
@@ -1061,6 +1101,43 @@ class Game {
     let hop = false;
     for (const p of this.players) if (p.team === t) { if (p.grounded && p.jumpCD <= 0) hop = true; p.press(); }
     if (hop) this.sfx.jump();
+    // a shot is on its way to our goal: the human's press also launches the goalie dive (green if well timed)
+    if (this.state === 'play' && !this.cpuOf(t)) {
+      const inc = this.incoming(t), k = inc && this.keeper(t);
+      if (k) k.dive(inc.x, inc.y, inc.tt, inc.tt >= GREEN_TT[0] && inc.tt <= GREEN_TT[1]);
+    }
+  }
+  // the most dangerous shot heading for this team's goal: where and when it crosses the line
+  incoming(t) {
+    const own = -TEAM[t].dir, g = this.cfg.gravity; let best = null;
+    for (const b of this.balls) {
+      if (b.waiting || b.scored) continue;
+      const v = b.body.getLinearVelocity(), p = b.body.getPosition();
+      if (v.x * own < 7) continue;
+      const dx = own * GOAL_X - p.x; if (dx * own <= 0) continue;
+      const tt = dx / v.x; if (tt > 1.0 || tt < 0.08) continue;
+      const y = p.y + v.y * tt - 0.5 * g * tt * tt;
+      if (y < 0.05 || y > GOAL_H + 0.3) continue;
+      if (!best || tt < best.tt) best = { b, tt, y: clamp(y, 0.3, GOAL_H), x: own * (GOAL_X - 0.4) };
+    }
+    return best;
+  }
+  keeper(t) {
+    const own = -TEAM[t].dir; let best = null, bd = 1e9;
+    for (const p of this.players) {
+      if (p.team !== t || !p.grounded || p.fallen || p.diveCD > 0) continue;
+      const d = Math.abs(p.x - own * GOAL_X); if (d < bd && d < 5.2) { bd = d; best = p; }
+    }
+    return best;
+  }
+  cpuDive() {
+    for (const c of this.cpus) {
+      const inc = this.incoming(c.team); if (!inc || inc.tt > 0.55) continue;
+      const key = 'dv' + c.team; if (inc.b[key] && this.time - inc.b[key] < 1) continue;
+      inc.b[key] = this.time;
+      const k = this.keeper(c.team); if (!k || Math.random() > (DIVE_CHANCE[c.level] || 0.6)) continue;
+      k.dive(inc.x, inc.y, inc.tt, Math.random() < (DIVE_GREEN[c.level] || 0.3));
+    }
   }
 
   // ------------------------------------------------ events from physics
@@ -1077,7 +1154,7 @@ class Game {
     }
     if (sign < 0 || A.kind !== 'ball') return;
     const b = A.ball, v = b.body.getLinearVelocity(), sp = Math.hypot(v.x, v.y);
-    if (B.kind === 'floor' || B.kind === 'wall' || B.kind === 'ceil' || B.kind === 'roof') this.sndQ.push(['bounce', sp]);
+    if (B.kind === 'floor' || B.kind === 'wall' || B.kind === 'ceil' || B.kind === 'roof') this.sndQ.push(['bounce', sp, b]);
     else if (B.kind === 'bar') this.sndQ.push(['bar', sp, b]);
     else if (B.kind === 'part') this.touchQ.push([B.player, B.part, b, sp]);
   }
@@ -1103,39 +1180,123 @@ class Game {
     const bv = b.body.getLinearVelocity(), bp = b.body.getPosition(), own = -p.dir;
     if (this.state === 'play' && bv.x * own > 6 && Math.abs(bp.x - own * GOAL_X) < 2.6 && bp.y < GOAL_H + 0.4 && (!b.saveT || this.time - b.saveT > 1)) {
       b.saveT = this.time; this.stat(p.team, 'saves');
-      this.popup(pick(['SAVE!', 'SAVED!', 'WHAT A SAVE!']), bp.x - own * 0.8, bp.y + 1.2, TEAM[p.team].light, 8, 1.1);
+      const dived = p.diveT > 0, green = dived && p.diveGreen;
+      if (green) b.body.setLinearVelocity({ x: p.dir * rand(5, 8), y: rand(2.5, 5.5) });   // a green dive parries it right out
+      this.popup(green ? 'GREEN SAVE!' : dived ? 'DIVING SAVE!' : pick(['SAVE!', 'SAVED!', 'WHAT A SAVE!']), bp.x - own * 0.8, bp.y + 1.2, green ? '#3ddc5a' : TEAM[p.team].light, dived ? 16 : 8, 1.3);
+      if (dived) {
+        this.rings.push({ x: bp.x, y: bp.y, t: 0, col: green ? '#3ddc5a' : '#ffffff' });
+        this.addShake(green ? 6 : 4); this.excite = Math.max(this.excite, 0.8); this.sfx.ooh();
+        for (let i = 0; i < (green ? 16 : 8); i++) this.addPart(bp.x, bp.y, rand(-5, 5), rand(-2, 5), 8, rand(0.3, 0.6), green ? '#3ddc5a' : '#ffffff', pick([1, 2]));
+        if (green) { this.hype(); this.sfx.cheer(); this.slowmo(0.45, 0.35); this.cam.fx = bp.x; this.cam.fy = bp.y; this.cam.goalT = 0.5; this.cam.zt = 1.5; }
+      }
     }
   }
+  // can this player's kick or header count as green? A human has to be near the top of the hop; the CPU gets it by chance
+  greenTiming(p, head) {
+    if (p.grounded || p.fallen || this.time < p.greenAt) return false;
+    const cpu = this.cpuOf(p.team);
+    if (cpu) return Math.random() < (GREEN_CHANCE[cpu.level] || 0.14) * (head ? 0.5 : 1);
+    return Math.abs(p.body.getLinearVelocity().y) < GREEN_VY;
+  }
+  // which kick this is, from where the ball is relative to the player and whether they are in the air
+  styleOf(p, bp, head) {
+    const c = p.center(), rx = (bp.x - c.x) * p.dir, ry = bp.y - c.y, air = !p.grounded && p.airT > 0.04, th = p.angle();
+    if (head) return air && p.body.getLinearVelocity().x * p.dir > 1.5 && ry < 0.8 && rx > 0.1 ? 'dive' : 'normal';
+    if (air && ((ry > 0.3 && rx < 0.3) || Math.abs(th) > 1.9)) return 'bicycle';
+    if (air && ry > 0.45 && rx >= 0.3) return 'scorpion';
+    if (!air && rx < 0.25 && ry < 0.25) return 'rabona';
+    if (air && ry > -0.3) return 'volley';
+    return 'normal';
+  }
+  styleFx(p, st, bp, sp) {
+    const d = p.dir;
+    if (st === 'bicycle') p.stylePose(d * 2.9, d * 1.6, d * 5, 0.5);
+    else if (st === 'scorpion') p.stylePose(d * 3.1, d * 2.4, -d * 3.5, 0.5);
+    else if (st === 'rabona') p.stylePose(-d * 0.9, d * 0.6, -d * 1.5, 0.45);
+    else if (st === 'volley') p.stylePose(d * 1.9, d * 1.8, -d * 1.2, 0.35);
+    else if (st === 'dive') p.stylePose(null, d * 2.9, -d * 5, 0.45);
+    if (st === 'normal') return;
+    const col = STYLES[st].col;
+    for (let i = 0; i < 8; i++) this.addPart(bp.x, bp.y, rand(-3, 3), rand(-1, 4), 6, rand(0.25, 0.5), col, 2);
+    if (sp > 8 && this.time >= p.popAt) { p.popAt = this.time + 1.2; this.popup(STYLES[st].name, bp.x, bp.y + 0.7, col, 8, 1.1); }
+  }
+  recordStyle(team, st, sp) {
+    const S = this.stats[team]; if (this.state !== 'play') return;
+    S.fastest = Math.max(S.fastest, sp);
+    if (st !== 'normal') S.styles[st] = Math.max(S.styles[st] || 0, sp);
+  }
+  greenFx(p, b, bp, sp) {
+    this.stat(p.team, 'greens'); p.greenAt = this.time + 1.2;
+    b.fx = { col: '#3ddc5a', until: this.time + 1.8, green: true };
+    this.popup('GREEN SHOT!', bp.x - p.dir * 0.2, bp.y + 2.1, '#3ddc5a', 10, 1.3);
+    this.rings.push({ x: bp.x, y: bp.y, t: 0, col: '#3ddc5a' });
+    this.addShake(5); this.slowmo(0.4, 0.4); this.excite = Math.max(this.excite, 0.6);
+    this.cam.fx = bp.x + p.dir * 1.5; this.cam.fy = bp.y; this.cam.goalT = 0.55; this.cam.zt = 1.45;
+    if (this.state === 'play') this.hype();
+    for (let i = 0; i < 14; i++) this.addPart(bp.x, bp.y, rand(-4, 4), rand(-3, 3), 6, rand(0.25, 0.5), pick(['#3ddc5a', '#8dff9f', '#ffd23f']), pick([1, 2]));
+  }
+  ripple(x, y, a) { if (this.ripples.length < 8) this.ripples.push({ side: x > 0 ? 1 : -1, x, y, a, t: 0 }); }
   // a boot swinging through the ball: it goes the way the boot was moving, hard
   kick(p, b) {
     if (p.kickCD > 0) return;
     const sw = p.swing(); if (sw < 3) return;
     this.checkSave(p, b);
-    const bp = b.body.getPosition(), fv = p.kleg.getLinearVelocityFromWorldPoint(bp), k = clamp(sw / 16, 0.35, 1), B = this.cfg.ball;
+    const bp = b.body.getPosition(), boot = p.bootPos(), fv = p.kleg.getLinearVelocityFromWorldPoint(bp), k = clamp(sw / 16, 0.35, 1), B = this.cfg.ball;
+    const fire = this.fireT[p.team] > 0, st = this.styleOf(p, bp, false);
     let vx = (fv.x * 1.2 + p.dir * 3 * k) * B.kick, vy = (fv.y * 1.1 + 2.2 * k) * B.kick;
-    const sp = Math.hypot(vx, vy), cap = KICK_SPEED * B.kick;
+    const sp = Math.hypot(vx, vy), cap = KICK_SPEED * B.kick * (fire ? 1.15 : 1) * (st === 'volley' ? 1.05 : 1);
     if (sp > cap) { vx *= cap / sp; vy *= cap / sp; }
+    else if (fire) { vx *= 1.15; vy *= 1.15; }
+    const green = sw > 6 && this.greenTiming(p, false);
     const cur = b.body.getLinearVelocity();
-    if (Math.hypot(vx, vy) > Math.hypot(cur.x, cur.y) * 0.6) b.body.setLinearVelocity({ x: vx, y: vy });
-    b.body.setAngularVelocity(-p.dir * 12 * k);
+    // strike below the ball's centre: backspin that floats it; above: topspin that dips. Rabonas bend the most.
+    let spin = -p.dir * 12 * k + p.dir * clamp((bp.y - boot.y) * 40, -9, 9) * k * (st === 'rabona' ? 2 : 1);
+    if (green) {
+      const spd = Math.max(14, Math.min(MAX_BALL - 1.5, 19.5 * B.kick * (fire ? 1.08 : 1))), g = this.cfg.gravity;
+      const tx = p.dir * (GOAL_X - 0.2), dx = tx - bp.x, dy = rand(0.45, GOAL_H - 0.45) - bp.y;
+      if (dx * p.dir > 1) {
+        const tt = Math.max(0.12, Math.abs(dx) / spd);
+        vx = dx / tt; vy = clamp(dy / tt + 0.5 * g * tt, -spd, spd);
+      } else { vx = p.dir * spd; vy = 1; }
+      b.body.setLinearVelocity({ x: vx, y: vy }); spin = -p.dir * 6;
+    } else if (Math.hypot(vx, vy) > Math.hypot(cur.x, cur.y) * 0.6) b.body.setLinearVelocity({ x: vx, y: vy });
+    const fsp = Math.hypot(vx, vy);
+    b.body.setAngularVelocity(spin);
     p.kickCD = 0.18;
-    b.touch = { p, part: 'kick', t: this.time, x: bp.x, bicycle: Math.abs(p.angle()) > 1.9 };
+    b.touch = { p, part: 'kick', t: this.time, x: bp.x, bicycle: st === 'bicycle', style: st, green };
     this.stat(p.team, 'kicks');
     if (vx * p.dir > 8 && bp.x * p.dir > -2) this.stat(p.team, 'shots');
-    this.sfx.kick(clamp(Math.hypot(vx, vy) / 14, 0.3, 1));
-    if (Math.hypot(vx, vy) > 13) { this.addShake(2); for (let i = 0; i < 6; i++) this.addPart(bp.x, bp.y, rand(-2, 2), rand(0, 3), 10, rand(0.2, 0.4), '#ffffff', 1); }
+    this.sfx.kick(clamp(fsp / 14, 0.3, 1));
+    this.styleFx(p, st, bp, fsp);
+    if (st !== 'normal' && fsp > 8) b.fx = { col: STYLES[st].col, until: this.time + 0.7 };
+    if (fire && fsp > 10 && !b.fx) b.fx = { col: '#ff7a1a', until: this.time + 0.6 };
+    if (fsp > 6) this.recordStyle(p.team, st, fsp);
+    if (green) this.greenFx(p, b, bp, fsp);
+    else if (fsp > 13) { this.addShake(2); for (let i = 0; i < 6; i++) this.addPart(bp.x, bp.y, rand(-2, 2), rand(0, 3), 10, rand(0.2, 0.4), '#ffffff', 1); }
   }
   header(p, b, sp) {
     this.checkSave(p, b);
     const hp = p.head.getPosition(), hv = p.head.getLinearVelocity(), bp = b.body.getPosition();
     let nx = bp.x - hp.x, ny = bp.y - hp.y; const n = Math.hypot(nx, ny) || 1; nx /= n; ny /= n;
     const push = Math.max(0, hv.x * nx + hv.y * ny);
-    b.touch = { p, part: 'head', t: this.time, x: bp.x };
+    const st = this.styleOf(p, bp, true), fire = this.fireT[p.team] > 0;
+    b.touch = { p, part: 'head', t: this.time, x: bp.x, style: st, green: false };
     if (push > 1.5 || ny > 0.4) {
-      const cur = b.body.getLinearVelocity(), k = 2 + push * 0.8;
+      const cur = b.body.getLinearVelocity(), k = 2 + push * 0.8 + (st === 'dive' ? 2 : 0);
       let vx = cur.x + nx * k + p.dir * 1.5, vy = cur.y + ny * k;
-      const s = Math.hypot(vx, vy), cap = 15 * this.cfg.ball.kick; if (s > cap) { vx *= cap / s; vy *= cap / s; }
+      const s = Math.hypot(vx, vy), cap = 15 * this.cfg.ball.kick * (fire ? 1.15 : 1); if (s > cap) { vx *= cap / s; vy *= cap / s; }
       b.body.setLinearVelocity({ x: vx, y: vy });
+      const green = push > 1.5 && this.greenTiming(p, true);
+      if (green) {
+        const spd = Math.min(MAX_BALL - 3, 16 * this.cfg.ball.kick * (fire ? 1.1 : 1)), tx = p.dir * (GOAL_X - 0.2), dx = tx - bp.x;
+        if (dx * p.dir > 1) { const tt = Math.max(0.12, Math.abs(dx) / spd), dy = rand(0.45, GOAL_H - 0.45) - bp.y; b.body.setLinearVelocity({ x: dx / tt, y: clamp(dy / tt + 0.5 * this.cfg.gravity * tt, -spd, spd) }); }
+        else b.body.setLinearVelocity({ x: p.dir * spd, y: 1 });
+        b.touch.green = true; this.greenFx(p, b, bp, spd);
+      }
+      const fs = b.body.getLinearVelocity(), fsp = Math.hypot(fs.x, fs.y);
+      if (fsp > 6) this.recordStyle(p.team, st, fsp);
+      if (st !== 'dive') { if (fsp > 9 && !b.fx) b.fx = { col: '#cfe8ff', until: this.time + 0.4 }; } else { b.fx = b.fx || { col: STYLES.dive.col, until: this.time + 0.7 }; }
+      if (st === 'dive') this.styleFx(p, st, bp, fsp);
     }
     if (ny > 0.3 && (push > 1 || sp > 3)) this.stat(p.team, 'headers');
     this.playImpact('head', Math.max(sp, push * 3));
@@ -1157,25 +1318,37 @@ class Game {
     b.scored = true;
     const lt = b.touch, bv = b.body.getLinearVelocity(), sp = Math.hypot(bv.x, bv.y);
     const own = lt && lt.p.team !== team && this.time - lt.t < 5;
-    const kind = own ? 'OWN GOAL!' : lt && lt.part === 'head' && this.time - lt.t < 2 ? 'HEADER!' : lt && lt.bicycle && this.time - lt.t < 2 ? 'BICYCLE KICK!'
+    const recent = lt && this.time - lt.t < 2, sty = recent && lt.style && lt.style !== 'normal' ? lt.style : '', green = !!(recent && lt.green && !own);
+    const kind = own ? 'OWN GOAL!' : sty ? STYLES[sty].name : lt && lt.part === 'head' && this.time - lt.t < 2 ? 'HEADER!'
       : lt && Math.abs(lt.x - side * GOAL_X) > 9 ? 'FROM DISTANCE!' : sp > 14 ? 'WHAT A STRIKE!' : '';
     this.netShake[side > 0 ? 1 : 0] = 1;
     this.excite = 1; this.addShake(6); this.slowmo(0.35, 0.7); if (!REDUCED) this.flash = 0.18;
     this.sfx.roar(); this.sfx.whistle(); this.sfx.jingle(team);
+    if (green || sp > 16 || (this.state === 'play' && this.streak[team] >= 1)) this.sfx.cheer();
+    this.ripple(b.body.getPosition().x, b.body.getPosition().y, clamp(sp / 12, 0.6, 1.5));
+    if (this.state === 'play' || this.state === 'title') this.wave = { x0: side > 0 ? ART_W : 0, dx: -side, t: 0 };
     const gx = side * (GOAL_X + 0.5);
     for (let i = 0; i < 50; i++) this.addPart(gx, rand(0.3, GOAL_H), -side * rand(0, 5), rand(1, 7), 14, rand(0.5, 1.1), pick([TEAM[team].jersey, TEAM[team].light, '#ffffff', '#ffd23f']), pick([1, 2]));
     this.popup('GOAL!', -side * 0.2 + side * 2.2, 4.4, '#ffd23f', 24, 2.2);
     if (kind) this.popup(kind, side * 2.0, 3.2, own ? '#ff8173' : TEAM[team].light, 8, 2.1);
-    this.cam.fx = side * 5.4; this.cam.fy = 2.0; this.cam.goalT = 1.7;
+    this.cam.fx = side * 5.4; this.cam.fy = 2.0; this.cam.goalT = 1.7; this.cam.zt = 1.8;
     b.body.setLinearVelocity({ x: bv.x * 0.35, y: bv.y * 0.35 });
     if (this.state === 'play') {
       this.stat(team, 'goals');
+      // two in a row and the team is ON FIRE for a while; the other team scoring puts the fire out
+      this.streak[team]++; this.streak[1 - team] = 0; this.fireT[1 - team] = 0;
+      if (this.streak[team] >= 2) {
+        const was = this.fireT[team] > 0; this.fireT[team] = FIRE_SECS;
+        if (!was) { this.popup('ON FIRE!', -side * 0.2 + side * 2.2, 5.3, '#ff7a1a', 16, 2.2); this.sfx.cheer(); }
+      }
+      this.celeb = { type: pick(['flip', 'slide', 'pile']) };
       this.score[team]++; this.scorePop[team] = 1; this.state = 'scored'; this.stateT = 0; this.scorer = team;
       this.goalLog.push({ team, own: !!own, kind, t: this.roundT });
       const winner = this.won(team);
       this.goalSound(winner);
-      this.pendingReplay = winner;
-      this.replayLabel = winner ? 'MATCH WINNER' : kind.replace('!', '');
+      this.pendingReplay = true; this.replayWinner = winner; this.scoreBall = Math.max(0, this.balls.indexOf(b));
+      this.replayLabel = winner ? 'MATCH WINNER' : (kind || 'GOAL!').replace('!', '');
+      this.replayTag = [green ? 'GREEN SHOT' : '', sty && winner ? STYLES[sty].short : '', this.fireT[team] > 0 ? 'ON FIRE' : ''].filter(Boolean).join('  +  ');
       this.scoreRec = this.recCount;
       for (const p of this.players) p.celebrate = p.team === team;
     } else if (this.state === 'title') this.titleRollAt = this.time + 2.2;
@@ -1199,6 +1372,8 @@ class Game {
       pl: this.players.map(p => [...pose(p.body), ...pose(p.head), ...pose(p.kleg), p.armA]),
       b: this.balls.map(b => { const p = b.body.getPosition(); return [p.x, p.y, b.body.getAngle()]; }),
       ns: this.netShake.slice(),
+      rp: this.ripples.length ? this.ripples.map(r => ({ side: r.side, x: r.x, y: r.y, a: r.a, t: r.t })) : NO_RIPPLES,
+      fx: this.balls.map(b => b.fx && this.time < b.fx.until ? b.fx.col : 0),
     });
     if (this.rec.length > 300) this.rec.shift();
     this.recCount++;
@@ -1206,11 +1381,30 @@ class Game {
   startReplay() {
     const frames = this.rec.slice(), si = frames.length - 1 - (this.recCount - this.scoreRec);
     if (si < 0 || frames.length < 10) { this.finishReplay(); return; }
-    this.replay = { frames, a: Math.max(0, si - 150), z: Math.min(frames.length - 1, si + 45) };
+    const win = this.replayWinner;
+    this.replay = { frames, a: Math.max(0, si - (win ? 150 : 110)), z: Math.min(frames.length - 1, si + (win ? 45 : 36)), sp: win ? 0.5 : 0.55, bi: Math.min(this.scoreBall, this.balls.length - 1) };
     this.replay.pos = this.replay.a;
+    const f0 = frames[Math.floor(this.replay.a)].b[this.replay.bi] || [0, 3];
+    this.replay.cx = ax(f0[0]); this.replay.cy = ay(f0[1]);
     this.state = 'replay'; this.stateT = 0; this.cam.goalT = 0; this.cam.z = 1;
   }
   finishReplay() { this.replay = null; this.state = 'scored'; this.stateT = 2.6; }
+
+  celebrate() {
+    const c = this.celeb, g = this.cfg.gravity;
+    const mates = this.players.filter(p => p.celebrate);
+    for (const p of mates) {
+      if (!p.grounded || p.jumpCD > 0) continue;
+      if (c && !c.done && this.stateT > 0.4 && p.cdone !== c) {
+        p.cdone = c;
+        if (c.type === 'flip') { p.jump(); const air = 2 * p.hopVel(0).y / g; p.body.setAngularVelocity(p.dir * 6.283 / air); p.spinT = air * 0.9; }
+        else if (c.type === 'slide') { for (const b of p.parts) b.setLinearVelocity({ x: p.dir * 6, y: 1.5 }); p.body.setAngularVelocity(p.dir * 2.5); p.spinT = 0.5; p.jumpCD = 0.8; }
+        else { const mid = mates.reduce((a, q) => a + q.x, 0) / mates.length; p.jump(); for (const b of p.parts) { const lv = b.getLinearVelocity(); b.setLinearVelocity({ x: clamp((mid - p.x) * 1.8, -5, 5), y: lv.y }); } }
+        p.jumpCD = Math.max(p.jumpCD, 0.6);
+      } else if (Math.random() < 0.04) { p.jump(); p.jumpCD = 0.5; }
+    }
+    if (c && this.stateT > 1.4) c.done = true;
+  }
 
   // ------------------------------------------------ simulation
   fixed(dt) {
@@ -1235,7 +1429,13 @@ class Game {
     if (b.waiting) return;
     // rolling along the ground slows it down (sand a lot, snow and rain hardly at all)
     if (p.y < b.r + 0.05 && Math.abs(v.y) < 1.2) b.body.setLinearVelocity({ x: v.x * (1 - this.cfg.pitch.roll * dt), y: v.y });
-    const sp = Math.hypot(v.x, v.y);
+    const sp = Math.hypot(v.x, v.y), w = b.body.getAngularVelocity();
+    // Magnus curl: spin bends the flight (backspin floats, topspin dips)
+    if (Math.abs(w) > 0.5 && sp > 3 && p.y > b.r + 0.15) b.body.applyForceToCenter({ x: -b.body.getMass() * MAG * w * v.y, y: b.body.getMass() * MAG * w * v.x }, true);
+    if (b.fx && this.time < b.fx.until) {
+      if (b.fx.green) for (let i = 0; i < 2; i++) this.addPart(p.x + rand(-0.12, 0.12), p.y + rand(-0.12, 0.12), rand(-0.6, 0.6), rand(0.5, 1.8), -2, rand(0.25, 0.5), pick(['#ff7a1a', '#ffd23f', '#3ddc5a', '#ff3b1a']), pick([2, 3]));
+      else this.addPart(p.x, p.y, rand(-0.3, 0.3), rand(-0.3, 0.3), 0, 0.35, b.fx.col, 2);
+    } else if (!REDUCED && Math.abs(w) > 10 && sp > 8) this.addPart(p.x, p.y, 0, 0, 0, 0.25, 'rgba(255,255,255,0.3)', 1);
     if (sp > MAX_BALL) b.body.setLinearVelocity({ x: v.x * MAX_BALL / sp, y: v.y * MAX_BALL / sp });
     // in the net: under the crossbar and past the goal line
     if (!b.scored && (this.state === 'play' || this.state === 'title') && Math.abs(p.x) > GOAL_X + b.r * 0.5 && p.y < GOAL_H) {
@@ -1257,7 +1457,10 @@ class Game {
           const bp = b.body.getPosition(); this.popup('CROSSBAR!', bp.x - Math.sign(bp.x) * 1.5, GOAL_H + 1.3, '#ffd23f', 8, 1.2);
           if (sp > 10 && this.state === 'play') this.cue('pipe');
         }
-      } else this.playImpact(k, sp);
+      } else {
+        this.playImpact(k, sp);
+        if (k === 'bounce' && b && sp > 2) { const bp = b.body.getPosition(); if (Math.abs(bp.x) > GOAL_X - 0.1 && bp.y < GOAL_H + ROOF_RISE + 0.4) this.ripple(bp.x, bp.y, clamp(sp / 12, 0.3, 1.2)); }
+      }
     }
     this.sndQ.length = 0;
     for (const [p, sp] of this.dustQ) {
@@ -1290,8 +1493,20 @@ class Game {
       }
     }
     for (const b of this.balls) this.ballStep(b, dt);
-    // the scoring team celebrates with little hops
-    if (this.state === 'scored' || this.state === 'over') for (const p of this.players) if (p.celebrate && p.grounded && p.jumpCD <= 0 && Math.random() < 0.04) { p.jump(); p.jumpCD = 0.5; }
+    // the scoring team celebrates: one random routine per goal (backflip, knee slide, pile-on), then little hops
+    if (this.state === 'scored' || this.state === 'over') this.celebrate();
+    if (this.state === 'play') for (let t = 0; t < 2; t++) this.fireT[t] = Math.max(0, this.fireT[t] - dt);
+    if (this.state === 'play' || this.state === 'scored') for (const p of this.players) if (this.fireT[p.team] > 0 && !REDUCED && Math.random() < 0.6) {
+      const c = p.center(); this.addPart(c.x + rand(-0.25, 0.25), c.y + rand(-0.5, 0.4), rand(-0.4, 0.4), rand(1.5, 3.5), -3, rand(0.3, 0.55), pick(['#ff7a1a', '#ffd23f', '#ff3b1a']), pick([1, 2, 2]));
+    }
+    if (this.state === 'play') {
+      this.cpuDive();
+      // a green dive reaches the ball even a little way off the body
+      for (const p of this.players) if (p.diveT > 0 && p.diveGreen) for (const b of this.balls) { const bp = b.body.getPosition(), c = p.center(); if (Math.hypot(bp.x - c.x, bp.y - c.y) < 1.4) this.checkSave(p, b); }
+    }
+    for (let i = this.rings.length - 1; i >= 0; i--) if ((this.rings[i].t += dt) > 0.6) this.rings.splice(i, 1);
+    for (let i = this.ripples.length - 1; i >= 0; i--) if ((this.ripples[i].t += dt) > 1.6) this.ripples.splice(i, 1);
+    if (this.wave && (this.wave.t += dt) > 2.6) this.wave = null;
 
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const q = this.parts[i];
@@ -1322,7 +1537,7 @@ class Game {
   frame(rdt) {
     this.realTime += rdt;
     if (this.tsT > 0) { this.tsT -= rdt; this.timeScale = this.tsTarget; } else this.timeScale = Math.min(1, this.timeScale + rdt * 2.5);
-    if (this.state === 'replay' && this.replay) { this.replay.pos += rdt * 60 * 0.5; if (this.replay.pos >= this.replay.z) this.finishReplay(); }
+    if (this.state === 'replay' && this.replay) { this.replay.pos += rdt * 60 * this.replay.sp; if (this.replay.pos >= this.replay.z) this.finishReplay(); }
     if (this.trans) {
       const tr = this.trans; tr.t += rdt;
       if (!tr.fired && tr.t >= tr.dur / 2) { tr.fired = true; tr.cb(); }
@@ -1333,7 +1548,7 @@ class Game {
     // the goal camera: a quick push in on the net, then back out
     const C = this.cam, on = C.goalT > 0 && this.state !== 'replay';
     C.goalT = Math.max(0, C.goalT - rdt);
-    C.z += ((on ? 1.8 : 1) - C.z) * Math.min(1, rdt * (on ? 4 : 3));
+    C.z += ((on ? (C.zt || 1.8) : 1) - C.z) * Math.min(1, rdt * (on ? 4 : 3));
     if (C.z < 1.002 && !on) C.z = 1;
     C.x += (C.fx - C.x) * Math.min(1, rdt * 7); C.y += (C.fy - C.y) * Math.min(1, rdt * 7);
   }
@@ -1381,14 +1596,22 @@ const RENDER = {
 };
 
 // the net behind the goal line, drawn under the players
-function drawNetBack(g, G, i, shake) {
+function drawNetBack(g, G, i, shake, rps) {
   const s = i ? 1 : -1, t = G.time;
   const fx = Math.round(ax(s * GOAL_X)), bx = s > 0 ? ART_W - 1 : 0, top = Math.round(ay(GOAL_H)), roofB = Math.round(ay(GOAL_H + BAR_T + ROOF_RISE));
   const x0 = Math.min(fx, bx), x1 = Math.max(fx, bx), wob = k => shake > 0.01 ? Math.round(Math.sin(t * 38 + k) * shake * 2.5) * s : 0;
   g.fillStyle = 'rgba(10,12,20,0.18)'; g.fillRect(x0, top, x1 - x0 + 1, 150 - top);
   g.fillStyle = 'rgba(255,255,255,0.55)';
-  for (let y = top + 2; y < 150; y += 3) g.fillRect(x0 + 1 + Math.max(0, wob(y)), y, x1 - x0 - 1, 1);
-  for (let x = x0 + 2; x < x1; x += 3) { const w = wob(x * 0.5); g.fillRect(x + w, top, 1, 150 - top); }
+  // a ripple spreads out from where the ball hit the net and bends the strands as it passes
+  const rp = rps.filter(r => r.side === s).map(r => ({ x: ax(r.x), y: ay(r.y), k: r.a * Math.exp(-r.t * 2.2) * 3.4, t: r.t }));
+  const disp = (px, py) => { let d = 0; for (const r of rp) { const dd = Math.hypot(px - r.x, py - r.y); d += r.k * Math.exp(-dd * dd / 420) * Math.sin(r.t * 26 - dd * 0.35); } return Math.round(d); };
+  if (rp.length) {
+    for (let y = top + 2; y < 150; y += 3) for (let x = x0 + 1; x < x1; x += 5) g.fillRect(x, y + disp(x + 2, y), Math.min(5, x1 - x), 1);
+    for (let x = x0 + 2; x < x1; x += 3) for (let y = top; y < 150; y += 5) g.fillRect(x + disp(x, y + 2), y, 1, Math.min(5, 150 - y));
+  } else {
+    for (let y = top + 2; y < 150; y += 3) g.fillRect(x0 + 1 + Math.max(0, wob(y)), y, x1 - x0 - 1, 1);
+    for (let x = x0 + 2; x < x1; x += 3) { const w = wob(x * 0.5); g.fillRect(x + w, top, 1, 150 - top); }
+  }
   // roof net, sloping up toward the back
   for (let x = x0; x <= x1; x++) { const k = s > 0 ? (x - fx) / (bx - fx) : (fx - x) / (fx - bx), y = Math.round(lerp(top - 3, roofB, k)); g.fillRect(x, y, 1, 1); if ((x & 1) === 0) g.fillRect(x, y + 1, 1, top - 3 - y > 0 ? top - 3 - y : 0); }
   g.fillStyle = '#c9ced8'; g.fillRect(bx - (s > 0 ? 1 : 0), top - 4, 2, 154 - top);   // back post
@@ -1404,12 +1627,13 @@ function drawLow(G, fr) {
   g.drawImage(G.bg, 0, 0);
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
   if (key === 'stadium' || key === 'rain') {
-    const ex = G.excite;
+    const ex = G.excite, wv = G.wave;
     for (const q of G.crowd) {
-      const hop = ex > 0.05 && Math.sin(t * 12 + q.ph) > 0.3 - ex ? Math.round(ex * 2) : 0;
+      let hop = ex > 0.05 && Math.sin(t * 12 + q.ph) > 0.3 - ex ? Math.round(ex * 2) : 0;
+      if (wv) { const dw = Math.abs(q.x - (wv.x0 + wv.dx * wv.t * 150)); if (dw < 26) hop = Math.max(hop, Math.round(4 * Math.cos(dw / 26 * 1.57))); }
       const y = q.yb - hop, dim = key === 'rain';
       R(q.x, y - 4, 4, 4, dim ? shade(q.shirt, -0.45) : q.shirt); R(q.x + 1, y - 7, 3, 3, dim ? shade(q.skin, -0.45) : q.skin);
-      if (hop > 1) { R(q.x - 1, y - 8, 1, 3, q.skin); R(q.x + 4, y - 8, 1, 3, q.skin); }
+      if (hop > 1 || (wv && hop > 0)) { R(q.x - 1, y - 8, 1, 3, q.skin); R(q.x + 4, y - 8, 1, 3, q.skin); }
     }
     if (key === 'stadium') for (const c of G.clouds) { const x = Math.round(c.x), y = Math.round(c.y * 0.4); R(x, y, c.w, 3, 'rgba(255,255,255,0.5)'); }
   } else if (key === 'park' || key === 'beach') {
@@ -1420,7 +1644,8 @@ function drawLow(G, fr) {
   }
   if (G.cfg.wind) for (const s of G.gusts) R(Math.round(s.x), Math.round(s.y), Math.round(s.l * Math.abs(G.windCur)), 1, 'rgba(255,255,255,0.5)');
   const ns = fr ? fr.ns : G.netShake;
-  drawNetBack(g, G, 0, ns[0]); drawNetBack(g, G, 1, ns[1]);
+  const rps = fr ? fr.rp : G.ripples;
+  drawNetBack(g, G, 0, ns[0], rps); drawNetBack(g, G, 1, ns[1], rps);
   const shadow = (x, h, w) => { const k = clamp(1 - h / 5, 0.25, 1), ww = Math.round(w * k); g.fillStyle = `rgba(0,0,0,${(0.22 * k).toFixed(2)})`; g.fillRect(Math.round(ax(x) - ww / 2), 149, ww, 2); };
   if (fr) {
     G.players.forEach((p, i) => { const a = fr.pl[i]; shadow(a[0], Math.max(0, a[1] - p.d.legLen - 0.02), 14); });
@@ -1444,6 +1669,10 @@ function drawScoreboard(G) {
     txt(name, AX(long ? (t === 0 ? x + 26 : x) : x + 13), AY(30), 8, T.light, { ow: 0.8, align: long ? (t === 0 ? 'right' : 'left') : 'center' });
   }
   txt('-', AX(160), AY(13), 8, CREAM);
+  for (let t = 0; t < 2; t++) if (G.fireT[t] > 0 && (G.fireT[t] > 3 || Math.sin(G.realTime * 14) > 0)) {
+    const x = t === 0 ? 142 : 178;
+    txt('ON FIRE', AX(x), AY(37), 8, Math.sin(G.realTime * 18) > 0 ? '#ffd23f' : '#ff7a1a', { ow: 0.8, bold: true });
+  }
 }
 function drawHUD(G) {
   if (G.state === 'title') return;
@@ -1459,8 +1688,29 @@ function drawHUD(G) {
   }
   if (G.state === 'play' && G.matchPoint && G.roundT > 0.3 && G.roundT < 3.2 && Math.sin(G.realTime * 9) > -0.5) txt('MATCH POINT', AX(160), AY(96), 16, '#ffd23f', { bold: true });
 }
+function meterBar(x0, x1, y0, h, pos, g0, g1, on) {
+  ctx.fillStyle = INK; ctx.fillRect(x0 - S, y0 - S, x1 - x0 + 2 * S, h + 2 * S);
+  ctx.fillStyle = '#7a2f2f'; ctx.fillRect(x0, y0, x1 - x0, h);
+  ctx.fillStyle = on ? '#8dff9f' : '#3ddc5a'; ctx.fillRect(x0 + g0 * (x1 - x0), y0, (g1 - g0) * (x1 - x0), h);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x0 + clamp(pos, 0, 1) * (x1 - x0) - S * 0.6, y0 - S * 1.5, S * 1.2, h + S * 3);
+}
+function drawMeters(G) {
+  if (G.state !== 'play' || G.cvc) return;
+  for (const p of G.players) {
+    if (G.cpuOf(p.team) || p.fallen) continue;
+    const hp = p.head.getPosition(), x0 = SX(hp.x - 0.65), x1 = SX(hp.x + 0.65), y0 = SY(hp.y + 0.85), h = 5 * S;
+    // goalie dive meter: left is early, the green middle is the time to dive, right is too late
+    const inc = G.incoming(p.team);
+    if (inc && p.diveCD <= 0 && p.grounded && G.keeper(p.team) === p) { meterBar(x0, x1, y0, h, 1 - inc.tt, 1 - GREEN_TT[1], 1 - GREEN_TT[0], inc.tt >= GREEN_TT[0] && inc.tt <= GREEN_TT[1]); continue; }
+    // shot meter: the green middle is the top of the hop (left rising, right falling)
+    if (p.grounded || !G.balls.some(b => !b.waiting && Math.hypot(b.body.getPosition().x - hp.x, b.body.getPosition().y - hp.y) < 4.2)) continue;
+    const vy = p.body.getLinearVelocity().y, jv = G.cfg.jumpV, gz = GREEN_VY / (2 * jv);
+    meterBar(x0, x1, y0, h, 0.5 - vy / (2 * jv), 0.5 - gz, 0.5 + gz, Math.abs(vy) < GREEN_VY);
+  }
+}
 function drawWorldText(G) {
   if (G.state === 'replay') return;
+  drawMeters(G);
   for (const q of G.pops) {
     const k = q.t < 0.1 ? lerp(0.3, 1.25, q.t / 0.1) : q.t < 0.2 ? lerp(1.25, 1, (q.t - 0.1) / 0.1) : 1;
     ctx.globalAlpha = clamp((q.dur - q.t) / 0.3, 0, 1);
@@ -1513,11 +1763,13 @@ function drawOver(G) {
   const title = G.vsCpu ? (G.winner === 0 ? 'YOU WIN!' : 'CPU WINS!') : `${T.name} WINS!`;
   txt(title, AX(160), AY(28), 24 * k, T.light, { ow: 1.4 });
   txt(`${G.score[0]}  -  ${G.score[1]}`, AX(160), AY(50), 16, CREAM);
-  txt(G.teamName(0), AX(112), AY(66), 8, TEAM[0].light, { ow: 0.8 }); txt(G.teamName(1), AX(208), AY(66), 8, TEAM[1].light, { ow: 0.8 });
-  [['GOALS', 'goals'], ['SHOTS', 'shots'], ['KICKS', 'kicks'], ['HEADERS', 'headers'], ['SAVES', 'saves']].forEach(([label, key], i) => {
-    const y = 77 + i * 9;
+  txt(G.teamName(0), AX(100), AY(66), 8, TEAM[0].light, { ow: 0.8 }); txt(G.teamName(1), AX(220), AY(66), 8, TEAM[1].light, { ow: 0.8 });
+  const bestStyle = t => { let k = '', v = 0; for (const [n, sp] of Object.entries(G.stats[t].styles)) if (sp > v) { v = sp; k = n; } return k ? STYLES[k].short : '-'; };
+  const kmh = t => G.stats[t].fastest ? Math.round(G.stats[t].fastest * 3.6) + ' KMH' : '-';
+  [['GOALS', t => G.stats[t].goals], ['SHOTS', t => G.stats[t].shots], ['SAVES', t => G.stats[t].saves], ['GREEN', t => G.stats[t].greens], ['FASTEST', kmh], ['STYLE', bestStyle]].forEach(([label, f], i) => {
+    const y = 77 + i * 8;
     txt(label, AX(160), AY(y), 8, '#b9c3dd', { ow: 0.7 });
-    txt(String(G.stats[0][key]), AX(112), AY(y), 8, CREAM, { ow: 0.7 }); txt(String(G.stats[1][key]), AX(208), AY(y), 8, CREAM, { ow: 0.7 });
+    txt(String(f(0)), AX(100), AY(y), 8, CREAM, { ow: 0.7 }); txt(String(f(1)), AX(220), AY(y), 8, CREAM, { ow: 0.7 });
   });
   if (G.stateT < 1.2) return;
   const labels = ['PLAY AGAIN', 'MENU'], cols = [['#43b04a', '#2d7a33'], ['#d63a3f', '#8f222b']];
@@ -1549,8 +1801,9 @@ function drawReplayOverlay(G) {
   artRect(0, 0, ART_W, 9, 'rgba(0,0,0,0.85)'); artRect(0, 171, ART_W, 9, 'rgba(0,0,0,0.85)');
   if (Math.sin(G.realTime * 6) > 0) artRect(5, 2, 5, 5, '#e0393e');
   txt('REPLAY', AX(13), AY(4.5), 8, CREAM, { align: 'left', ow: 0.6 });
-  txt(G.replayLabel, AX(160), AY(158), 16, ORANGE, { bold: true });
-  txt('W OR UP ARROW TO SKIP', AX(316), AY(175.5), 8, '#b9c3dd', { align: 'right', ow: 0.6 });
+  txt(G.replayLabel, AX(160), AY(150), 16, ORANGE, { bold: true });
+  if (G.replayTag) txt(G.replayTag, AX(160), AY(162), 8, '#3ddc5a', { ow: 0.8, bold: true });
+  txt(document.body.classList.contains('touch') ? 'TAP TO SKIP' : 'W OR UP ARROW TO SKIP', AX(316), AY(175.5), 8, '#b9c3dd', { align: 'right', ow: 0.6 });
 }
 function render(G) {
   ctx.imageSmoothingEnabled = false;
@@ -1560,9 +1813,14 @@ function render(G) {
   const sa = replay ? 0 : G.shakeA * S; SHX = sa ? rand(-sa, sa) : 0; SHY = sa ? rand(-sa, sa) : 0;
   ctx.save(); ctx.beginPath(); ctx.rect(OX, OY, ART_W * S, ART_H * S); ctx.clip();
   // the goal camera: zoom in around a point on the pitch, never showing past the edges
-  const C = G.cam, zoom = !fr && C.z > 1.001;
+  const C = G.cam, zoom = fr ? true : C.z > 1.001;
   if (zoom) {
-    const Z = C.z, px = clamp(ax(C.x), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(C.y), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
+    let Z = C.z, cx = ax(C.x), cy = ay(C.y);
+    if (fr) {   // the replay camera follows the ball, close in
+      const R = G.replay, bb = fr.b[R.bi] || fr.b[0];
+      R.cx += (ax(bb[0]) - R.cx) * 0.12; R.cy += (ay(bb[1]) - R.cy) * 0.12; Z = 1.6; cx = R.cx; cy = R.cy;
+    }
+    const px = clamp(cx, ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(cy, ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
     ctx.save(); ctx.translate(OX + ART_W * S / 2, OY + ART_H * S / 2); ctx.scale(Z, Z); ctx.translate(-(OX + px * S), -(OY + py * S));
   }
   drawLow(G, fr);
@@ -1572,9 +1830,15 @@ function render(G) {
       const a = fr.pl[i];
       p.draw(RENDER, { body: new Pose(a[0], a[1], a[2]), head: new Pose(a[3], a[4], a[5]), leg: new Pose(a[6], a[7], a[8]), armA: a[9] });
     });
-    fr.b.forEach((x, i) => RENDER.part(G.balls[i].spr, new Pose(x[0], x[1], x[2]), false));
+    const fi = Math.min(G.replay.frames.length - 1, Math.floor(G.replay.pos));
+    fr.b.forEach((x, i) => {
+      if (fr.fx[i]) for (let k = 1; k <= 7; k++) { const q = G.replay.frames[Math.max(0, fi - k * 2)].b[i]; ctx.globalAlpha = 1 - k / 8; ctx.fillStyle = k % 2 ? fr.fx[i] : '#ffd23f'; const sz = (4 - k * 0.3) * S; ctx.fillRect(Math.round(SX(q[0]) - sz / 2), Math.round(SY(q[1]) - sz / 2), Math.ceil(sz), Math.ceil(sz)); }
+      ctx.globalAlpha = 1;
+      RENDER.part(G.balls[i].spr, new Pose(x[0], x[1], x[2]), false);
+    });
     drawGoalFront(G, 0); drawGoalFront(G, 1);
     drawWeather(G);
+    if (zoom) ctx.restore();
     drawHUD(G);
     drawReplayOverlay(G);
   } else {
@@ -1582,6 +1846,8 @@ function render(G) {
     for (const b of G.balls) RENDER.part(b.spr, b.body, false);
     drawGoalFront(G, 0); drawGoalFront(G, 1);
     for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
+    ctx.globalAlpha = 1;
+    for (const r of G.rings) { const k = r.t / 0.6; ctx.globalAlpha = 1 - k; ctx.strokeStyle = r.col; ctx.lineWidth = Math.max(1, (1 - k) * 3 * S); ctx.beginPath(); ctx.arc(SX(r.x), SY(r.y), (0.4 + k * 6) * PPM * S, 0, 6.283); ctx.stroke(); }
     ctx.globalAlpha = 1;
     drawWeather(G);
     drawWorldText(G);
@@ -1732,6 +1998,7 @@ function touchPress(code, down) {
 cv.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse') return;
   touchOn();
+  if (G.state === 'replay') { G.finishReplay(); return; }
   if (G.paused || !(G.state === 'play' || G.state === 'scored')) return;
   const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width);
   touchPress(code, true); touchKeys.set(e.pointerId, code);

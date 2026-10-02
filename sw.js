@@ -2,7 +2,7 @@
 // start with no internet. Pages are fetched fresh when online (so uploads show up), with the cache as backup;
 // the big unchanging files (sounds, physics) come straight from the cache. build.sh stamps VERSION with a
 // hash of the site files, so every upload replaces the old cache.
-const VERSION = 'b282353895';
+const VERSION = '2daf366186';
 const CACHE = 'floppy-' + VERSION, FONTS = 'floppy-fonts';
 const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'clips.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
