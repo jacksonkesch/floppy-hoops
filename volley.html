@@ -89,7 +89,7 @@ const SPIKE_FX = {
   comet:  { name: 'COMET',     cols: ['#ff5d8f', '#ffd23f', '#43f07a', '#6ab7ff', '#c77dff'] },
   meteor: { name: 'METEOR',    cols: ['#3ddc5a', '#b9ffc4', '#ffffff', '#43f07a'] },
 };
-const GREEN_VY = 2.2;                     // m/s: how close to the top of a jump a spike has to be hit to be green
+const GREEN_VY = 3.4;                     // m/s: how close to the top of a jump a spike has to be hit to be green
 const SERVE_DROP = 1.3;                    // seconds into a point before the serve ball drops
 const BALL_G = 0.55;                       // the ball falls at 55% of the players' gravity: floaty
 const GAME_SPEED = 0.95;   // the whole game runs a touch slower than real time
@@ -662,7 +662,8 @@ class Ball {
   constructor(game, team) {
     const B = game.cfg.ball, srv = game.players.find(p => p.team === team && p.slot === 0);
     this.game = game; this.r = B.r; this.team = team;
-    this.spawn = { x: srv.x + srv.dir * 0.3, y: srv.headY0 + srv.d.headR + 3.9 * srv.k };   // hangs above a jump's reach, then drops: the server times a jump serve
+    this.srv = srv;
+    this.spawn = { x: srv.x + srv.dir * 1.2 * srv.k, y: srv.headY0 + 0.9 * srv.k };   // held out in front of the server, then tossed up for the jump serve
     this.body = game.world.createBody({ type: 'dynamic', position: this.spawn, bullet: true, angularDamping: 0.3 });
     this.body.createFixture(new pl.Circle(B.r), { density: B.density, friction: 0.3, restitution: B.rest, filterCategoryBits: CAT_BALL, filterMaskBits: MASK_BALL, userData: { kind: 'ball', ball: this } });
     this.body.setGravityScale(0);
@@ -964,7 +965,9 @@ class CPU {
     const key = b.touchN + (b.waiting ? 'w' : '');
     if (this.readKey !== key || !b.body) { this.readKey = key; this.misread = { x: 1 + gauss() * L.err, y: 1 + gauss() * L.err * 0.5 }; }
     const bp = b.body.getPosition(), bv = b.body.getLinearVelocity(), hold = b.waiting ? Math.max(0, SERVE_DROP - g.roundT) : 0;
-    const path = g.flight(b, bp, { x: bv.x * this.misread.x, y: bv.y * this.misread.y }, 3, hold);
+    let path;
+    if (b.waiting) { const tp = g.tossPlan(b, bp); path = g.flight(b, { x: tp.x, y: tp.y }, { x: 0, y: 0 }, 3.6, hold + tp.T); }   // it hangs at the top of the toss, then falls
+    else path = g.flight(b, bp, { x: bv.x * this.misread.x, y: bv.y * this.misread.y }, 3, hold);
     let best = null;
     for (const p of mine) {
       if (!p.grounded || p.jumpCD > 0) continue;
@@ -1323,6 +1326,12 @@ class Game {
     } else if (part === 'head' && Math.random() < 0.15 && sp > 8) { const hp = p.head.getPosition(); this.popup('HEADER!', hp.x, hp.y + 0.9, CREAM, 8, 0.7); }
     if (this.settings.touch3 === 'on' && b.teamTouches > 3 && playing) this.pointTo(1 - p.team, b, bp, '4 TOUCHES!');
   }
+  // The serve toss: the ball goes up from the server's hand and peaks just above the head, about where a jump
+  // puts the hand. Returns where it peaks (x, y) and how long that takes (T).
+  tossPlan(b, from) {
+    const s = b.srv, g = this.cfg.ballG, y = s.headY0 + s.d.headR + 2.4 * s.k;
+    return { x: s.x + s.dir * 0.3, y, T: Math.sqrt(2 * Math.max(0.2, y - from.y) / g) };
+  }
   // the ball's flight from pos with vel: gravity, wind, walls and the net (the CPU plans with this).
   // hold: seconds it hangs there first (a serve ball that hasn't dropped yet)
   flight(b, pos, vel, horizon = 3, hold = 0) {
@@ -1366,7 +1375,7 @@ class Game {
     this.state = 'scored'; this.stateT = 0; this.score[team]++; this.scorePop[team] = 1; this.scorer = team;
     this.stats[team].points++; if (reason === 'ACE!') this.stats[team].aces++;
     this.longest = Math.max(this.longest, this.rally);
-    this.server = 1 - team;   // the team that lost the point serves the next one
+    this.server = team;   // the team that scored serves the next one
     this.pointPop = { team, x: clamp(pos.x, -6.6, 6.6), y: 2.4, t: 0, reason };
     this.cam.focus = { x: pos.x, y: 1.9, until: this.time + 1.25 };
     this.slowmo(0.35, 0.55); this.addShake(5); this.excite = 1;
@@ -1432,7 +1441,7 @@ class Game {
     if (this.roundT > 0.3 && !this.whistled) { this.whistled = true; if (this.state === 'play') this.sfx.whistle(); }
     for (const b of this.balls) {
       if (b.waiting) {
-        if (this.roundT > SERVE_DROP) { b.waiting = false; b.body.setGravityScale(this.cfg.ballG / this.cfg.gravity); b.body.setLinearVelocity({ x: 0, y: -0.3 }); }
+        if (this.roundT > SERVE_DROP) { const bp = b.body.getPosition(), tp = this.tossPlan(b, bp), T = tp.T; b.waiting = false; b.body.setGravityScale(this.cfg.ballG / this.cfg.gravity); b.body.setLinearVelocity({ x: (tp.x - bp.x) / T, y: this.cfg.ballG * T }); this.sfx.jump(); }
         else { b.body.setTransform({ x: b.spawn.x, y: b.spawn.y + Math.sin(this.time * 4) * 0.05 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); }
       } else if (this.cfg.wind) b.body.applyForceToCenter({ x: b.body.getMass() * this.cfg.wind * this.windCur, y: 0 }, true);
     }
