@@ -120,6 +120,7 @@ const MASK_BALL = CAT_WORLD | CAT_PLAYER | CAT_HOOP;
 const HOOP_CX = 6.45, BOARD_X = 7.12;
 let RIM_Y = 3.5, RIM_HALF = 0.55;          // set per round by the hoop mode
 const METER_TIME = 0.62, METER_GREEN = 0.8, DUNK_RANGE = 2.6;
+const OOP_LATE = 0.5;   // ALLEY-OOP MODE: how long after an in-air catch a press still slams it
 // a HEAD JUMP (off somebody's head) is a springboard, the same for everyone: up, and flying at the hoop you
 // attack, far enough to come down about a metre in front of the rim (from up to about 5 m out)
 const springVel = p => {
@@ -2827,6 +2828,9 @@ class ImpossibleCPU extends CPU {
     const m = g.meters.find(q => q.state === 'charging' && q.player.team === this.team);
     if (m) g.clearMeter(m.player);   // no shots, so a hop with the ball is just a hop
     if (mine.some(p => p.dunk || p.hang)) { this.oop = null; return; }
+    // one of ours just caught a lob up in the air without the slam (the key wasn't down at the catch): press now, while
+    // he's still up there and in reach, and it's the alley-oop
+    if (mine.some(p => p.holding && !p.grounded && g.time - (p.oopCatchT ?? -9) < OOP_LATE - 0.05 && p.canDunk(true))) { this.oop = null; this.press(this.t + 0.2, 'late oop slam'); return; }
     if (this.oop && this.runOop(mine)) return;
     if (this.hold) { if (this.t < this.hold.until && !mine.some(p => p.holding)) return; this.hold = null; this.set(false); }
     if (this.down) { if (this.t >= this.until) this.set(false); return; }
@@ -4612,6 +4616,8 @@ class Game {
     if (canShoot && p.holding && !p.dunk && !p.hang && !this.oopOnly()) {
       if (p.canDunk() || (p.grounded && p.canDunk(true) && Math.random() < 0.35)) p.startDunk(); else this.startMeter(p);
     }
+    // (...except a lob caught in the air a moment ago: still up there and in reach, the press is the slam)
+    else if (canShoot && p.holding && !p.dunk && !p.hang && !p.grounded && this.time - (p.oopCatchT ?? -9) < OOP_LATE && p.canDunk(true)) this.oopSlam(p, p.holding.lastThrower === p);
     p.press();
     if (!quiet) this.sfx.jump();
   }
@@ -4720,6 +4726,8 @@ class Game {
     else { this.note('grab', p); this.sfx.grab(); }
     b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.greenClip = null;
     p.holding = b; p.grabT = this.time;
+    // (ALLEY-OOP MODE: a teammate's lob caught in the air can still be slammed with a press a moment later, see playerPress)
+    p.oopCatchT = this.oopOnly() && !prev && !p.grounded && b.lastThrower && b.lastThrower.team === p.team && this.time - b.throwTime < 2 ? this.time : -9;
     if (this.keyDown(p) && (this.state === 'play' || this.state === 'title' || this.state === 'showcase')) {
       const h = this.hoopFor(p.team), bpos = b.body.getPosition(), nearRim = Math.hypot(bpos.x - h.cx, bpos.y - h.y) < 1.4;
       const rebound = !prev && b.rimT > b.throwTime && this.time - b.rimT < 1.5;
@@ -4728,18 +4736,22 @@ class Game {
         // a lob caught in the air is a slam from anywhere a kangaroo reaches, even if it grazed the rim on the way;
         // anything else (a putback, a steal, a catch on the way down) is just a catch
         const lob = !prev && b.lastThrower && b.lastThrower.team === p.team && this.time - b.throwTime < (rebound ? 1.2 : 2);
-        if (!p.grounded && lob && p.canDunk(true)) {
-          p.startDunk();
-          const sky = this.time - (p.headJumpT || -9) < 1.6;   // caught it after jumping off somebody's head
-          if (p.dunk) this.popup(sky ? 'SKY WALK ALLEY-OOP!' : b.lastThrower === p ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', hp.x, hp.y + 1.2, sky ? '#ff4fa3' : '#ffd23f', sky ? 16 : 8, sky ? 1.6 : 1.2);
-          if (p.dunk && sky) { this.addShake(6); this.slowmo(0.4, 0.5); this.stat(p.team, 'skywalks'); }
-        }
+        if (!p.grounded && lob && p.canDunk(true)) this.oopSlam(p, b.lastThrower === p);
       }
       else if (!p.grounded && this.forceDunk) p.startDunk();
       else if (!p.grounded && rebound && nearRim && (this.dunkOn('tip') || p.canDunk())) p.startDunk(this.pickDunk(p, (h.cx - p.x) * p.dir, true));
       else if (!p.grounded && this.dunkOn('oop') && p.canDunk()) { p.startDunk(); if (oop && p.dunk) this.popup('ALLEY-OOP!', hp.x, hp.y + 1.2, '#ffd23f', 8, 1.2); }
       else this.startMeter(p);
     }
+  }
+  // ALLEY-OOP MODE: the slam off a lob caught in the air (held through the catch, or pressed just after it)
+  oopSlam(p, self) {
+    p.startDunk();
+    if (!p.dunk) return;
+    p.oopCatchT = -9;
+    const hp = p.head.getPosition(), sky = this.time - (p.headJumpT || -9) < 1.6;   // caught it after jumping off somebody's head
+    this.popup(sky ? 'SKY WALK ALLEY-OOP!' : self ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', hp.x, hp.y + 1.2, sky ? '#ff4fa3' : '#ffd23f', sky ? 16 : 8, sky ? 1.6 : 1.2);
+    if (sky) { this.addShake(6); this.slowmo(0.4, 0.5); this.stat(p.team, 'skywalks'); }
   }
   placeHeld(b) {
     const p = b.holder, arm = p.arms[b.arm];
