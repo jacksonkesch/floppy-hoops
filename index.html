@@ -191,18 +191,20 @@ function go(i) {
   try { localStorage.setItem('floppy-last-game', GAMES[i].id); } catch (e) { /* storage unavailable */ }
   setTimeout(() => { if (inArtifact) openFrame(GAMES[i].href); else location.href = GAMES[i].href; }, 350);
 }
-// Inside the Claude artifact the games run in a frame over this page, which keeps the artifact's room open
-// for them (online play) and counts who's here. Anywhere else they're plain pages.
+// Inside the Claude artifact the games run in a frame over this page, which keeps the room open for them and
+// counts who's here. Anywhere else they're plain pages, and this page just counts.
 const inArtifact = !!(window.claude && window.FloppyNet);
-if (inArtifact) {
+if (window.FloppyNet) {
   const roomP = FloppyNet.room();
-  FloppyNet.serveFrames(roomP);
+  if (inArtifact) FloppyNet.serveFrames(roomP);
   roomP.then(room => {
     if (!room) return;
     const count = ps => { online = ps.filter(p => p.kind !== 'agent').length; };
     try { count(room.peers()); } catch (e) { /* not connected yet */ }
     room.onPeers(ch => count(ch.peers), () => {});
   });
+}
+if (inArtifact) {
   addEventListener('message', e => { if (frame && e.source === frame.contentWindow && e.data && e.data.fnet === 'home') closeFrame(); });
 }
 function openFrame(href) {

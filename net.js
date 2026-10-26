@@ -7,13 +7,124 @@
 (() => {
 'use strict';
 const PROTO = 1;
-const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
+const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }];
 const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // no I or O
 const BUF = 2;                                 // ticks a guest keeps in hand against jitter
 const TICK_MS = 1000 / 60 / 0.95;              // the games run at GAME_SPEED 0.95
 const now = () => performance.now();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const call = f => { try { if (typeof f === 'function') f(); } catch (e) { /* already gone */ } };
+
+// ---------------------------------------------------------------- the open room: a free public MQTT relay
+// Anyone with either link (GitHub or the Claude artifact, signed in or not) can find each other here. It only
+// carries the matchmaking; the game itself runs over a direct link between the computers. It mimics the
+// artifact's room: each peer keeps its presence as a retained message (cleared by a last will if the tab
+// dies), so newcomers see everyone at once.
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const TOPIC = 'floppygames/v1/';
+const enc = new TextEncoder(), dec = new TextDecoder();
+const mqStr = s => { const b = enc.encode(s); return [b.length >> 8, b.length & 255, ...b]; };
+function mqPacket(head, body) {
+  const len = []; let n = body.length;
+  do { let d = n & 127; n >>= 7; if (n) d |= 128; len.push(d); } while (n);
+  return new Uint8Array([head, ...len, ...body]);
+}
+// one connection = one room (so each has its own last will)
+function mqConnect(url, name, me) {
+  return new Promise((resolve, reject) => {
+    const base = TOPIC + (name || 'lobby') + '/', mine = base + me;
+    let ws; try { ws = new WebSocket(url, 'mqtt'); } catch (e) { reject(e); return; }
+    ws.binaryType = 'arraybuffer';
+    let buf = new Uint8Array(0), up = false, ping = 0;
+    const subs = new Set();
+    const c = {
+      base, mine, onMsg: null, onClose: null,
+      pub(topic, text, retain) { if (ws.readyState === 1) ws.send(mqPacket(0x30 | (retain ? 1 : 0), [...mqStr(topic), ...enc.encode(text)])); },
+      close() { clearInterval(ping); if (ws.readyState === 1) { c.pub(mine, '', true); ws.send(new Uint8Array([0xe0, 0])); } try { ws.close(); } catch (e) { /* fine */ } },
+    };
+    const timer = setTimeout(() => { try { ws.close(); } catch (e) { /* fine */ } reject(new Error('timeout')); }, 4500);
+    ws.onopen = () => {
+      const id = mqStr('fg' + me + Math.random().toString(36).slice(2, 6));
+      // MQTT 3.1.1, clean session, last will = an empty retained message on our presence (deletes it)
+      ws.send(mqPacket(0x10, [...mqStr('MQTT'), 4, 0x02 | 0x04 | 0x20, 0, 45, ...id, ...mqStr(mine), 0, 0]));
+    };
+    ws.onmessage = e => {
+      const a = new Uint8Array(e.data), b = new Uint8Array(buf.length + a.length); b.set(buf); b.set(a, buf.length); buf = b;
+      for (;;) {
+        let i = 1, n = 0, mul = 1;
+        for (;;) { if (i >= buf.length) return; const d = buf[i++]; n += (d & 127) * mul; mul *= 128; if (!(d & 128)) break; }
+        if (buf.length < i + n) return;
+        const type = buf[0] >> 4, flags = buf[0] & 15, body = buf.subarray(i, i + n);
+        buf = buf.slice(i + n);
+        if (type === 2) {   // CONNACK
+          if (body[1] !== 0) { reject(new Error('refused')); ws.close(); return; }
+          ws.send(mqPacket(0x82, [0, 1, ...mqStr(base + '+'), 0]));
+        } else if (type === 9) {   // SUBACK
+          clearTimeout(timer); up = true;
+          ping = setInterval(() => { if (ws.readyState === 1) ws.send(new Uint8Array([0xc0, 0])); }, 20000);
+          resolve(c);
+        } else if (type === 3) {   // PUBLISH
+          const tl = (body[0] << 8) | body[1], topic = dec.decode(body.subarray(2, 2 + tl));
+          const off = 2 + tl + (((flags >> 1) & 3) ? 2 : 0);
+          if (c.onMsg) c.onMsg(topic, dec.decode(body.subarray(off)), !!(flags & 1));
+        }
+      }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => { clearTimeout(timer); clearInterval(ping); if (!up) reject(new Error('closed')); else if (c.onClose) c.onClose(); };
+  });
+}
+// a room object shaped like the artifact runtime's (peers, onPeers, presence, join, leave)
+function mqRoom(url, name, me) {
+  const peers = new Map(), subs = new Set();
+  let conn = null, mine = {}, timer = 0, beat = 0, left = false, sent = '';
+  const list = () => [...peers.entries()].map(([peer, v]) => ({ peer, isMe: peer === me, sameTab: peer === me, kind: 'viewer', guest: false, presence: v.p, updatedAt: v.at }));
+  const fire = () => { const ps = list(); for (const h of subs) try { h({ peers: ps, joined: [], left: [], updated: [] }); } catch (e) { console.error(e); } };
+  const flush = () => { timer = 0; if (conn) { sent = JSON.stringify({ p: mine, t: Date.now() }); conn.pub(conn.mine, sent, true); } };
+  peers.set(me, { p: {}, at: Date.now() });
+  function attach(c) {
+    conn = c;
+    c.onMsg = (topic, text, retained) => {
+      const id = topic.slice(c.base.length); if (id === me || !id) return;
+      if (!text) { if (peers.delete(id)) fire(); return; }
+      let m; try { m = JSON.parse(text); } catch (e) { return; }
+      if (retained && Math.abs(Date.now() - m.t) > 90000) return;   // a ghost left behind by a dead tab
+      peers.set(id, { p: m.p || {}, at: Date.now() }); fire();
+    };
+    c.onClose = () => { conn = null; if (left) return; for (const id of [...peers.keys()]) if (id !== me) peers.delete(id); fire(); setTimeout(reconnect, 1500); };
+    flush();
+  }
+  function reconnect() { if (left) return; mqConnect(url, name, me).then(attach, () => setTimeout(reconnect, 3000)); }
+  // say we're still here now and then, and forget anyone who stopped saying so
+  beat = setInterval(() => {
+    if (conn) flush();
+    let gone = false;
+    for (const [id, v] of peers) if (id !== me && Date.now() - v.at > 60000) { peers.delete(id); gone = true; }
+    if (gone) fire();
+  }, 20000);
+  const api = {
+    get connected() { return !!conn; },
+    peers: list,
+    onPeers(h) { subs.add(h); setTimeout(() => { if (subs.has(h)) h({ peers: list(), joined: [], left: [], updated: [] }); }, 0); return () => subs.delete(h); },
+    presence(patch) {
+      for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; }
+      peers.get(me).p = JSON.parse(JSON.stringify(mine)); fire();
+      if (!timer) timer = setTimeout(flush, 30);
+      return Promise.resolve();
+    },
+    emit() { return Promise.resolve(); }, on() { return () => {}; },
+    join: n => mqConnect(url, n, me).then(c => { const r = mqRoom(url, n, me); r.attach(c); return r.api; }, () => Promise.reject({ code: 'upstream_error' })),
+    leave() { left = true; clearInterval(beat); clearTimeout(timer); if (conn) conn.close(); conn = null; return Promise.resolve(); },
+  };
+  return { api, attach };
+}
+async function openRoom() {
+  const me = Math.random().toString(36).slice(2, 10);
+  for (const url of BROKERS) {
+    try { const c = await mqConnect(url, '', me), r = mqRoom(url, '', me); r.attach(c); return r.api; } catch (e) { /* try the next relay */ }
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------- the room, served over a MessagePort
 function servePort(port, roomP) {
@@ -60,7 +171,8 @@ function servePort(port, roomP) {
 
 // the artifact's room, asked for once per page
 let roomP = null;
-const room = () => roomP || (roomP = (window.claude && claude.use ? Promise.resolve().then(() => claude.use('room')) : Promise.resolve(null)).catch(() => null));
+// the open relay first, so GitHub and artifact players all meet in the same place; the artifact's own room only if no relay answers
+const room = () => roomP || (roomP = openRoom().catch(() => null).then(r => r || (window.claude && claude.use ? Promise.resolve().then(() => claude.use('room')).catch(() => null) : null)));
 // is this page a game running inside the picker that holds the room?
 const framedByPicker = () => { try { return parent !== window && !!(parent.FloppyNet && parent.FloppyNet.serving); } catch (e) { return false; } };
 // back to the game picker: the picker closes our frame, or (on our own) we go to it
@@ -84,18 +196,11 @@ class Svc {
     this.ok = null; this.count = 0; this.onCount = null;
     this.id = 0; this.waits = new Map(); this.handlers = new Map();
     this.ready = new Promise(r => { this.readyFn = r; });
-    // Where the room is depends on how we were opened, which a page can't always tell, so every likely source
-    // gets a port and the first to say hello with a room wins: the picker framing us, our own Claude runtime,
-    // or (framed by something we can't look into) our parent.
+    // A game framed by the picker shares the picker's room; anything else opens its own.
     this.port = null; this.tries = 0; this.fails = 0;
-    const own = window.claude && claude.use;
     if (framedByPicker()) this.offer(p => parent.postMessage({ fnet: 'port' }, '*', [p]));
-    else {
-      if (own) this.offer(p => servePort(p, room()));
-      if (parent !== window) this.offer(p => parent.postMessage({ fnet: 'port' }, '*', [p]));
-      if (!own && parent === window) this.offer(p => servePort(p, Promise.resolve(null)));
-    }
-    setTimeout(() => this.hello(false), 12000);
+    else this.offer(p => servePort(p, room()));
+    setTimeout(() => this.hello(false), 25000);
     addEventListener('pagehide', () => { try { if (this.port) this.port.postMessage({ op: 'bye' }); } catch (e) { /* fine */ } });
   }
   offer(open) {
@@ -170,7 +275,7 @@ class Session {
   get live() { return this.phase === 'live'; }
 
   async start() {
-    if (!(await this.svc.ready)) return this.end('ONLINE PLAY ONLY WORKS INSIDE THE CLAUDE ARTIFACT');
+    if (!(await this.svc.ready)) return this.end('COULD NOT REACH THE ONLINE SERVER, CHECK YOUR INTERNET');
     for (let tries = 0; ; tries++) {
       if (this.isHost) this.code = randomCode();
       else if (this.code.length !== 4) return this.end('ROOM CODES ARE 4 LETTERS');

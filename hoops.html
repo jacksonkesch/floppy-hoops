@@ -5857,7 +5857,7 @@ function onlineEsc() {
 }
 function onlineGo(host) {
   if (G.net) return;
-  if (!netSvc) { ON.err = 'ONLINE PLAY ONLY WORKS INSIDE THE CLAUDE ARTIFACT'; return; }
+  if (!netSvc) { ON.err = 'ONLINE PLAY NEEDS THE INTERNET'; return; }
   if (!host && ON.code.length !== 4) { ON.err = 'TYPE THE 4-LETTER ROOM CODE'; return; }
   ON.err = ''; ON.live = false;
   const T = G.net = new FloppyNet.Session(netSvc, {
