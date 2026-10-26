@@ -259,7 +259,7 @@ function randomCode() {
 // q: ping, rt: rtt, x: tick it went out of sync at }.
 class Session {
   constructor(service, o) {
-    this.svc = service; this.game = o.game; this.isHost = !!o.host; this.size = o.size || 1;
+    this.svc = service; this.game = o.game; this.isHost = !!o.host; this.size = o.size || 1; this.max = o.max || this.size * 2;
     this.onChange = o.onChange || (() => {}); this.onEnd = o.onEnd || (() => {}); this.onDesync = o.onDesync || null;
     this.code = String(o.code || '').toUpperCase().replace(/[^A-Z]/g, '');
     this.phase = 'joining';                 // joining -> lobby -> live -> closed
@@ -321,7 +321,7 @@ class Session {
 
   // ------------------------------------------------ host side
   hostInfo() {
-    return { g: this.game, v: PROTO, size: this.size, st: this.live ? 'play' : 'lobby', seats: this.seats.slice(),
+    return { g: this.game, v: PROTO, size: this.size, max: this.max, st: this.live ? 'play' : 'lobby', seats: this.seats.slice(),
       up: this.seats.map((p, i) => i === 0 ? 2 : this.linkUp(this.links.get(p))),
       ms: this.seats.map(p => { const l = this.links.get(p); return l ? Math.round(l.rtt) : 0; }) };
   }
@@ -341,7 +341,7 @@ class Session {
     }
     for (const p of others) {
       const pr = p.presence || {};
-      if (pr.j === PROTO && !this.live && !this.seats.includes(p.peer) && this.seats.length < this.size * 2) {
+      if (pr.j === PROTO && !this.live && !this.seats.includes(p.peer) && this.seats.length < this.max) {
         this.seats.push(p.peer); this.links.set(p.peer, this.newLink(p.peer)); changed = true;
       }
       const l = this.links.get(p.peer); if (!l || l.gone) continue;
@@ -395,11 +395,11 @@ class Session {
     this.hostPeer = host.peer;
     const h = this.info = host.presence.h;
     if (h.v !== PROTO) return this.end('THE HOST HAS A DIFFERENT VERSION, RELOAD BOTH PAGES');
-    this.size = h.size; this.seats = h.seats.slice();
+    this.size = h.size; this.max = h.max || h.size * 2; this.seats = h.seats.slice();
     const seat = this.seats.indexOf(this.me);
     if (seat < 0) {
       if (this.mySeat >= 0 || h.st === 'play') return this.end(this.mySeat >= 0 ? 'DROPPED FROM THE ROOM' : 'THAT MATCH ALREADY STARTED');
-      if (this.seats.length >= h.size * 2) {
+      if (this.seats.length >= this.max) {
         if (!this.fullT) this.fullT = now();
         else if (now() - this.fullT > 3000) return this.end('THAT ROOM IS FULL');
       }
@@ -539,7 +539,7 @@ class Session {
   view() {
     const h = this.isHost ? this.hostInfo() : this.info;
     const seats = h ? h.seats.map((p, i) => ({ me: p === this.me, host: i === 0, up: h.up[i], ms: h.ms[i] })) : [];
-    return { phase: this.phase, code: this.code, size: h ? h.size : this.size, isHost: this.isHost, seats, canStart: this.canStart(), mySeat: this.mySeat, rtt: Math.round(this.rtt) };
+    return { phase: this.phase, code: this.code, size: h ? h.size : this.size, max: h ? h.max || h.size * 2 : this.max, isHost: this.isHost, seats, canStart: this.canStart(), mySeat: this.mySeat, rtt: Math.round(this.rtt) };
   }
   ping() {
     if (!this.isHost) return Math.round(this.rtt);

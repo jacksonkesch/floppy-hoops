@@ -4634,7 +4634,7 @@ class Game {
     if (ev.slot !== undefined) {
       const p = this.players.find(q => q.team === ev.team && q.slot === ev.slot); if (!p) return;
       p.keyHeld = ev.down;
-      if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.playerPress(p, this.state !== 'scored'); }
+      if (ev.down) { if (this.state === 'play' || this.state === 'title' || this.state === 'scored') this.playerPress(p, this.state !== 'scored', ev.quiet); }
       else this.playerRelease(p);
       return;
     }
@@ -5040,10 +5040,16 @@ class Game {
     this.online = this.net; this.netSeats = c.seats; this.netGone = new Set(); this.netHeld = false; this.netSyncAt = 0; this.netSyncSent = -999;
     this.newGame();
   }
-  // seats alternate red, blue, red...: seat i plays team i % 2, slot i >> 1
+  // seats alternate red, blue, red...: seat i plays team i % 2. A team with fewer people than spots shares
+  // them out, so one person on a 2-man team runs both players (a 2v2 with just two people)
+  netSlots(seat) {
+    const t = seat % 2, j = seat >> 1, h = Math.ceil((this.netSeats - t) / 2), k = this.players.filter(p => p.team === t).length, out = [];
+    for (let s = j; s < k; s += h) out.push([t, s]);
+    return out;
+  }
   netPress(seat, down) {
     if (down && this.state === 'over') { this.overContinue(); return; }
-    this.evq.push({ team: seat % 2, slot: seat >> 1, down });
+    this.netSlots(seat).forEach(([team, slot], i) => this.evq.push({ team, slot, down, quiet: i > 0 }));
   }
   netHash() {   // a fingerprint of the match, to notice if two computers ever drift apart
     let s = this.state + this.score + '|' + this.round;
@@ -5456,7 +5462,7 @@ function drawWorldText(G) {
   // 4 / 6 PLAYERS: whose key is whose, over each head at the start of the first rounds (online: YOU, every round)
   if (G.four && G.state === 'play' && (G.online || G.round <= 2) && G.roundT < 3.5) {
     const seat = G.online ? G.online.mySeat : -1;
-    const tags = G.online ? (seat >= 0 ? [[seat % 2, seat >> 1, 'YOU']] : []) : Object.entries(G.keyMap || FOUR_KEYS).map(([code, [t, s]]) => [t, s, FOUR_LABEL[code]]);
+    const tags = G.online ? (seat >= 0 ? G.netSlots(seat).map(([t, s]) => [t, s, 'YOU']) : []) : Object.entries(G.keyMap || FOUR_KEYS).map(([code, [t, s]]) => [t, s, FOUR_LABEL[code]]);
     for (const [t, s, label] of tags) {
       const p = G.players.find(q => q.team === t && q.slot === s); if (!p) continue;
       const hp = p.head.getPosition(), bob = Math.sin(G.realTime * 6 + s) * 1.5;
@@ -5778,7 +5784,7 @@ resize();
 window.addEventListener('resize', resize);
 // ---------------------------------------------------------------- PLAY ONLINE: the room screen (net.js does the talking)
 const onlineEl = document.getElementById('online'), onlineBody = document.getElementById('online-body');
-const ON = { size: 1, code: '', err: '', shape: '', live: false };
+const ON = { size: 1, max: 2, code: '', err: '', shape: '', live: false };
 const netSvc = window.FloppyNet ? FloppyNet.connect() : null;
 const countText = n => n > 0 ? `${n} ${n === 1 ? 'PERSON' : 'PEOPLE'} ONLINE NOW` : '';
 if (netSvc) {
@@ -5786,12 +5792,14 @@ if (netSvc) {
   netSvc.onCount = n => { G.onlineCount = n; renderOnline(); };
 }
 const vol = x => `<span data-v>${x}</span>`;   // text that changes while the screen is up (patched in place)
+// how many people the room takes: 2 up to every spot on the court (empty spots are played by teammates)
+const maxSeg = (cur, size, off) => `<div class="seg">${[2, 3, 4, 5, 6].filter(m => m <= size * 2).map(m => `<button type="button" id="on-max-${m}" aria-pressed="${cur === m}"${off && off(m) ? ' disabled' : ''}>${m}</button>`).join('')}</div>`;
 const sizeSeg = (cur, off) => `<div class="seg">${[1, 2, 3].map(k => `<button type="button" id="on-size-${k}" aria-pressed="${cur === k}"${off && off(k) ? ' disabled' : ''}>${k} V ${k}</button>`).join('')}</div>`;
 function seatsHtml(v) {
   let h = '<div class="teams">';
   for (let t = 0; t < 2; t++) {
     h += `<div class="team t${t}"><h3>${t ? 'BLUE' : 'RED'}</h3>`;
-    for (let i = t; i < v.size * 2; i += 2) {
+    for (let i = t; i < v.max; i += 2) {
       const s = v.seats[i];
       if (!s) { h += '<div class="seat open"><span>OPEN</span></div>'; continue; }
       const link = s.host ? 'HOST' : !s.up ? 'CONNECTING' : `${s.ms} MS${s.up === 1 ? ' (RELAY)' : ''}`;
@@ -5807,6 +5815,7 @@ function onlineHtml() {
 <p class="note count">${vol(countText(G.onlineCount))}</p>
 ${ON.err ? `<p class="err" role="alert">${ON.err}</p>` : ''}
 <div class="row"><span class="lbl">TEAMS</span>${sizeSeg(ON.size)}</div>
+<div class="row"><span class="lbl">PEOPLE</span>${maxSeg(ON.max, ON.size)}</div>
 <div class="row"><span class="lbl">NEW ROOM</span><button type="button" class="go" id="on-create">CREATE ROOM</button></div>
 <p class="note">You get a 4-letter code. Anyone you've shared this page with types it in to join. The room plays your GAME MODES.</p>
 <div class="row"><span class="lbl">HAVE A CODE?</span><input id="on-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" placeholder="ABCD" value="${ON.code}"><button type="button" id="on-join">JOIN</button></div>
@@ -5819,8 +5828,9 @@ ${ON.err ? `<p class="err" role="alert">${ON.err}</p>` : ''}
 <p class="code">${v.code}</p>
 <p class="note">${v.isHost ? 'Send this code to your friends. They open Floppy Hoops, pick PLAY ONLINE and type it in.' : 'You\'re in. The host starts the match.'}</p>
 <div class="row"><span class="lbl">TEAMS</span>${v.isHost ? sizeSeg(v.size, k => k * 2 < n) : `<span>${v.size} V ${v.size}</span>`}</div>
+<div class="row"><span class="lbl">PEOPLE</span>${v.isHost ? maxSeg(v.max, v.size, m => m < n) : `<span>${v.max}</span>`}</div>
 ${seatsHtml(v)}
-${n > 2 && n % 2 ? '<p class="note">Odd number of players: blue gets a teammate who just stands there.</p>' : ''}
+${v.max < v.size * 2 ? '<p class="note">Not enough people for every spot? You also play the empty spots on your team.</p>' : ''}
 <div class="foot">${v.isHost ? `<button type="button" class="go" id="on-start"${v.canStart ? '' : ' disabled'}>START</button>` : ''}<button type="button" id="on-leave">LEAVE</button><span class="hint">${!v.isHost ? 'WAITING FOR THE HOST' : n < 2 ? 'WAITING FOR PLAYERS' : v.canStart ? n + ' PLAYERS READY' : 'CONNECTING EVERYONE...'}</span></div>`;
   return `<h2 id="online-title">ONLINE MATCH</h2>
 <p class="note">ROOM ${v.code} / PING ${vol(T.ping() + ' MS')}</p>
@@ -5861,7 +5871,7 @@ function onlineGo(host) {
   if (!host && ON.code.length !== 4) { ON.err = 'TYPE THE 4-LETTER ROOM CODE'; return; }
   ON.err = ''; ON.live = false;
   const T = G.net = new FloppyNet.Session(netSvc, {
-    game: 'hoops', host, size: ON.size, code: host ? '' : ON.code,
+    game: 'hoops', host, size: ON.size, max: ON.max, code: host ? '' : ON.code,
     onChange() {
       if (G.net !== T) return;
       if (T.live && !ON.live) { ON.live = true; closeOnline(); } else renderOnline();
@@ -5878,7 +5888,7 @@ function onlineGo(host) {
 function onlineBegin() {   // host: everyone starts the same match on the same tick, with the host's settings
   const T = G.net; if (!T || !T.isHost || !T.canStart()) return;
   const n = T.seats.length, s = G.settings;
-  T.begin({ c: 'start', seed: newSeed(), seats: n, set: { modes: s.modes, always: s.always, dunks: s.dunks, target: s.target, winBy2: s.winBy2, teamSize: Math.ceil(n / 2) } });
+  T.begin({ c: 'start', seed: newSeed(), seats: n, set: { modes: s.modes, always: s.always, dunks: s.dunks, target: s.target, winBy2: s.winBy2, teamSize: Math.max(T.size, Math.ceil(n / 2)) } });
 }
 onlineBody.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
@@ -5886,7 +5896,11 @@ onlineBody.addEventListener('click', e => {
   const id = b.id, T = G.net;
   if (id.startsWith('on-size-')) {
     const k = +id.slice(8);
-    if (T && T.isHost && T.phase === 'lobby') { T.size = k; T.pubInfo(); } else ON.size = k;
+    if (T && T.isHost && T.phase === 'lobby') { T.size = k; T.max = Math.max(T.seats.length, Math.min(T.max, k * 2)); T.pubInfo(); }
+    else { ON.size = k; ON.max = Math.min(ON.max, k * 2); }
+  } else if (id.startsWith('on-max-')) {
+    const m = +id.slice(7);
+    if (T && T.isHost && T.phase === 'lobby') { T.max = m; T.pubInfo(); } else ON.max = m;
   } else if (id === 'on-create') onlineGo(true);
   else if (id === 'on-join') onlineGo(false);
   else if (id === 'on-back' || id === 'on-resume') { closeOnline(); return; }
