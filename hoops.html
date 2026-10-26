@@ -5116,7 +5116,10 @@ class Game {
     const bp = b.body.getPosition(), bv0 = b.body.getLinearVelocity();
     b.padCD -= dt;
     if (!b.holder) {
-      const order = this.players.slice().sort(() => Math.random() - 0.5);
+      // (a shuffle that rolls exactly n-1 dice: a random sort can roll a different number of times on another
+      // computer, and online that slips everyone's shared dice out of step)
+      const order = this.players.slice();
+      for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)), t = order[i]; order[i] = order[j]; order[j] = t; }
       // the hand works like a magnet: a loose ball close to it gets pulled in
       let pull = null, pd = b.r + 0.25, pdist = 0;
       for (const p of order) {
@@ -5454,7 +5457,7 @@ function drawHUD(G) {
       ctx.globalAlpha = 1;
     }
     if (G.state === 'play' && G.gamePoint && G.roundT > 0.3 && G.roundT < 3.2 && Math.sin(G.realTime * 9) > -0.5) txt('GAME POINT', AX(160), AY(96), 16, '#ffd23f', { bold: true });
-    if (G.online) txt(`PING ${G.online.ping()} MS`, AX(316), AY(175), 7, '#7d88a8', { align: 'right', ow: 0.6 });
+    if (G.online) txt(`PING ${G.online.ping()} MS${G.online.relayed() ? ' (RELAY)' : ''}`, AX(316), AY(175), 7, G.online.relayed() ? ORANGE : '#7d88a8', { align: 'right', ow: 0.6 });
   }
 }
 // text that lives on the court (DUNK / LET GO! over heads, popups), so it moves with the camera

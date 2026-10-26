@@ -1,15 +1,14 @@
 // Floppy Games online play.
 // The Claude room lives in the page the artifact opens (index.html); a game running in its frame borrows it over a
 // MessagePort. The room only carries signaling (presence): players then talk over a WebRTC data channel, or through
-// presence itself if a direct connection can't be made. Matches run host-scheduled lockstep: every computer steps
-// the same seeded sim with the same inputs, and the host decides which tick each input lands on and streams the
-// confirmed ticks out. Guests stay a couple of ticks behind the host to ride out jitter.
+// presence itself if a direct connection can't be made. Matches run delay-based lockstep: every computer steps
+// the same seeded sim with the same inputs, each stamping its own presses a few ticks ahead (see Session).
 (() => {
 'use strict';
-const PROTO = 1;
+const PROTO = 2;
 const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }];
 const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ';   // no I or O
-const BUF = 2;                                 // ticks a guest keeps in hand against jitter
+const MIN_D = 2, MAX_D = 30;                   // input delay bounds, in ticks
 const TICK_MS = 1000 / 60 / 0.95;              // the games run at GAME_SPEED 0.95
 const now = () => performance.now();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -19,8 +18,11 @@ const call = f => { try { if (typeof f === 'function') f(); } catch (e) { /* alr
 // Anyone with either link (GitHub or the Claude artifact, signed in or not) can find each other here. It only
 // carries the matchmaking; the game itself runs over a direct link between the computers. It mimics the
 // artifact's room: each peer keeps its presence as a retained message (cleared by a last will if the tab
-// dies), so newcomers see everyone at once.
-const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+// dies), so newcomers see everyone at once. When two computers can't link directly the game itself rides
+// through here too, so HiveMQ goes first: it passes 60 messages a second along in ~150 ms, while EMQX queues
+// anything past ~8 a second and a relayed match fell 20 seconds behind.
+const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+const GAP = url => url.includes('emqx') ? 150 : 30;   // fewest ms between our messages that the relay keeps up with
 const TOPIC = 'floppygames/v1/';
 const enc = new TextEncoder(), dec = new TextDecoder();
 const mqStr = s => { const b = enc.encode(s); return [b.length >> 8, b.length & 255, ...b]; };
@@ -77,10 +79,10 @@ function mqConnect(url, name, me) {
 // a room object shaped like the artifact runtime's (peers, onPeers, presence, join, leave)
 function mqRoom(url, name, me) {
   const peers = new Map(), subs = new Set();
-  let conn = null, mine = {}, timer = 0, beat = 0, left = false, sent = '';
+  let conn = null, mine = {}, timer = 0, beat = 0, left = false, sent = '', last = 0;
   const list = () => [...peers.entries()].map(([peer, v]) => ({ peer, isMe: peer === me, sameTab: peer === me, kind: 'viewer', guest: false, presence: v.p, updatedAt: v.at }));
   const fire = () => { const ps = list(); for (const h of subs) try { h({ peers: ps, joined: [], left: [], updated: [] }); } catch (e) { console.error(e); } };
-  const flush = () => { timer = 0; if (conn) { sent = JSON.stringify({ p: mine, t: Date.now() }); conn.pub(conn.mine, sent, true); } };
+  const flush = () => { timer = 0; if (conn) { last = Date.now(); sent = JSON.stringify({ p: mine, t: last }); conn.pub(conn.mine, sent, true); } };
   peers.set(me, { p: {}, at: Date.now() });
   function attach(c) {
     conn = c;
@@ -109,7 +111,7 @@ function mqRoom(url, name, me) {
     presence(patch) {
       for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; }
       peers.get(me).p = JSON.parse(JSON.stringify(mine)); fire();
-      if (!timer) timer = setTimeout(flush, 30);
+      if (!timer) timer = setTimeout(flush, Math.max(0, GAP(url) - (Date.now() - last)));
       return Promise.resolve();
     },
     emit() { return Promise.resolve(); }, on() { return () => {}; },
@@ -254,9 +256,16 @@ function randomCode() {
 
 // ---------------------------------------------------------------- a room session
 // Host seat is 0; seats alternate red/blue, so seat i plays team i % 2, slot i >> 1.
-// Host -> guest packet: { t: confirmed through tick, e: [[tick, seat, down] | [tick, -1, command]], a: last input
-// seq heard, h: [tick, hash], r: ping echo }. Guest -> host: { i: [[seq, down]] not yet acked, a: ticks held,
-// q: ping, rt: rtt, x: tick it went out of sync at }.
+// Matches run delay-based lockstep. Every computer stamps its own presses D ticks past its clock and keeps
+// promising "nothing more from me through tick z" (its horizon); nobody steps a tick until every seat has promised
+// past it, so all of them step the same seeded sim with the same presses. D is about half a round trip, and that
+// is all the lag anyone feels: a guest's press doesn't wait to go to the host and back. Guests hear each other
+// through the host, and pace their clocks to the host's.
+// Host -> guest: { n: host tick, t: everyone else settled through here, d: D, e: [[tick, seat, down] |
+// [tick, -1, command]] they haven't got, a: last press seq heard, h: [tick, hash], r: ping echo }.
+// Guest -> host: { i: [[seq, tick, down]] not yet acked, z: horizon, a: ticks got, w: waits so far, q: ping,
+// rt: rtt, x: tick it went out of sync at }.
+const bySeat = evs => evs.length > 1 ? evs.sort((a, b) => a[1] - b[1]) : evs;   // one order on every computer (sort is stable)
 class Session {
   constructor(service, o) {
     this.svc = service; this.game = o.game; this.isHost = !!o.host; this.size = o.size || 1; this.max = o.max || this.size * 2;
@@ -266,8 +275,10 @@ class Session {
     this.error = ''; this.me = null; this.peerList = []; this.hostPeer = null; this.info = null;
     this.seats = []; this.mySeat = this.isHost ? 0 : -1;
     this.links = new Map(); this.link = null; this.busy = false;
-    this.tick = 0; this.acc = 0; this.log = []; this.ownT = 0; this.lastHash = null;
-    this.have = 0; this.evs = new Map(); this.pend = []; this.seq = 0; this.n = 0; this.starve = 0;
+    this.tick = 0; this.acc = 0; this.log = []; this.hz = 0; this.D = MIN_D; this.lastHash = null;
+    this.extra = 0; this.calm = 0; this.waits = 0; this.tuneT = 0;
+    this.have = 0; this.evs = new Map(); this.mine = new Map(); this.pend = []; this.seq = 0; this.n = 0;
+    this.hostT = -1; this.sinceHost = 0; this.pace = 1; this.lastFrame = 0; this.lastOut = 0; this.pingTimer = 0;
     this.rtt = 0; this.lastQ = 0; this.hashes = new Map(); this.hostHash = null; this.bad = 0; this.syncT = 0;
     this.pres = {}; this.infoJson = ''; this.relayOut = this.isHost ? {} : null; this.relayT = 0; this.relayTimer = 0; this.rc = 0;
   }
@@ -315,7 +326,7 @@ class Session {
     else if (m.op === 'perr') console.warn('[net] presence rejected:', m.code);
   }
   pub(patch) { Object.assign(this.pres, patch); this.svc.presence(this.name, patch); }
-  newLink(peer) { return { peer, pc: null, dc: null, open: false, relay: false, answered: 0, offer: null, seat: -1, ack: 0, seq: 0, rtt: 0, heard: now(), rc: 0, gone: false }; }
+  newLink(peer) { return { peer, pc: null, dc: null, open: false, relay: false, answered: 0, offer: null, seat: -1, ack: 0, seq: 0, hz: 0, waits: 0, waits0: 0, rtt: 0, heard: now(), rc: 0, gone: false }; }
   linkUp(l) { return !l ? 0 : l.open ? 2 : l.relay ? 1 : 0; }
   closePc(l) { if (l.pc) { try { l.pc.close(); } catch (e) { /* fine */ } } l.pc = null; l.dc = null; l.open = false; }
 
@@ -337,7 +348,7 @@ class Session {
       if (here.has(peer)) continue;
       const l = this.links.get(peer);
       if (!this.live) { this.seats.splice(this.seats.indexOf(peer), 1); if (l) this.closePc(l); this.links.delete(peer); changed = true; }
-      else if (l && !l.gone) { l.gone = true; this.closePc(l); delete this.relayOut[peer]; this.command({ c: 'gone', s: l.seat }); changed = true; }
+      else if (l && !l.gone) { this.drop(l); changed = true; }
     }
     for (const p of others) {
       const pr = p.presence || {};
@@ -352,6 +363,7 @@ class Session {
     this.pump();
     this.onChange();
   }
+  drop(l) { l.gone = true; this.closePc(l); delete this.relayOut[l.peer]; this.command({ c: 'gone', s: l.seat }); }
   pump() {
     if (this.busy || this.phase === 'closed') return;
     const l = [...this.links.values()].find(k => !k.gone && k.offer && k.offer.n > k.answered);
@@ -376,16 +388,31 @@ class Session {
   canStart() { return this.isHost && this.phase === 'lobby' && this.seats.length >= 2 && this.seats.slice(1).every(p => this.linkUp(this.links.get(p))); }
   begin(cmd) {
     if (!this.canStart()) return false;
-    this.phase = 'live'; this.tick = 0; this.acc = 0; this.ownT = 0; this.log = [[1, -1, cmd]];
-    this.seats.forEach((p, i) => { const l = this.links.get(p); if (l) { l.seat = i; l.ack = 0; l.heard = now(); } });
+    this.phase = 'live'; this.tick = 0; this.acc = 0; this.log = [[1, -1, cmd]];
+    this.extra = 0; this.calm = 0; this.waits = 0; this.tuneT = now(); this.D = this.delay(); this.hz = this.D;
+    this.seats.forEach((p, i) => { const l = this.links.get(p); if (l) { l.seat = i; l.ack = 0; l.hz = 0; l.waits = l.waits0 = 0; l.heard = now(); } });
     this.pubInfo(); this.onChange();
     return true;
   }
-  command(c) { if (this.isHost && this.live) this.log.push([this.tick + 1, -1, c]); return this.tick + 1; }
-  delay() {   // hold the host's own presses back about as long as a guest's take to reach it
-    let m = 0;
-    for (const l of this.links.values()) if (!l.gone && this.linkUp(l)) m = Math.max(m, l.rtt);
-    return Math.max(0, Math.min(6, Math.round(m / 2 / TICK_MS)));
+  stamp() { return Math.max(this.tick + this.D + 1, this.hz + 1); }   // the first tick not yet promised away
+  command(c) { if (!this.isHost || !this.live) return 0; const t = this.stamp(); this.log.push([t, -1, c]); return t; }
+  // how far ahead everyone stamps presses: long enough for a press to reach every other computer before it's due.
+  // Guests hear each other through the host, so with two or more guests the two slowest links add up.
+  delay() {
+    const r = [];
+    for (const l of this.links.values()) if (!l.gone && this.linkUp(l)) r.push(l.rtt);
+    r.sort((a, b) => b - a);
+    const need = r.length > 1 ? (r[0] + r[1]) / 2 : (r[0] || 0) / 2;
+    return Math.max(MIN_D, Math.min(MAX_D, Math.ceil(need / TICK_MS + 1.2) + this.extra));
+  }
+  retune() {   // waiting in the last second (ours or any guest's) means presses arrive too close to due: stamp further out
+    let w = this.waits; this.waits = 0;
+    for (const l of this.links.values()) if (!l.gone) { w = Math.max(w, l.waits - l.waits0); l.waits0 = l.waits; }
+    if (w >= 3) { this.extra = Math.min(this.extra + 1, 8); this.calm = 0; }
+    else if (++this.calm >= 5 && this.extra > 0) { this.extra--; this.calm = 0; }
+    this.D = this.delay();
+    // a guest gone quiet would hold everyone up: carry on without them
+    for (const l of this.links.values()) if (!l.gone && l.seat > 0 && now() - l.heard > 5000) { this.drop(l); this.pubInfo(); this.onChange(); }
   }
 
   // ------------------------------------------------ guest side
@@ -420,6 +447,8 @@ class Session {
     const l = this.link = this.link || this.newLink(this.hostPeer);
     const n = ++this.n;
     this.closePc(l);
+    // ping through the lobby (so the host knows how far ahead to stamp), and keep promising from a hidden tab
+    if (!this.pingTimer) this.pingTimer = setInterval(() => { if (this.phase === 'lobby' ? now() - this.lastQ > 500 : this.live && document.hidden) this.flush(); }, 250);
     const pc = l.pc = new RTCPeerConnection({ iceServers: ICE });
     this.wire(l, pc.createDataChannel('g', { ordered: false, maxRetransmits: 0 }));
     try {
@@ -431,6 +460,8 @@ class Session {
     setTimeout(() => { if (this.phase !== 'closed' && !l.open && !l.relay) { l.relay = true; this.flush(); this.onChange(); } }, 4000);
     setTimeout(() => { if (this.phase !== 'closed' && !l.open && l.pc === pc && this.n < 4) this.connect(); }, 9000);
   }
+  // where the host's clock is now: its last tick, plus what we've stepped since, plus the trip over
+  hostNow() { return this.hostT + this.sinceHost + this.rtt / 2 / TICK_MS * this.pace; }
   hash(t, h) {
     if (this.isHost) this.lastHash = [t, h];
     else { this.hashes.set(t, h); this.check(); }
@@ -471,16 +502,27 @@ class Session {
       if (pk.q) this.sendTo(l, { r: pk.q });
       if (pk.rt) l.rtt = pk.rt;
       if (!this.live || l.gone) return;
-      if (pk.i) for (const [s, v] of pk.i) if (s > l.seq) { l.seq = s; this.log.push([this.tick + 1, l.seat, v]); }
-      if (pk.a > l.ack) l.ack = Math.min(pk.a, this.tick);
+      if (pk.i) for (const [s, t, v] of pk.i) if (s > l.seq) {
+        l.seq = s;
+        if (t <= this.tick) console.warn('[net] a press came in after its tick', t, this.tick);
+        this.log.push([Math.max(t, this.tick + 1), l.seat, v]);
+      }
+      if (pk.z > l.hz) l.hz = pk.z;
+      if (pk.a > l.ack) l.ack = pk.a;
+      if (pk.w > l.waits) l.waits = pk.w;
       if (pk.x && this.onDesync) this.onDesync(pk.x);
     } else {
       if (pk.r) { const d = now() - pk.r; this.rtt = this.rtt ? this.rtt * 0.75 + d * 0.25 : d; }
-      if (pk.t > this.have && this.mySeat >= 0) {
-        for (let k = this.have + 1; k <= pk.t; k++) this.evs.set(k, []);
-        for (const e of pk.e || []) if (e[0] > this.have && e[0] <= pk.t) this.evs.get(e[0]).push(e);
-        this.have = pk.t;
-        if (this.phase === 'lobby') { this.phase = 'live'; this.onChange(); }
+      if (pk.n >= 0 && this.mySeat >= 0) {
+        if (this.phase === 'lobby') { this.phase = 'live'; this.D = this.hz = pk.d; this.onChange(); }
+        if (pk.n >= this.hostT) { this.hostT = pk.n; this.sinceHost = 0; }
+        this.D = pk.d;
+        if (pk.t > this.have) {
+          for (let k = this.have + 1; k <= pk.t; k++) this.evs.set(k, []);
+          for (const e of pk.e || []) if (e[0] > this.have && e[0] <= pk.t) this.evs.get(e[0]).push(e);
+          this.have = pk.t;
+        }
+        if (document.hidden && now() - this.lastOut > 50) this.flush();   // (timers crawl in a hidden tab; messages don't)
       }
       if (pk.a >= 0) this.pend = this.pend.filter(x => x[0] > pk.a);
       if (pk.h && (!this.hostHash || pk.h[0] > this.hostHash[0])) { this.hostHash = pk.h; this.check(); }
@@ -488,9 +530,12 @@ class Session {
   }
   input(down) {
     if (!this.live) return;
-    const v = down ? 1 : 0;
-    if (this.isHost) { this.ownT = Math.max(this.ownT, this.tick + 1 + this.delay()); this.log.push([this.ownT, 0, v]); }
-    else { this.pend.push([++this.seq, v]); this.flush(); }
+    const v = down ? 1 : 0, t = this.stamp();
+    if (this.isHost) { this.log.push([t, 0, v]); this.flush(); return; }
+    this.pend.push([++this.seq, t, v]);
+    if (!this.mine.has(t)) this.mine.set(t, []);
+    this.mine.get(t).push([t, this.mySeat, v]);
+    this.flush();
   }
   flush() {
     if (this.phase === 'closed') return;
@@ -500,15 +545,23 @@ class Session {
         if (l.gone || l.seat < 0) continue;
         min = Math.min(min, l.ack);
         if (!this.linkUp(l)) continue;
-        const pk = { t: this.tick, e: this.log.filter(e => e[0] > l.ack && e[0] <= this.tick), a: l.seq };
+        let t = this.hz;   // everyone but them has promised through t
+        for (const k of this.links.values()) if (k !== l && !k.gone && k.seat > 0) t = Math.min(t, k.hz);
+        const pk = { n: this.tick, t, d: this.D, e: this.log.filter(e => e[0] > l.ack && e[0] <= t && e[1] !== l.seat), a: l.seq };
         if (this.lastHash) pk.h = this.lastHash;
         this.sendTo(l, pk);
       }
       if (this.log.some(e => e[0] <= min)) this.log = this.log.filter(e => e[0] > min);
     } else if (this.link) {
-      const pk = { i: this.pend, a: this.have };
+      if (this.live) {
+        this.hz = Math.max(this.hz, this.tick + this.D);
+        // a hidden tab can't press anything, so promise past the host's clock and nobody waits on us
+        if (document.hidden && this.hostT >= 0) this.hz = Math.max(this.hz, Math.floor(this.hostNow()) + this.D + (this.link.open ? 12 : 90));
+      }
+      const pk = { i: this.pend, z: this.hz, a: this.have, w: this.waits };
       if (now() - this.lastQ > 500) { this.lastQ = now(); pk.q = this.lastQ; if (this.rtt) pk.rt = Math.round(this.rtt); }
       if (this.bad) pk.x = this.bad;
+      this.lastOut = now();
       this.sendTo(this.link, pk);
     }
   }
@@ -518,19 +571,36 @@ class Session {
     if (!this.live) return 0;
     let n = 0;
     if (this.isHost) {
+      if (now() - this.tuneT > 1000) { this.tuneT = now(); this.retune(); }
+      let k = Infinity;   // every guest's presses are in through here
+      for (const l of this.links.values()) if (!l.gone && l.seat > 0) k = Math.min(k, l.hz);
       this.acc = Math.min(this.acc + want, 5);
-      while (this.acc >= 1 && n < 5) { this.acc--; n++; const t = ++this.tick; run(this.log.filter(e => e[0] === t), t); }
-      if (n) this.flush();
+      while (this.acc >= 1 && n < 5) {
+        if (this.tick >= k) { if (this.tick) this.waits++; break; }
+        this.acc--; n++;
+        const t = ++this.tick;
+        run(bySeat(this.log.filter(e => e[0] === t)), t);
+      }
+      this.hz = Math.max(this.hz, this.tick + this.D);
+      this.flush();
     } else {
-      const avail = this.have - this.tick;
-      this.acc += want;
-      n = Math.floor(this.acc);
-      if (avail - n > BUF + 1) n++;                       // drifting behind: catch up a tick at a time
-      if (avail - n > BUF + 10) n = avail - BUF;          // way behind (a hitch): jump most of the way
-      n = Math.max(0, Math.min(n, avail, 12));
-      this.acc = Math.max(0, Math.min(1.5, this.acc - n));
-      for (let i = 0; i < n; i++) { const t = ++this.tick, ev = this.evs.get(t) || []; this.evs.delete(t); run(ev, t); }
-      this.starve = avail === 0 ? this.starve + 1 : 0;
+      const t0 = now(), dt = t0 - this.lastFrame; this.lastFrame = t0;
+      if (dt > 0 && dt < 200) this.pace = this.pace * 0.9 + 0.1 * Math.min(1.5, want / (dt / TICK_MS));   // (slow-mo runs the clock slow)
+      this.sinceHost += want;
+      // pace our clock to the host's: a touch faster when behind, slower when ahead (both clocks count the
+      // fraction of a tick they're owed; the host's is about half a tick on average)
+      const behind = this.hostT >= 0 ? this.hostNow() + 0.5 - (this.tick + this.acc + want) : 0;
+      this.acc = Math.min(this.acc + want * (1 + Math.max(-0.3, Math.min(0.5, behind * 0.08))), 5);
+      let todo = Math.floor(this.acc);
+      if (behind > 12) todo = Math.max(todo, Math.min(240, Math.floor(behind) - 2));   // way behind (a hitch, a hidden tab): jump most of the way
+      while (n < todo) {
+        if (this.tick >= this.have) { if (this.tick) this.waits++; break; }
+        n++;
+        const t = ++this.tick, ev = this.evs.get(t) || [], own = this.mine.get(t);
+        this.evs.delete(t); this.mine.delete(t);
+        run(bySeat(own ? ev.concat(own) : ev), t);
+      }
+      this.acc = Math.max(0, this.acc - n);
       this.flush();
       if (this.link && now() - this.link.heard > 6000) this.end('LOST THE CONNECTION TO THE HOST');
     }
@@ -539,19 +609,24 @@ class Session {
   view() {
     const h = this.isHost ? this.hostInfo() : this.info;
     const seats = h ? h.seats.map((p, i) => ({ me: p === this.me, host: i === 0, up: h.up[i], ms: h.ms[i] })) : [];
-    return { phase: this.phase, code: this.code, size: h ? h.size : this.size, max: h ? h.max || h.size * 2 : this.max, isHost: this.isHost, seats, canStart: this.canStart(), mySeat: this.mySeat, rtt: Math.round(this.rtt) };
+    return { phase: this.phase, code: this.code, size: h ? h.size : this.size, max: h ? h.max || h.size * 2 : this.max, isHost: this.isHost, seats, canStart: this.canStart(), mySeat: this.mySeat, rtt: Math.round(this.rtt), delay: this.D };
   }
   ping() {
     if (!this.isHost) return Math.round(this.rtt);
     let m = 0; for (const l of this.links.values()) if (!l.gone) m = Math.max(m, l.rtt);
     return Math.round(m);
   }
+  relayed() {   // going through the matchmaking server instead of straight across (slow)
+    if (!this.isHost) return !!(this.link && !this.link.open && this.link.relay);
+    for (const l of this.links.values()) if (!l.gone && !l.open && l.relay) return true;
+    return false;
+  }
   end(msg) {
     if (this.phase === 'closed') return;
     this.phase = 'closed'; this.error = msg || '';
     for (const l of this.links.values()) this.closePc(l);
     if (this.link) this.closePc(this.link);
-    clearTimeout(this.relayTimer); clearInterval(this.infoTimer);
+    clearTimeout(this.relayTimer); clearInterval(this.infoTimer); clearInterval(this.pingTimer);
     this.svc.leave(this.name);
     this.onEnd(this.error);
   }
