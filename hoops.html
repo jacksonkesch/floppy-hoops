@@ -5817,7 +5817,7 @@ ${ON.err ? `<p class="err" role="alert">${ON.err}</p>` : ''}
 <div class="row"><span class="lbl">TEAMS</span>${sizeSeg(ON.size)}</div>
 <div class="row"><span class="lbl">PEOPLE</span>${maxSeg(ON.max, ON.size)}</div>
 <div class="row"><span class="lbl">NEW ROOM</span><button type="button" class="go" id="on-create">CREATE ROOM</button></div>
-<p class="note">You get a 4-letter code. Anyone you've shared this page with types it in to join. The room plays your GAME MODES.</p>
+<p class="note">You get a 4-letter code. Your friends open this same link, pick PLAY ONLINE and type it in. The room plays your GAME MODES.</p>
 <div class="row"><span class="lbl">HAVE A CODE?</span><input id="on-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" placeholder="ABCD" value="${ON.code}"><button type="button" id="on-join">JOIN</button></div>
 <div class="foot"><button type="button" id="on-back">BACK</button><span class="hint">ONE KEY EACH: HOLD TO JUMP, LET GO TO SHOOT</span></div>`;
   if (v.phase === 'joining') return `<h2 id="online-title">${v.isHost ? 'OPENING A ROOM' : 'JOINING ' + v.code}</h2>

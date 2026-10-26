@@ -1,13 +1,14 @@
 // Offline support: after the first visit, the picker and all five games load from the Chromebook's cache, so they
-// start with no internet. Pages are fetched fresh when online (so uploads show up), with the cache as backup;
-// the big unchanging files (sounds, physics) come straight from the cache. build.sh stamps VERSION with a
+// start with no internet. Pages and their scripts are fetched fresh when online (skipping the browser's own
+// cache, so an upload shows up on the next load), with the saved copy as backup; the big unchanging files
+// (sounds, physics) come straight from the cache. build.sh stamps VERSION with a
 // hash of the site files, so every upload replaces the old cache.
-const VERSION = '9fcbd1fb00';
+const VERSION = '4f723f2707';
 const CACHE = 'floppy-' + VERSION, FONTS = 'floppy-fonts';
 const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'clips.js', 'net.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -27,13 +28,13 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== location.origin) return;
-  if (req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
-    // pages: fresh from the network when it answers within 3 s, otherwise the saved copy
+  if (req.mode === 'navigate' || /(\.html|\/|net\.js)$/.test(url.pathname)) {
+    // pages (and the online code they share): fresh from the network when it answers within 3 s, otherwise the saved copy
     e.respondWith(new Promise(resolve => {
       let done = false;
       const fallback = () => fromCache(req).then(hit => { if (!done && hit) { done = true; resolve(hit); } });
       const timer = setTimeout(fallback, 3000);
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         clearTimeout(timer);
         if (res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
         if (!done) { done = true; resolve(res); }
