@@ -5933,7 +5933,8 @@ window.addEventListener('keydown', e => {
   }
   const code = e.code;
   if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'Space') e.preventDefault();
-  if (code === 'KeyM' && !(G.four && (G.state === 'play' || G.state === 'scored' || G.state === 'over'))) { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); if (G.state === 'showcase') syncReel(); return; }
+  // (in a 4 / 6 PLAYERS match M is a player's key the whole match, between rounds and in the replay too)
+  if (code === 'KeyM' && !(G.four && G.state !== 'title' && G.state !== 'showcase')) { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); if (G.state === 'showcase') syncReel(); return; }
   if (G.state === 'title') {
     if (e.repeat) return;
     G.sfx.init();
