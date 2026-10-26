@@ -16,11 +16,13 @@
   body { margin: 0; background: #0b0d14; overflow: hidden; }
   #pick { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #0b0d14; }
 </style>
 </head>
 <body>
 <canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley or Boxing. Arrows to choose, Enter to play."></canvas>
 <nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a></nav>
+<script src="net.js"></script>
 <script>
 (() => {
 'use strict';
@@ -35,7 +37,7 @@ const GAMES = [
   { id: 'boxing', name: 'FLOPPY BOXING', tag: 'RAGDOLL BOXING', href: 'boxing.html', col: '#b8323a' },
 ];
 const CARD = { w: 128, h: 104, x: [16, 156, 296, 86, 226], y: [52, 52, 52, 170, 170] };
-let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null;
+let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null, online = 0, frame = null;
 try { sel = Math.max(0, GAMES.findIndex(g => g.id === localStorage.getItem('floppy-last-game'))); } catch (e) { /* storage unavailable */ }
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -170,6 +172,7 @@ function draw() {
   R(0, 0, ART_W, ART_H, '#161a29');
   for (let i = 0; i < 40; i++) { const x = (i * 83) % ART_W, y = (i * 47) % 60; if (Math.sin(t * 2 + i) > 0.3) R(x, y, 1, 1, '#3a4266'); }
   R(0, ART_H - 16, ART_W, 16, '#1f2436');
+  if (online > 0) txt(`${online} ONLINE NOW`, ART_W / 2, ART_H - 8, 8, '#43f07a');
   txt('PICK A GAME', ART_W / 2, 22, 16, ORANGE, true);
   txt('ARROWS TO CHOOSE, ENTER TO PLAY', ART_W / 2, 38, 8, '#7d88a8');
   GAMES.forEach((gm, i) => {
@@ -186,16 +189,49 @@ function go(i) {
   if (going) return;
   sel = i; going = { t: 0, href: GAMES[i].href };
   try { localStorage.setItem('floppy-last-game', GAMES[i].id); } catch (e) { /* storage unavailable */ }
-  setTimeout(() => { location.href = GAMES[i].href; }, 350);
+  setTimeout(() => { if (inArtifact) openFrame(GAMES[i].href); else location.href = GAMES[i].href; }, 350);
+}
+// Inside the Claude artifact the games run in a frame over this page, which keeps the artifact's room open
+// for them (online play) and counts who's here. Anywhere else they're plain pages.
+const inArtifact = !!(window.claude && window.FloppyNet);
+if (inArtifact) {
+  const roomP = FloppyNet.room();
+  FloppyNet.serveFrames(roomP);
+  roomP.then(room => {
+    if (!room) return;
+    const count = ps => { online = ps.filter(p => p.kind !== 'agent').length; };
+    try { count(room.peers()); } catch (e) { /* not connected yet */ }
+    room.onPeers(ch => count(ch.peers), () => {});
+  });
+  addEventListener('message', e => { if (frame && e.source === frame.contentWindow && e.data && e.data.fnet === 'home') closeFrame(); });
+}
+function openFrame(href) {
+  frame = document.createElement('iframe');
+  frame.id = 'game'; frame.title = GAMES[sel].name; frame.allow = 'fullscreen; autoplay';
+  // a game that sends itself back to the picker lands here instead of nesting a second picker
+  frame.addEventListener('load', () => {
+    let home = false;
+    try { home = !!frame.contentDocument.getElementById('pick'); } catch (e) { /* not ours to read */ }
+    if (home) closeFrame(); else try { frame.contentWindow.focus(); } catch (e) { /* fine */ }
+  });
+  frame.src = href;
+  document.body.appendChild(frame);
+}
+function closeFrame() {
+  if (!frame) return;
+  frame.remove(); frame = null; going = null;
+  last = performance.now(); requestAnimationFrame(loop); cv.focus();
 }
 let last = performance.now();
 function loop(now) {
+  if (frame) return;   // a game has the screen; it restarts us when it closes
   const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
   if (going) going.t += dt;
   draw(); requestAnimationFrame(loop);
 }
 window.addEventListener('resize', resize);
 window.addEventListener('keydown', e => {
+  if (frame) return;
   const c = e.code;
   // left/right step through the cards; up/down hop between the rows (top 0-2, bottom 3-4)
   if (['ArrowLeft', 'KeyA', 'KeyW', 'KeyI'].includes(c)) { sel = (sel + GAMES.length - 1) % GAMES.length; e.preventDefault(); }

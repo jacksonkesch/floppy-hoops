@@ -69,6 +69,26 @@
   #touchhint { position: fixed; left: 0; right: 0; bottom: 64px; display: none; justify-content: space-around; pointer-events: none; z-index: 4; font: 13px Silkscreen, "Courier New", monospace; color: #fff6e0; text-shadow: 0 2px 0 #141019; }
   body.touch #touchhint:not(:empty) { display: flex; }
   #touchhint span { background: rgba(20, 16, 25, 0.55); padding: 6px 10px; border-radius: 6px; }
+  #online[hidden] { display: none; }
+  #online { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; background: rgba(8, 10, 18, 0.72); overflow: auto; font-family: Silkscreen, "Courier New", monospace; }
+  #online .panel { width: min(560px, 100%); }
+  #online .row .lbl { min-width: 110px; }
+  #online button { font: inherit; font-size: 13px; line-height: 1.2; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; box-shadow: 0 3px 0 #141019; padding: 7px 10px; cursor: pointer; }
+  #online button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
+  #online button:disabled { opacity: 0.4; cursor: default; }
+  #online button:focus-visible, #online input:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
+  #online button:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
+  #online .go { background: #43f07a; color: #141019; font-size: 17px; padding: 9px 20px; }
+  #online input { box-sizing: border-box; width: 6.2em; font: inherit; font-size: 20px; letter-spacing: 0.2em; text-transform: uppercase; color: #fff6e0; background: #0f1220; border: 2px solid #141019; box-shadow: inset 0 0 0 2px #2b3350; padding: 6px 10px; }
+  #online .code { margin: -6px 0 6px; font-size: 44px; font-weight: 700; letter-spacing: 0.15em; color: #fff6e0; text-shadow: 0 4px 0 #141019; }
+  #online .count { color: #43f07a; }
+  #online .err { margin: 0 0 12px; font-size: 13px; color: #ff6a4d; }
+  #online .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 4px; }
+  #online .team h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: #ff6a6e; }
+  #online .team.t1 h3 { color: #6aa0ff; }
+  #online .seat { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 4px; padding: 7px 8px; font-size: 12px; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; }
+  #online .seat.me { background: #ff8a2a; color: #141019; }
+  #online .seat.open { color: #59627d; background: transparent; border: 2px dashed #2b3350; }
 </style>
 </head>
 <body>
@@ -101,8 +121,10 @@
     <button type="button" id="reel-exit">BACK TO MENU</button>
   </div>
 </div>
+<div id="online" hidden role="dialog" aria-labelledby="online-title"><div class="panel" id="online-body"></div></div>
 <script src="planck.min.js"></script>
 <script src="clips.js"></script>
+<script src="net.js"></script>
 <script>
 (() => {
 'use strict';
@@ -249,17 +271,27 @@ const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER VS CPU' },
   { id: '2p', label: '2 PLAYERS' },
   { id: '4p', label: '4 PLAYERS (2 V 2)' },
+  { id: '6p', label: '6 PLAYERS (3 V 3)' },
+  { id: 'online', label: 'PLAY ONLINE' },
   { id: 'cvc', label: 'CPU VS CPU' },
   { id: 'tour', label: 'CPU TOURNAMENT' },
   { id: 'modes', label: 'GAME MODES' },
   { id: 'reels', label: 'DUNKS + SOUNDS' },
   { id: 'switch', label: 'SWITCH GAME' },
 ];
-const MENU_X = 14, MENU_W = 104, MENU_Y0 = 52, MENU_DY = 13, MENU_H = 12;
+const MENU_X = 14, MENU_W = 104, MENU_Y0 = 50, MENU_DY = 11, MENU_H = 10;
 // 4 PLAYERS: one key each, spread across the keyboard so four pairs of hands fit: red on the left, blue on the right
 // (in the same left-to-right order as the players stand on the court: [team, slot])
 const FOUR_KEYS = { KeyQ: [0, 0], KeyC: [0, 1], KeyM: [1, 1], ArrowUp: [1, 0] };
-const FOUR_LABEL = { KeyQ: 'Q', KeyC: 'C', KeyM: 'M', ArrowUp: 'UP' };
+// 6 PLAYERS (3 V 3 on one keyboard): left to right along the keyboard, the way the players stand on the court
+const SIX_KEYS = { KeyQ: [0, 0], KeyC: [0, 1], KeyB: [0, 2], KeyM: [1, 2], KeyP: [1, 1], ArrowUp: [1, 0] };
+const FOUR_LABEL = { KeyQ: 'Q', KeyC: 'C', KeyB: 'B', KeyM: 'M', KeyP: 'P', ArrowUp: 'UP' };
+// online every computer steps the same seeded match, so dice rolled for this computer alone (its sound settings,
+// what it has already painted) must come from the real Math.random, not the shared seeded one
+const REAL_RANDOM = Math.random;
+const ownDice = f => function (...a) { const r = Math.random; Math.random = REAL_RANDOM; try { return f.apply(this, a); } finally { Math.random = r; } };
+const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+const NET_KEEP = new Set(['isShadow', 'sfx', 'settings', 'realTime', 'menuOpen', 'menuSel']);   // what a match start leaves alone
 const CPU_LEVELS = {
   easy:       { react: 0.38, aim: 0.14,  range: 6.5, aggr: 0.2,  reach: 2.0 },
   normal:     { react: 0.22, aim: 0.08,  range: 8.5, aggr: 0.4,  reach: 2.4 },
@@ -4192,7 +4224,7 @@ function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
-      mode: s.mode === 'cpu' ? 'cpu' : s.mode === 'cvc' ? 'cvc' : s.mode === '4p' ? '4p' : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
+      mode: ['cpu', 'cvc', '4p', '6p'].includes(s.mode) ? s.mode : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       target: [3, 5, 7, 11].includes(s.target) ? s.target : s.target === 10 ? 11 : 5, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
@@ -4314,7 +4346,7 @@ class Game {
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
     this.roundT = 0; this.whistled = false; this.cam.watch = null; this.cam.z = 1;
-    if (!this.isShadow) this.bg = courtImage(court.key);
+    if (!this.isShadow) this.bg = ownDice(courtImage)(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
     this.bannerItems = [court.key === 'gym' ? '' : court.name, ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
     this.bannerLines = packLines(this.bannerItems, 36);
@@ -4353,10 +4385,13 @@ class Game {
 
   // ------------------------------------------------ flow
   newGame(opts = {}) {
-    const s = this.settings, mode = opts.mode || s.mode;
-    this.score = [0, 0]; this.round = 1; this.target = opts.target || s.target; this.vsCpu = mode === 'cpu'; this.cvc = mode === 'cvc'; this.four = mode === '4p'; this.winBy2 = s.winBy2 !== 'off';
+    const s = this.settings, mode = opts.mode || (this.online ? 'online' : s.mode);
+    this.score = [0, 0]; this.round = 1; this.target = opts.target || s.target; this.vsCpu = mode === 'cpu'; this.cvc = mode === 'cvc'; this.winBy2 = s.winBy2 !== 'off';
+    // 4 and 6 PLAYERS give each player a key of their own; online each computer drives its own player (so per-player
+    // keys too, just with no key map)
+    this.keyMap = mode === '4p' ? FOUR_KEYS : mode === '6p' ? SIX_KEYS : null; this.four = !!this.keyMap || mode === 'online';
     this.stats = newStats(); this.replay = null; this.pendingReplay = false; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
-    this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND, this.four ? 2 : s.teamSize);
+    this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND, mode === '4p' ? 2 : mode === '6p' ? 3 : s.teamSize);
     // ALLEY-OOP MODE plays the picked CVC levels too (IMPOSSIBLE gets the lob brain; set both to IMPOSSIBLE for the
     // all-out lob show)
     this.cpus = this.vsCpu ? [makeCPU(this, 1, opts.level || s.level)] :
@@ -4386,11 +4421,12 @@ class Game {
   menuPick() {
     const id = MENU_ITEMS[this.menuSel].id;
     this.sfx.init();
-    if (id === 'cpu' || id === '2p' || id === '4p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
+    if (id === 'cpu' || id === '2p' || id === '4p' || id === '6p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
+    else if (id === 'online') openOnline();
     else if (id === 'tour') this.startTournament();
     else if (id === 'modes') openMenu();
     else if (id === 'reels') this.startShowcase('dunk');
-    else if (id === 'switch') location.href = 'index.html';
+    else if (id === 'switch') { if (window.FloppyNet) FloppyNet.home(); else location.href = 'index.html'; }
   }
   // ------------------------------------------------ CPU tournament: three matches in a row, harder each time
   startTournament() {
@@ -4571,6 +4607,12 @@ class Game {
 
   // ------------------------------------------------ input
   humanKey(code, down) {
+    if (this.online) {   // online any key is your player's one key; the host decides which tick the press lands on
+      if (down) { this.sfx.init(); this.keysDown.add(code); } else this.keysDown.delete(code);
+      const held = this.keysDown.size > 0;
+      if (held !== this.netHeld) { this.netHeld = held; this.online.input(held); }
+      return;
+    }
     if (down) {
       this.sfx.init();
       if (this.state === 'over') { this.overContinue(); return; }
@@ -4580,7 +4622,7 @@ class Game {
       if (this.paused || (this.state !== 'play' && this.state !== 'scored')) return;
       this.keysDown.add(code);
     } else this.keysDown.delete(code);
-    if (this.four) { const k = FOUR_KEYS[code]; if (k) this.evq.push({ team: k[0], slot: k[1], down }); }
+    if (this.four) { const k = this.keyMap && this.keyMap[code]; if (k) this.evq.push({ team: k[0], slot: k[1], down }); }
     else if (this.vsCpu) {
       const now = [...this.keysDown].some(c => c === 'KeyW' || c === 'ArrowUp');
       if (now !== this.humanHeld) { this.humanHeld = now; this.evq.push({ team: 0, down: now }); }
@@ -4831,7 +4873,7 @@ class Game {
       this.score[team] += pts; this.scorePop[team] = 1; this.state = 'scored'; this.stateT = 0; this.scorer = team;
       const winner = this.won(team);
       if (!winner) this.onStreak(team, h);
-      this.pendingReplay = !!b.dunked || winner;
+      this.pendingReplay = !this.online && (!!b.dunked || winner);   // (online there's no replay to sit through)
       this.replayLabel = winner ? 'GAME WINNER' : (b.dunked || '').replace('!', '');
       this.scoreRec = this.recCount;
       this.sfx.jingle(team);
@@ -4960,7 +5002,82 @@ class Game {
   }
 
   // ------------------------------------------------ simulation
+  stepTrans(dt) {
+    const tr = this.trans; tr.t += dt;
+    if (!tr.fired && tr.t >= tr.dur / 2) { tr.fired = true; tr.cb(); }
+    if (tr.t >= tr.dur) this.trans = null;
+  }
+  get calm() { return REDUCED && !this.online; }   // (online everyone rolls the same particle dice, so none get skipped)
+  // ------------------------------------------------ online (net.js runs the room; this is the match it drives)
+  // One confirmed tick: the inputs and commands the host put on it, then a normal fixed step on the shared dice.
+  netTick(evs, t) {
+    const real = Math.random;
+    if (this.netRand) Math.random = this.netRand;
+    try {
+      for (const [, seat, v] of evs) {
+        if (seat < 0) this.netCommand(v, t);
+        else if (this.online) this.netPress(seat, !!v);
+      }
+      if (!this.online) return;
+      this.fixed(STEP);
+      if (t % 30 === 0) this.online.hash(t, this.netHash());
+    } finally { Math.random = real; }
+  }
+  netCommand(c, t) {
+    if (c.c === 'start') this.netStart(c);
+    else if (!this.online) return;
+    else if (c.c === 'gone') { this.netGone.add(c.s); this.netPress(c.s, false); }
+    else if (c.c === 'sync') this.netResync(c, t);
+  }
+  netStart(c) {
+    this.netRand = rng(c.seed); Math.random = this.netRand;
+    closeReel(); this.sfx.stopClip();
+    if (!this.homeSettings) this.homeSettings = this.settings;
+    this.settings = Object.assign({}, this.homeSettings, c.set);   // the host's modes and dunks; sounds stay this computer's
+    const fresh = new Game(true);   // every computer starts the match from the same blank slate
+    for (const k of Object.keys(fresh)) if (!NET_KEEP.has(k)) this[k] = fresh[k];
+    this.roundId = 0; this.forceDunk = null; this.show = null; this.winner = 0;
+    this.online = this.net; this.netSeats = c.seats; this.netGone = new Set(); this.netHeld = false; this.netSyncAt = 0; this.netSyncSent = -999;
+    this.newGame();
+  }
+  // seats alternate red, blue, red...: seat i plays team i % 2, slot i >> 1
+  netPress(seat, down) {
+    if (down && this.state === 'over') { this.overContinue(); return; }
+    this.evq.push({ team: seat % 2, slot: seat >> 1, down });
+  }
+  netHash() {   // a fingerprint of the match, to notice if two computers ever drift apart
+    let s = this.state + this.score + '|' + this.round;
+    for (const p of this.players) { const q = p.body.getPosition(); s += '|' + q.x.toFixed(4) + ',' + q.y.toFixed(4) + ',' + p.angle().toFixed(3); }
+    for (const b of this.balls) { const q = b.body.getPosition(); s += '|' + q.x.toFixed(4) + ',' + q.y.toFixed(4); }
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return h >>> 0;
+  }
+  // a guest's copy drifted from ours: restart the round from our score on fresh dice (the guest keeps asking until
+  // it's fixed, so a moment that can't take a restart just waits for the next ask)
+  netDesync(x) {
+    const T = this.online;
+    if (!T || !T.isHost || x <= this.netSyncAt || T.tick - this.netSyncSent < 120 || this.trans) return;
+    this.netSyncSent = T.tick;
+    T.command({ c: 'sync', seed: newSeed(), score: this.score.slice(), round: this.round, over: this.state === 'over' ? this.winner : -1 });
+  }
+  netResync(c, t) {
+    this.netRand = rng(c.seed); Math.random = this.netRand;
+    this.trans = null; this.replay = null; this.pendingReplay = false; this.evq.length = 0;
+    this.score = c.score.slice(); this.round = c.round; this.streak = { team: -1, n: 0 };
+    this.setupRound(c.round > 1 ? this.nextRound() : CLASSIC_ROUND);
+    if (c.over >= 0) this.gameOver(c.over); else { this.state = 'play'; this.stateT = 0; this.checkGamePoint(); }
+    this.netSyncAt = t; this.online.synced(t);
+  }
+  netQuit() { if (this.net) this.net.end(''); }
+  netEnded() {
+    const was = !!this.online;
+    this.net = null; this.online = null; this.netRand = null; this.netHeld = false;
+    if (this.homeSettings) { this.settings = this.homeSettings; this.homeSettings = null; }
+    if (was) this.toTitle();
+  }
   fixed(dt) {
+    if (this.online && this.trans) this.stepTrans(dt);
     this.time += dt; this.stateT += dt; this.roundT += dt;
     for (const c of this.cpus) c.update(dt);
     for (const ev of this.evq) this.handleEvent(ev);
@@ -5036,13 +5153,13 @@ class Game {
         for (const pad of this.pads) if (Math.abs(p.x - pad.x) < pad.w / 2) { b.body.setLinearVelocity({ x: v.x, y: Math.max(-v.y * 1.05, 8.5) }); pad.squash = 1; b.padCD = 0.3; this.sfx.boing(); break; }
       }
       if (b.ghost && (b.ghostT += dt) > 3) b.ghost = false;
-      if (b.green && !REDUCED) this.addPart(p.x + rand(-0.1, 0.1), p.y + rand(-0.1, 0.1), 0, 0, 0, 0.3, GREEN, 2);
-      else if (b.lastThrower && this.onFire(b.lastThrower.team) && !REDUCED && Math.random() < 0.7) this.flame(p);
+      if (b.green && !this.calm) this.addPart(p.x + rand(-0.1, 0.1), p.y + rand(-0.1, 0.1), 0, 0, 0, 0.3, GREEN, 2);
+      else if (b.lastThrower && this.onFire(b.lastThrower.team) && !this.calm && Math.random() < 0.7) this.flame(p);
       const sp = Math.hypot(v.x, v.y);
       if (!b.waiting && sp < 0.3) b.stillT += dt; else b.stillT = 0;
       if ((b.stillT > 2.5 && p.y > 1.0) || b.stillT > 7) { b.body.setLinearVelocity({ x: rand(-2, 2), y: 3 }); b.stillT = 0; }
       if (Math.abs(p.x) > 9 || p.y < -3 || p.y > VY1 + 0.05) { b.body.setTransform({ x: b.spawnX, y: 5.8 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); b.prevY = 5.8; b.shotBy = null; }   // (above the roof = it tunneled through the ceiling and would sit up there for good)
-    } else if (this.onFire(b.holder.team) && !REDUCED && Math.random() < 0.5) this.flame(b.body.getPosition());
+    } else if (this.onFire(b.holder.team) && !this.calm && Math.random() < 0.5) this.flame(b.body.getPosition());
     b.prevY = b.body.getPosition().y;
   }
   afterStep(dt) {
@@ -5113,11 +5230,7 @@ class Game {
     const base = this.state === 'showcase' && this.show.kind === 'dunk' ? 0.7 : 1;
     if (this.tsT > 0) { this.tsT -= rdt; this.timeScale = this.tsTarget; } else this.timeScale = Math.min(base, this.timeScale + rdt * 2.5);
     if (this.state === 'replay' && this.replay) { this.replay.pos += rdt * 60 * 0.45; if (this.replay.pos >= this.replay.z) this.finishReplay(); }
-    if (this.trans) {
-      const tr = this.trans; tr.t += rdt;
-      if (!tr.fired && tr.t >= tr.dur / 2) { tr.fired = true; tr.cb(); }
-      if (tr.t >= tr.dur) this.trans = null;
-    }
+    if (this.trans && !this.online) this.stepTrans(rdt);   // (online a transition is part of the match: fixed steps it)
     this.shakeA = Math.max(0, this.shakeA - rdt * 22);
     this.flash = Math.max(0, this.flash - rdt * 1.6);
     const C = this.cam, on = C.watch && C.watch.on;
@@ -5335,16 +5448,19 @@ function drawHUD(G) {
       ctx.globalAlpha = 1;
     }
     if (G.state === 'play' && G.gamePoint && G.roundT > 0.3 && G.roundT < 3.2 && Math.sin(G.realTime * 9) > -0.5) txt('GAME POINT', AX(160), AY(96), 16, '#ffd23f', { bold: true });
+    if (G.online) txt(`PING ${G.online.ping()} MS`, AX(316), AY(175), 7, '#7d88a8', { align: 'right', ow: 0.6 });
   }
 }
 // text that lives on the court (DUNK / LET GO! over heads, popups), so it moves with the camera
 function drawWorldText(G) {
-  // 4 PLAYERS: whose key is whose, over each head at the start of the first rounds
-  if (G.four && G.state === 'play' && G.round <= 2 && G.roundT < 3.5) {
-    for (const [code, [t, s]] of Object.entries(FOUR_KEYS)) {
+  // 4 / 6 PLAYERS: whose key is whose, over each head at the start of the first rounds (online: YOU, every round)
+  if (G.four && G.state === 'play' && (G.online || G.round <= 2) && G.roundT < 3.5) {
+    const seat = G.online ? G.online.mySeat : -1;
+    const tags = G.online ? (seat >= 0 ? [[seat % 2, seat >> 1, 'YOU']] : []) : Object.entries(G.keyMap || FOUR_KEYS).map(([code, [t, s]]) => [t, s, FOUR_LABEL[code]]);
+    for (const [t, s, label] of tags) {
       const p = G.players.find(q => q.team === t && q.slot === s); if (!p) continue;
       const hp = p.head.getPosition(), bob = Math.sin(G.realTime * 6 + s) * 1.5;
-      txt(FOUR_LABEL[code], SX(hp.x), SY(hp.y + p.d.headR + 0.7) + bob * S, 16, TEAM[t].light, { bold: true });
+      txt(label, SX(hp.x), SY(hp.y + p.d.headR + 0.7) + bob * S, 16, TEAM[t].light, { bold: true });
     }
   }
   if (G.state === 'play') {
@@ -5382,6 +5498,7 @@ function drawTitle(G) {
   artRect(6, 6, 118, 1, '#2b3350'); artRect(6, 173, 118, 1, '#2b3350'); artRect(6, 6, 1, 168, '#2b3350'); artRect(123, 6, 1, 168, '#2b3350');
   wobblyWord('FLOPPY', 65, 22, 16, ORANGE, '#7a2d0c', t);
   wobblyWord('HOOPS', 65, 41, 16, CREAM, '#6b5f49', t);
+  if (G.onlineCount > 0) txt(`${G.onlineCount} ONLINE`, AX(222), AY(12), 8, GREEN, { ow: 0.8 });
   MENU_ITEMS.forEach((it, i) => {
     const y = MENU_Y0 + i * MENU_DY, sel = i === G.menuSel;
     artRect(MENU_X - 1, y - 1, MENU_W + 2, MENU_H + 2, INK);
@@ -5389,7 +5506,7 @@ function drawTitle(G) {
     if (sel) {
       artRect(MENU_X, y + MENU_H - 2, MENU_W, 2, '#c4621a');
       const nudge = Math.round(Math.sin(t * 8));
-      for (let k = 0; k < 3; k++) { artRect(MENU_X + 3 + nudge, y + 3 + k, 1 + k, 1, INK); artRect(MENU_X + 3 + nudge, y + 7 - k, 1 + k, 1, INK); }
+      for (let k = 0; k < 3; k++) { artRect(MENU_X + 3 + nudge, y + 2 + k, 1 + k, 1, INK); artRect(MENU_X + 3 + nudge, y + 6 - k, 1 + k, 1, INK); }
     }
     txt(it.label, AX(MENU_X + MENU_W / 2 + 2), AY(y + MENU_H / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
@@ -5515,6 +5632,12 @@ function render(G) {
 }
 
 // ---------------------------------------------------------------- game modes panel
+// online every computer steps the match on the same dice; sounds differ per computer, so they roll their own
+for (const k of Object.getOwnPropertyNames(Sfx.prototype)) {
+  const d = Object.getOwnPropertyDescriptor(Sfx.prototype, k);
+  if (k !== 'constructor' && typeof d.value === 'function') Sfx.prototype[k] = ownDice(d.value);
+}
+Game.prototype.greenSound = ownDice(Game.prototype.greenSound);
 const G = new Game();
 const menuEl = document.getElementById('menu');
 let draft = null;
@@ -5653,11 +5776,144 @@ try {
 } catch (e) { /* live reload is optional */ }
 resize();
 window.addEventListener('resize', resize);
-const KEYS = new Set(['KeyW', 'ArrowUp', ...Object.keys(FOUR_KEYS)]);
-// Q, C and M are player keys only in a 4 PLAYERS match (everywhere else Q is the menu and M mutes)
-const playKey = code => code === 'KeyW' || code === 'ArrowUp' || (G.four && code in FOUR_KEYS);
+// ---------------------------------------------------------------- PLAY ONLINE: the room screen (net.js does the talking)
+const onlineEl = document.getElementById('online'), onlineBody = document.getElementById('online-body');
+const ON = { size: 1, code: '', err: '', shape: '', live: false };
+const netSvc = window.FloppyNet ? FloppyNet.connect() : null;
+const countText = n => n > 0 ? `${n} ${n === 1 ? 'PERSON' : 'PEOPLE'} ONLINE NOW` : '';
+if (netSvc) {
+  G.onlineCount = netSvc.count;
+  netSvc.onCount = n => { G.onlineCount = n; renderOnline(); };
+}
+const vol = x => `<span data-v>${x}</span>`;   // text that changes while the screen is up (patched in place)
+const sizeSeg = (cur, off) => `<div class="seg">${[1, 2, 3].map(k => `<button type="button" id="on-size-${k}" aria-pressed="${cur === k}"${off && off(k) ? ' disabled' : ''}>${k} V ${k}</button>`).join('')}</div>`;
+function seatsHtml(v) {
+  let h = '<div class="teams">';
+  for (let t = 0; t < 2; t++) {
+    h += `<div class="team t${t}"><h3>${t ? 'BLUE' : 'RED'}</h3>`;
+    for (let i = t; i < v.size * 2; i += 2) {
+      const s = v.seats[i];
+      if (!s) { h += '<div class="seat open"><span>OPEN</span></div>'; continue; }
+      const link = s.host ? 'HOST' : !s.up ? 'CONNECTING' : `${s.ms} MS${s.up === 1 ? ' (RELAY)' : ''}`;
+      h += `<div class="seat${s.me ? ' me' : ''}"><span>${s.me ? 'YOU' : 'PLAYER ' + (i + 1)}</span>${vol(link)}</div>`;
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function onlineHtml() {
+  const T = G.net, v = T && T.view();
+  if (!v || v.phase === 'closed') return `<h2 id="online-title">PLAY ONLINE</h2>
+<p class="note count">${vol(countText(G.onlineCount))}</p>
+${ON.err ? `<p class="err" role="alert">${ON.err}</p>` : ''}
+<div class="row"><span class="lbl">TEAMS</span>${sizeSeg(ON.size)}</div>
+<div class="row"><span class="lbl">NEW ROOM</span><button type="button" class="go" id="on-create">CREATE ROOM</button></div>
+<p class="note">You get a 4-letter code. Anyone you've shared this page with types it in to join. The room plays your GAME MODES.</p>
+<div class="row"><span class="lbl">HAVE A CODE?</span><input id="on-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" placeholder="ABCD" value="${ON.code}"><button type="button" id="on-join">JOIN</button></div>
+<div class="foot"><button type="button" id="on-back">BACK</button><span class="hint">ONE KEY EACH: HOLD TO JUMP, LET GO TO SHOOT</span></div>`;
+  if (v.phase === 'joining') return `<h2 id="online-title">${v.isHost ? 'OPENING A ROOM' : 'JOINING ' + v.code}</h2>
+<p class="note">One moment...</p>
+<div class="foot"><button type="button" id="on-leave">CANCEL</button></div>`;
+  const n = v.seats.length;
+  if (v.phase === 'lobby') return `<h2 id="online-title">ROOM CODE</h2>
+<p class="code">${v.code}</p>
+<p class="note">${v.isHost ? 'Send this code to your friends. They open Floppy Hoops, pick PLAY ONLINE and type it in.' : 'You\'re in. The host starts the match.'}</p>
+<div class="row"><span class="lbl">TEAMS</span>${v.isHost ? sizeSeg(v.size, k => k * 2 < n) : `<span>${v.size} V ${v.size}</span>`}</div>
+${seatsHtml(v)}
+${n > 2 && n % 2 ? '<p class="note">Odd number of players: blue gets a teammate who just stands there.</p>' : ''}
+<div class="foot">${v.isHost ? `<button type="button" class="go" id="on-start"${v.canStart ? '' : ' disabled'}>START</button>` : ''}<button type="button" id="on-leave">LEAVE</button><span class="hint">${!v.isHost ? 'WAITING FOR THE HOST' : n < 2 ? 'WAITING FOR PLAYERS' : v.canStart ? n + ' PLAYERS READY' : 'CONNECTING EVERYONE...'}</span></div>`;
+  return `<h2 id="online-title">ONLINE MATCH</h2>
+<p class="note">ROOM ${v.code} / PING ${vol(T.ping() + ' MS')}</p>
+${seatsHtml(v)}
+<p class="note">The match keeps going while this is open.</p>
+<div class="foot"><button type="button" class="go" id="on-resume">BACK TO THE GAME</button><button type="button" id="on-sound" aria-pressed="${!G.sfx.muted}">SOUND ${G.sfx.muted ? 'OFF' : 'ON'}</button><button type="button" id="on-leave">LEAVE MATCH</button></div>`;
+}
+const LIVE_VAL = /<span data-v>(.*?)<\/span>/g;
+function renderOnline() {
+  if (onlineEl.hidden) return;
+  const h = onlineHtml(), shape = h.replace(LIVE_VAL, '<span data-v></span>');
+  if (shape === ON.shape) {   // same screen, new numbers: patch them so a click in progress isn't lost
+    const vals = [...h.matchAll(LIVE_VAL)].map(m => m[1]);
+    onlineBody.querySelectorAll('[data-v]').forEach((el, i) => { if (el.textContent !== vals[i]) el.textContent = vals[i]; });
+    return;
+  }
+  const a = document.activeElement, keep = a && onlineBody.contains(a) ? a.id : '';
+  ON.shape = shape; onlineBody.innerHTML = h;
+  let f = keep && document.getElementById(keep);
+  if (!f || f.disabled) f = onlineBody.querySelector('.go:not(:disabled)') || onlineBody.querySelector('button:not(:disabled)');
+  if (f) f.focus({ preventScroll: true });
+}
+function openOnline() {
+  G.sfx.init();
+  if (G.online) G.releaseAll();
+  onlineEl.hidden = false; G.menuOpen = true; ON.shape = ''; renderOnline();
+}
+function closeOnline() { onlineEl.hidden = true; G.menuOpen = false; cv.focus(); }
+function onlineEsc() {
+  const T = G.net;
+  if (!T) closeOnline();
+  else if (T.live) closeOnline();
+  else if (T.phase === 'joining') G.netQuit();
+}
+function onlineGo(host) {
+  if (G.net) return;
+  if (!netSvc) { ON.err = 'ONLINE PLAY ONLY WORKS INSIDE THE CLAUDE ARTIFACT'; return; }
+  if (!host && ON.code.length !== 4) { ON.err = 'TYPE THE 4-LETTER ROOM CODE'; return; }
+  ON.err = ''; ON.live = false;
+  const T = G.net = new FloppyNet.Session(netSvc, {
+    game: 'hoops', host, size: ON.size, code: host ? '' : ON.code,
+    onChange() {
+      if (G.net !== T) return;
+      if (T.live && !ON.live) { ON.live = true; closeOnline(); } else renderOnline();
+    },
+    onEnd(err) {
+      if (G.net !== T) return;
+      ON.err = err; ON.live = false; G.netEnded();
+      if (err) openOnline(); else renderOnline();
+    },
+    onDesync: x => G.netDesync(x),
+  });
+  T.start();
+}
+function onlineBegin() {   // host: everyone starts the same match on the same tick, with the host's settings
+  const T = G.net; if (!T || !T.isHost || !T.canStart()) return;
+  const n = T.seats.length, s = G.settings;
+  T.begin({ c: 'start', seed: newSeed(), seats: n, set: { modes: s.modes, always: s.always, dunks: s.dunks, target: s.target, winBy2: s.winBy2, teamSize: Math.ceil(n / 2) } });
+}
+onlineBody.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  G.sfx.init();
+  const id = b.id, T = G.net;
+  if (id.startsWith('on-size-')) {
+    const k = +id.slice(8);
+    if (T && T.isHost && T.phase === 'lobby') { T.size = k; T.pubInfo(); } else ON.size = k;
+  } else if (id === 'on-create') onlineGo(true);
+  else if (id === 'on-join') onlineGo(false);
+  else if (id === 'on-back' || id === 'on-resume') { closeOnline(); return; }
+  else if (id === 'on-leave') { ON.err = ''; G.netQuit(); }
+  else if (id === 'on-start') onlineBegin();
+  else if (id === 'on-sound') G.sfx.setMuted(!G.sfx.muted);
+  renderOnline();
+});
+onlineBody.addEventListener('input', e => {
+  if (e.target.id !== 'on-code') return;
+  const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+  if (e.target.value !== v) e.target.value = v;
+  ON.code = v;
+});
+onlineBody.addEventListener('keydown', e => { if (e.target.id === 'on-code' && e.key === 'Enter') { e.preventDefault(); onlineGo(false); renderOnline(); } });
+const KEYS = new Set(['KeyW', 'ArrowUp', ...Object.keys(FOUR_KEYS), ...Object.keys(SIX_KEYS)]);
+// Q, C, M (and B, P with six) are player keys only in a 4 / 6 PLAYERS match (everywhere else Q is the menu and M mutes)
+const playKey = code => code === 'KeyW' || code === 'ArrowUp' || (G.four && code in (G.keyMap || FOUR_KEYS));
 window.addEventListener('keydown', e => {
+  if (!onlineEl.hidden) { if (e.code === 'Escape') onlineEsc(); return; }
   if (G.menuOpen) { if (e.code === 'Escape') closeMenu(); return; }
+  if (G.online) {   // online every key but Esc is your player's one key
+    if (e.code === 'Escape') { openOnline(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey || e.code === 'Tab' || /^F\d/.test(e.code)) return;
+    e.preventDefault(); if (!e.repeat) G.humanKey(e.code, true);
+    return;
+  }
   const code = e.code;
   if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'Space') e.preventDefault();
   if (code === 'KeyM' && !(G.four && (G.state === 'play' || G.state === 'scored' || G.state === 'over'))) { G.sfx.init(); G.sfx.setMuted(!G.sfx.muted); if (G.state === 'showcase') syncReel(); return; }
@@ -5691,8 +5947,8 @@ window.addEventListener('keydown', e => {
   else if (code === 'KeyP' || code === 'Escape') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
   else if (code === 'KeyQ') { if (G.paused || G.state === 'over') G.toTitle(); }
 });
-window.addEventListener('keyup', e => { if (KEYS.has(e.code)) { e.preventDefault(); G.humanKey(e.code, false); } });
-window.addEventListener('blur', () => { G.releaseAll(); if (G.state === 'play' || G.state === 'scored') G.paused = true; });
+window.addEventListener('keyup', e => { if (G.online) G.humanKey(e.code, false); else if (KEYS.has(e.code)) { e.preventDefault(); G.humanKey(e.code, false); } });
+window.addEventListener('blur', () => { G.releaseAll(); if (!G.online && (G.state === 'play' || G.state === 'scored')) G.paused = true; });
 function artPoint(e) { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) * DPR - OX) / S, y: ((e.clientY - r.top) * DPR - OY) / S }; }
 function menuHit(p) {
   for (let i = 0; i < MENU_ITEMS.length; i++) { const y = MENU_Y0 + i * MENU_DY; if (p.x >= MENU_X && p.x <= MENU_X + MENU_W && p.y >= y && p.y <= y + MENU_H) return i; }
@@ -5713,8 +5969,14 @@ cv.addEventListener('pointerdown', e => {
   else if (G.state === 'replay') G.finishReplay();
 });
 // vs the CPU the whole screen is your button; two players split it down the middle
-const TOUCH_ZONE = x => G.four ? ['KeyQ', 'KeyC', 'KeyM', 'ArrowUp'][Math.min(3, Math.floor(x * 4))] : !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
-const TOUCH_HINT = () => G.cvc ? '' : G.four ? '<span>RED 1</span><span>RED 2</span><span>BLUE 1</span><span>BLUE 2</span>' : G.vsCpu ? '<span>HOLD ANYWHERE TO JUMP, LET GO TO SHOOT</span>' : '<span>RED: HOLD THE LEFT SIDE</span><span>BLUE: HOLD THE RIGHT SIDE</span>';
+// (online it's all yours too; 4 and 6 players split it into one strip per player, in the order they stand)
+const TOUCH_ZONE = x => {
+  if (G.online) return 'KeyW';
+  if (!G.four) return !G.vsCpu && x >= 0.5 ? 'ArrowUp' : 'KeyW';
+  const k = Object.keys(G.keyMap || FOUR_KEYS); return k[Math.min(k.length - 1, Math.floor(x * k.length))];
+};
+const zoneNames = () => { const n = [0, 0]; return Object.values(G.keyMap || FOUR_KEYS).map(([t]) => `<span>${t ? 'BLUE' : 'RED'} ${++n[t]}</span>`).join(''); };
+const TOUCH_HINT = () => G.cvc ? '' : G.four && !G.online ? zoneNames() : G.vsCpu || G.online ? '<span>HOLD ANYWHERE TO JUMP, LET GO TO SHOOT</span>' : '<span>RED: HOLD THE LEFT SIDE</span><span>BLUE: HOLD THE RIGHT SIDE</span>';
 // ---------------------------------------------------------------- touch (touchscreen Chromebooks in tablet mode)
 // During a match a finger on the screen works like holding a key (TOUCH_ZONE picks which). Touch users also get
 // small FULL SCREEN / PAUSE / MENU buttons, since tablet mode has no keyboard. Mice keep the old click behavior.
@@ -5730,9 +5992,9 @@ function touchPress(code, down) {
   if (!down && !held) G.humanKey(code, false);
 }
 cv.addEventListener('pointerdown', e => {
-  if (e.pointerType === 'mouse') return;
-  touchOn();
-  if (G.paused || !(G.state === 'play' || G.state === 'scored' || G.state === 'over')) return;
+  if (e.pointerType === 'mouse' && !G.online) return;   // (online a mouse button is a key too)
+  if (e.pointerType !== 'mouse') touchOn();
+  if (G.paused || G.menuOpen || !(G.state === 'play' || G.state === 'scored' || G.state === 'over')) return;
   const r = cv.getBoundingClientRect(), code = TOUCH_ZONE((e.clientX - r.left) / r.width);
   touchPress(code, true); touchKeys.set(e.pointerId, code);
   if (cv.setPointerCapture) try { cv.setPointerCapture(e.pointerId); } catch (err) { /* already gone */ }
@@ -5746,13 +6008,13 @@ touchBar.addEventListener('click', e => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   } else if (a === 'pause') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
-  else if (a === 'menu') { G.paused = false; G.toTitle(); }
+  else if (a === 'menu') { if (G.online) openOnline(); else { G.paused = false; G.toTitle(); } }
   cv.focus();
 });
 setInterval(() => {
   const playing = G.state === 'play' || G.state === 'scored';
-  touchBar.dataset.menu = G.paused || G.state === 'over' ? '1' : '';
-  touchBar.dataset.pause = playing || G.paused ? '1' : '';
+  touchBar.dataset.menu = G.online || G.paused || G.state === 'over' ? '1' : '';
+  touchBar.dataset.pause = !G.online && (playing || G.paused) ? '1' : '';
   const hint = G.state === 'play' && !G.paused && G.roundT < 3.5 && G.round <= 2 ? TOUCH_HINT() : '';
   if (touchHint.dataset.text !== hint) { touchHint.dataset.text = hint; touchHint.innerHTML = hint; }
 }, 150);
@@ -5762,7 +6024,8 @@ let last = performance.now(), acc = 0;
 function loop(now) {
   const rdt = Math.min(0.05, (now - last) / 1000); last = now;
   G.frame(rdt);
-  if (!G.paused && G.state !== 'replay') {
+  if (G.net && G.net.live) G.net.frame(rdt * G.timeScale * GAME_SPEED / STEP, (evs, t) => G.netTick(evs, t));   // online the room sets the pace
+  else if (!G.paused && G.state !== 'replay') {
     acc += rdt * G.timeScale * GAME_SPEED;
     let n = 0;
     while (acc >= STEP && n < 5) { G.fixed(STEP); acc -= STEP; n++; }
