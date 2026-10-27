@@ -132,6 +132,10 @@ const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 if (!window.planck) { document.getElementById('err').hidden = false; return; }
 const pl = window.planck;
+// planck hands finished contacts and tree nodes to pools kept outside any world, to reuse later. Online a rewind
+// (netLoad) can bring one of those back to life while it still waits in a pool, and then it gets handed out a
+// second time and the physics knots itself up, so nothing goes back into a pool
+Object.getPrototypeOf(new pl.DynamicTree().inputPool).release = function () {};
 
 // ---------------------------------------------------------------- constants
 const PPM = 20, ART_W = 320, ART_H = 180;
@@ -172,7 +176,9 @@ const ax = x => (x - VX0) * PPM, ay = y => (VY1 - y) * PPM;
 function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function mix(a, b, t) { const A = hexRgb(a), B = hexRgb(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
 const shade = (c, f) => f < 0 ? mix(c, '#000000', -f) : mix(c, '#ffffff', f);
-function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// rngIn: the same dice keeping their place in an object, so an online match can save and rewind them with the rest
+function rng(seed) { return rngIn({ a: seed >>> 0 }); }
+function rngIn(box) { return () => { const a = box.a = (box.a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 // 3x5 pixel font for jerseys and wall signs
 const F3 = {A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','!':'010010010000010','-':'000000111000000',' ':'000000000000000'};
@@ -292,6 +298,11 @@ const REAL_RANDOM = Math.random;
 const ownDice = f => function (...a) { const r = Math.random; Math.random = REAL_RANDOM; try { return f.apply(this, a); } finally { Math.random = r; } };
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 const NET_KEEP = new Set(['isShadow', 'sfx', 'settings', 'realTime', 'menuOpen', 'menuSel']);   // what a match start leaves alone
+// what rewinding an online match leaves alone: this computer's own things, and the look of the screen
+const NET_LOCAL = new Set(['sfx', 'net', 'online', 'settings', 'homeSettings', 'show', 'netHeard', 'netSyncSent', 'netHeld', 'keysDown',
+  'humanHeld', 'isShadow', 'realTime', 'timeScale', 'tsT', 'tsTarget', 'shakeA', 'flash', 'cam', 'menuOpen', 'menuSel', 'paused']);
+const NET_OPAQUE = v => v instanceof Node || v instanceof CanvasRenderingContext2D || v instanceof AudioNode || v instanceof AudioBuffer ||
+  (typeof ImageBitmap !== 'undefined' && v instanceof ImageBitmap) || (typeof OffscreenCanvas !== 'undefined' && v instanceof OffscreenCanvas);
 const CPU_LEVELS = {
   easy:       { react: 0.38, aim: 0.14,  range: 6.5, aggr: 0.2,  reach: 2.0 },
   normal:     { react: 0.22, aim: 0.08,  range: 8.5, aggr: 0.4,  reach: 2.4 },
@@ -480,6 +491,15 @@ const SOUND_REEL = [
   { id: 'greenlight', name: 'SQUID GAME GREEN LIGHT', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'greenlight', trim: [0.04, 1.6], gain: 2.1 },
   { id: 'chaching', name: 'CHA-CHING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'chaching', trim: [0.15, 1.55], gain: 1.9 },
   { id: 'daddyshome', name: "DADDY'S HOME", when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'daddyshome', trim: [0, 6.06], gain: 0.72 },
+  { id: 'applepay', name: 'APPLE PAY', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'applepay', trim: [0.05, 0.65], gain: 3.5 },
+  { id: 'corner3', name: 'CORNER 3', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'corner3', trim: [0.38, 1.34], gain: 1.4 },
+  { id: 'gimme3', name: 'GIMME 3 BOOM', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'gimme3', trim: [0, 3.85], gain: 0.4 },
+  { id: 'greenchicken', name: 'GREEN GREEN CHICKEN', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'greenchicken', trim: [0, 1.68], gain: 0.7 },
+  { id: 'kobe', name: 'KOBE', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'kobe', trim: [0, 0.6], gain: 2.5 },
+  { id: 'larrybird', name: 'LARRY BIRD', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'larrybird', trim: [0, 1.33], gain: 0.55 },
+  { id: 'letitrain', name: 'LET IT RAIN', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'letitrain', trim: [0, 0.83], gain: 0.6 },
+  { id: 'heehee', name: 'HEE HEE', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'heehee', trim: [0.5, 1.42], gain: 2.2 },
+  { id: 'wetball', name: 'WET BALL', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'wetball', trim: [0, 1.39], gain: 0.25 },
   // Rocket League's splash goal explosion (the game's own sound, mixed down from 5.1 to stereo)
   { id: 'bigsplash', name: 'ROCKET LEAGUE BIG SPLASH', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'bigsplash', trim: [0, 3.3], gain: 1 },
   { id: 'ding', name: 'CORRECT ANSWER DING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'ding', trim: [0.06, 1.0], gain: 1 },
@@ -5143,15 +5163,48 @@ class Game {
   netTick(evs, t) {
     const real = Math.random;
     if (this.netRand) Math.random = this.netRand;
+    // a tick can be stepped again after a late press rewinds the match: each sound plays only the first time
+    // its tick makes it (a sound the late press brings in still plays)
+    const heard = this.netHeard || (this.netHeard = new Map()), count = {};
+    let was = heard.get(t);
+    if (!was) { heard.set(t, was = {}); heard.delete(t - 300); }
+    this.sfx.gate = k => { count[k] = (count[k] || 0) + 1; if (count[k] <= (was[k] || 0)) return false; was[k] = count[k]; return true; };
     try {
       for (const [, seat, v] of evs) {
         if (seat < 0) this.netCommand(v, t);
         else if (this.online) this.netPress(seat, !!v);
       }
-      if (!this.online) return;
-      this.fixed(STEP);
-      if (t % 30 === 0) this.online.hash(t, this.netHash());
-    } finally { Math.random = real; }
+      if (this.online) this.fixed(STEP);
+    } finally { Math.random = real; this.sfx.gate = null; }
+  }
+  // rewinding (see FloppyNet's Session): netSave copies every object the match is made of, and netLoad puts the
+  // copies back into those same objects, so whatever points at them (the physics, callbacks) still lines up
+  netSave() {
+    const keep = new Map([[this, null]]), todo = [this];
+    while (todo.length) {
+      const o = todo.pop();
+      if (ArrayBuffer.isView(o)) { keep.set(o, o.slice()); continue; }
+      let c;
+      if (Array.isArray(o)) c = o.slice();
+      else if (o instanceof Map || o instanceof Set) c = [...o];
+      else { c = Object.create(null); for (const k of Object.keys(o)) if (o !== this || !NET_LOCAL.has(k)) c[k] = o[k]; }
+      keep.set(o, c);
+      if (o === this.rec) continue;   // (recorded replay frames never change)
+      for (const v of o instanceof Map ? c.flat() : Array.isArray(c) ? c : Object.values(c)) {
+        if (v && typeof v === 'object' && !keep.has(v) && !NET_OPAQUE(v)) { keep.set(v, null); todo.push(v); }
+      }
+    }
+    return { keep, rim: [RIM_Y, RIM_HALF] };
+  }
+  netLoad(s) {
+    for (const [o, c] of s.keep) {
+      if (ArrayBuffer.isView(o)) o.set(c);
+      else if (Array.isArray(o)) { o.length = c.length; for (let i = 0; i < c.length; i++) o[i] = c[i]; }
+      else if (o instanceof Map) { o.clear(); for (const [k, v] of c) o.set(k, v); }
+      else if (o instanceof Set) { o.clear(); for (const v of c) o.add(v); }
+      else { for (const k of Object.keys(o)) if (!(k in c) && (o !== this || !NET_LOCAL.has(k))) delete o[k]; Object.assign(o, c); }
+    }
+    [RIM_Y, RIM_HALF] = s.rim;
   }
   netCommand(c, t) {
     if (c.c === 'start') this.netStart(c);
@@ -5160,7 +5213,7 @@ class Game {
     else if (c.c === 'sync') this.netResync(c, t);
   }
   netStart(c) {
-    this.netRand = rng(c.seed); Math.random = this.netRand;
+    this.netDice = { a: c.seed >>> 0 }; this.netRand = rngIn(this.netDice); Math.random = this.netRand;   // (the dice live on the match, so a rewind takes them back too)
     closeReel(); this.sfx.stopClip();
     if (!this.homeSettings) this.homeSettings = this.settings;
     this.settings = Object.assign({}, this.homeSettings, c.set);   // the host's modes and dunks; sounds stay this computer's
@@ -5198,7 +5251,7 @@ class Game {
     T.command({ c: 'sync', seed: newSeed(), score: this.score.slice(), round: this.round, over: this.state === 'over' ? this.winner : -1 });
   }
   netResync(c, t) {
-    this.netRand = rng(c.seed); Math.random = this.netRand;
+    this.netDice = { a: c.seed >>> 0 }; this.netRand = rngIn(this.netDice); Math.random = this.netRand;
     this.trans = null; this.replay = null; this.pendingReplay = false; this.evq.length = 0;
     this.score = c.score.slice(); this.round = c.round; this.streak = { team: -1, n: 0 };
     this.setupRound(c.round > 1 ? this.nextRound() : CLASSIC_ROUND);
@@ -5772,9 +5825,11 @@ function render(G) {
 
 // ---------------------------------------------------------------- game modes panel
 // online every computer steps the match on the same dice; sounds differ per computer, so they roll their own
+// (and online a rewound tick doesn't play its sounds twice: netTick sets gate)
+const SFX_QUIET = new Set(['constructor', 'init', 'setMuted', 'has', 'stopClip', 'loadClips', 'curve', 'send']);
 for (const k of Object.getOwnPropertyNames(Sfx.prototype)) {
-  const d = Object.getOwnPropertyDescriptor(Sfx.prototype, k);
-  if (k !== 'constructor' && typeof d.value === 'function') Sfx.prototype[k] = ownDice(d.value);
+  const d = Object.getOwnPropertyDescriptor(Sfx.prototype, k), f = d.value;
+  if (k !== 'constructor' && typeof f === 'function') Sfx.prototype[k] = ownDice(SFX_QUIET.has(k) ? f : function (...a) { if (this.gate && !this.gate(k)) return; return f.apply(this, a); });
 }
 Game.prototype.greenSound = ownDice(Game.prototype.greenSound);
 const G = new Game();
@@ -6172,7 +6227,7 @@ let last = performance.now(), acc = 0;
 function loop(now) {
   const rdt = Math.min(0.05, (now - last) / 1000); last = now;
   G.frame(rdt);
-  if (G.net && G.net.live) G.net.frame(rdt * G.timeScale * GAME_SPEED / STEP, (evs, t) => G.netTick(evs, t));   // online the room sets the pace
+  if (G.net && G.net.live) G.net.frame(rdt * G.timeScale * GAME_SPEED / STEP, G);   // online the room sets the pace
   else if (!G.paused && G.state !== 'replay') {
     acc += rdt * G.timeScale * GAME_SPEED;
     let n = 0;
