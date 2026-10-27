@@ -497,10 +497,10 @@ const SOUND_REEL = [
   { id: 'greenchicken', name: 'GREEN GREEN CHICKEN', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'greenchicken', trim: [0, 1.68], gain: 0.7 },
   { id: 'kobe', name: 'KOBE', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'kobe', trim: [0, 0.6], gain: 2.5 },
   { id: 'larrybird', name: 'LARRY BIRD', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'larrybird', trim: [0, 1.33], gain: 0.55 },
-  { id: 'letitrain', name: 'LET IT RAIN', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'letitrain', trim: [0, 0.83], gain: 0.6 },
+  { id: 'letitrain', name: 'LET IT RAIN', when: 'POSTERIZING DUNK', demo: 'poster', poster: true, clip: 'letitrain', trim: [0, 0.83], gain: 0.6 },
   { id: 'heehee', name: 'HEE HEE', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'heehee', trim: [0.5, 1.42], gain: 2.2 },
   { id: 'wetball', name: 'WET BALL', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'wetball', trim: [0, 1.39], gain: 0.25 },
-  { id: 'negalert', name: 'NEGATIVE ALERT', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'negalert', trim: [0, 1.17], gain: 0.5 },
+  { id: 'negalert', name: 'NEGATIVE ALERT', when: 'POSTERIZING DUNK', demo: 'poster', poster: true, clip: 'negalert', trim: [0, 1.17], gain: 0.5 },
   // Rocket League's splash goal explosion (the game's own sound, mixed down from 5.1 to stereo)
   { id: 'bigsplash', name: 'ROCKET LEAGUE BIG SPLASH', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'bigsplash', trim: [0, 3.3], gain: 1 },
   { id: 'ding', name: 'CORRECT ANSWER DING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'ding', trim: [0.06, 1.0], gain: 1 },
@@ -4438,6 +4438,11 @@ class Game {
     const pool = SOUND_LIST.filter(e => e.green && this.soundOn(e.id) && this.sfx.has(e.id));
     if (pool.length) this.cue(pick(pool).id);
   }
+  // a dunk that catches a defender in the air: one of the posterizing sounds that are switched on
+  posterSound() {
+    const pool = SOUND_LIST.filter(e => e.poster && this.soundOn(e.id) && this.sfx.has(e.id));
+    if (pool.length) this.cue(pick(pool).id);
+  }
   mateFor(p) {
     let best = null, bestA = 9;
     for (const m of this.players) {
@@ -4662,8 +4667,8 @@ class Game {
     this.placeAt(blue[0], -2.5); this.placeAt(blue[1], -5.5);
     const b = this.ball; b.waiting = false; b.body.setGravityScale(1);
     // the winner scene ends when its replay does
-    Sh.dur = d === 'winner' ? 40 : d === 'collapse' ? 5.8 : Math.max(3.4, 1.6 + (e.trim ? e.trim[1] - e.trim[0] : 2));
-    if (d === 'collapse') { this.placeAt(red[0], -0.5); this.placeAt(red[1], 3.9); this.placeAt(blue[0], 5.7); }
+    Sh.dur = d === 'winner' ? 40 : d === 'collapse' || d === 'poster' ? 5.8 : Math.max(3.4, 1.6 + (e.trim ? e.trim[1] - e.trim[0] : 2));
+    if (d === 'collapse' || d === 'poster') { this.placeAt(red[0], -0.5); this.placeAt(red[1], 3.9); this.placeAt(blue[0], 5.7); }
     else { this.placeAt(red[0], -3.8); this.placeAt(red[1], 0.8); }
     this.grab(red[1], 0, b);
     Sh.shooter = red[1];
@@ -4672,8 +4677,8 @@ class Game {
     const Sh = this.show, p = Sh.shooter, b = this.ball, d = Sh.demo;
     Sh.t += dt;
     if (Sh.replayAt && Sh.t > Sh.replayAt) { Sh.replayAt = 0; this.startReplay('showcase'); return; }
-    if (d === 'collapse') {
-      if (Sh.step === 0 && Sh.t > 0.8 && b.holder === p) { Sh.step = 1; this.forceDunk = 'hammer'; p.startDunk(); this.forceDunk = null; this.forceFx = 'collapse'; }
+    if (d === 'collapse' || d === 'poster') {
+      if (Sh.step === 0 && Sh.t > 0.8 && b.holder === p) { Sh.step = 1; this.forceDunk = 'hammer'; p.startDunk(); this.forceDunk = null; this.forceFx = d; }
       if (!Sh.jumped && p.dunk && p.dunk.t > p.dunk.T - 0.3) {
         Sh.jumped = true; const o = this.players.filter(q => q.team === 1)[0];
         for (const q of o.parts) q.setLinearVelocity({ x: -0.5, y: this.cfg.jumpV * 0.9 }); o.armsUp = true;
@@ -5070,6 +5075,7 @@ class Game {
         o.flail(1); poster = true;
       }
     }
+    if (poster) this.posterSound();
     const v = p.body.getLinearVelocity(), fx = this.forceFx;
     const power = style.power * clamp(0.6 + Math.hypot(v.x, v.y) / 12, 0.6, 1.5) + (poster ? 0.5 : 0), hard = power >= 1.5;
     if (fx === 'collapse' || (!fx && hard && poster && this.dunkOn('collapse') && Math.random() < 0.2)) {
