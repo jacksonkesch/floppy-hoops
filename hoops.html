@@ -1381,7 +1381,7 @@ class Player {
   }
   updateDunk(dt) {
     const D = this.dunk, st = D.style, dir = this.dir, g = this.game;
-    if ((D.ball.holder && D.ball.holder !== this) || (!D.released && this.holding !== D.ball)) { this.dunk = null; this.front = false; this.legA = null; this.layer = null; return; }
+    if ((D.ball.holder && D.ball.holder !== this) || (!D.released && this.holding !== D.ball)) { this.cancelDunk(); return; }
     D.t += dt;
     const s = clamp(D.t / D.T, 0, 1), s2 = clamp((D.t + dt) / D.T, 0, 1);
     const q = D.path(s2), pos = this.body.getPosition();
@@ -1399,6 +1399,12 @@ class Player {
     for (const [at, ev] of st.events || []) if (!D.fired[at] && s >= at) { D.fired[at] = true; this.dunkEvent(ev, D); }
     if (st.sparkle && s > st.sparkle[0] && s < st.sparkle[1] && Math.random() < 0.6) { const c = this.center(); g.addPart(c.x + rand(-0.6, 0.6), c.y + rand(-1, 0.8), 0, rand(-0.3, 0.3), 0, 0.5, pick(['#ffffff', '#c9d6ff', '#ffd23f']), 1); }
     if (s >= 1) this.finishDunk();
+  }
+  // the ball got taken mid-dunk: drop the pose and stop the tumble, so he comes down upright instead of rolling on
+  cancelDunk() {
+    this.dunk = null; this.front = false; this.legA = null; this.layer = null; this.armScale = 1; this.spinA = 0;
+    for (const b of this.parts) b.setAngularVelocity(clamp(b.getAngularVelocity(), -2, 2));
+    this.upT = 0.9;
   }
   dunkEvent(ev, D) {
     const g = this.game, dir = this.dir;
@@ -4911,7 +4917,7 @@ class Game {
     if (prev && prev !== p) {
       const wasDunk = !!prev.dunk;
       this.note(wasDunk ? 'block' : 'steal', p);
-      prev.grabCD = 0.5; prev.dunk = null; prev.holding = null; prev.front = false; prev.legA = null; prev.layer = null; prev.armScale = 1; this.clearMeter(prev);
+      prev.grabCD = 0.5; prev.holding = null; if (prev.dunk) prev.cancelDunk(); this.clearMeter(prev);
       this.popup(wasDunk ? 'BLOCKED!' : 'STEAL!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 0.9); this.stat(p.team, wasDunk ? 'blocks' : 'steals'); this.sfx.steal();
     } else if (inFlight) { this.note('goaltend', p); this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks'); this.sfx.steal(); }
     else { this.note('grab', p); this.sfx.grab(); }
