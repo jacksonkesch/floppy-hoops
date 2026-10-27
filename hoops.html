@@ -4526,13 +4526,30 @@ class Game {
   }
   nextRound() { return this.randomRound(this.settings.modes, this.settings.always); }
   makeCrowd() {
-    const r = rng(this.round * 131 + 7), people = [];
-    const shirts = ['#7f8aa3', '#9a7f7f', '#86977f', '#a29579', '#8a7da3', '#a46a6c', '#6a7fa6', '#b0a58c'];
+    // home fans fill the left stands and away fans the right, with a few strays. Fans wear their team's
+    // colours, some in caps or with foam fingers, and a handful hold up signs.
+    const r = rng(this.round * 131 + 7), people = [], used = [[], [], [], []], one = a => a[(r() * a.length) | 0];
+    const plain = ['#7f8aa3', '#9a7f7f', '#86977f', '#a29579', '#8a7da3', '#b0a58c'], hair = ['#231812', '#4a2e1c', '#8a5a2e', '#d8b25a', '#1c1c24'];
     for (let row = 0; row < 4; row++) {
       const yb = 58 + row * 12 + 11;
-      for (let x = 2 + ((r() * 5) | 0); x < ART_W - 4; x += 7 + ((r() * 5) | 0)) {
-        if (r() < 0.2) continue;
-        people.push({ x, yb, shirt: shirts[(r() * shirts.length) | 0], skin: ['#d9b89a', '#c49a78', '#a47b5c', '#7d5a42'][(r() * 4) | 0], ph: r() * 6.28 });
+      for (let x = 2 + ((r() * 5) | 0); x < ART_W - 6; x += 7 + ((r() * 4) | 0)) {
+        if (r() < 0.15) continue;
+        const side = x < ART_W / 2 ? 0 : 1, roll = r(), team = roll < 0.78 ? side : roll < 0.9 ? 1 - side : -1, fan = team >= 0;
+        const q = { x, yb, team, shirt: fan ? (r() < 0.65 ? TEAM[team].jersey : TEAM[team].dark) : one(plain),
+          stripe: fan && r() < 0.4, cap: fan && r() < 0.3, finger: fan && r() < 0.1, hair: one(hair),
+          skin: one(['#d9b89a', '#c49a78', '#a47b5c', '#7d5a42']), ph: r() * 6.28, bag: r(), sign: null };
+        // a sign: cheering your own team or trashing the other one, kept clear of the signs beside it
+        if (fan && !q.finger && row > 0 && r() < 0.16) {
+          const me = TEAM[team].name, them = TEAM[1 - team].name;
+          const text = r() < 0.5 ? one([`GO ${me}`, `${me}!`, 'DEFENSE', 'DUNK IT', 'LETS GO']) : one([`${them} SUX`, `BOO ${them}`, 'AIRBALL', 'BRICK']);
+          const w = text.length * 4 + 1, sx = x + 2 - (w >> 1);
+          if (sx > 1 && sx + w < ART_W - 1 && used[row].every(([l, rt]) => sx + w + 2 < l || sx > rt + 2)) {
+            used[row].push([sx, sx + w]);
+            const light = r() < 0.5;
+            q.sign = { text, w, bg: light ? '#f4ecd8' : TEAM[team].jersey, fg: light ? TEAM[team].dark : '#ffffff' };
+          }
+        }
+        people.push(q);
       }
     }
     this.crowd = people;
@@ -5499,12 +5516,31 @@ function drawLow(G, fr) {
   g.drawImage(G.bg, 0, 0);
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
   if (key === 'gym') {
-    const ex = G.excite;
+    const ex = G.excite, lead = G.score[0] - G.score[1], need = Math.max(2, Math.ceil(G.target * 0.6));
+    // in a blowout the losing side's fans pull paper bags over their heads, more of them the worse it gets
+    const sad = Math.abs(lead) >= need ? (lead > 0 ? 1 : 0) : -1, bags = sad < 0 ? 0 : Math.min(0.85, 0.45 + 0.2 * (Math.abs(lead) - need));
     for (const q of G.crowd) {
-      const hop = ex > 0.05 && Math.sin(t * 12 + q.ph) > 0.3 - ex ? Math.round(ex * 2) : 0;
-      const y = q.yb - hop;
-      R(q.x, y - 4, 4, 4, q.shirt); R(q.x + 1, y - 7, 3, 3, q.skin);
-      if (hop > 1) { R(q.x - 1, y - 8, 1, 3, q.skin); R(q.x + 4, y - 8, 1, 3, q.skin); }
+      const bag = q.team === sad && q.bag < bags, fan = q.team >= 0;
+      // when a team scores its fans jump; the other side's sit on their hands
+      const cheer = ex > 0.05 && !bag && (!fan || G.scorer == null || q.team === G.scorer);
+      const hop = cheer && Math.sin(t * 12 + q.ph) > 0.3 - ex ? Math.round(ex * 2) : 0;
+      const x = q.x, y = q.yb - hop;
+      R(x, y - 5, 5, 5, q.shirt);
+      if (q.stripe) R(x, y - 4, 5, 1, '#ffffff');
+      if (bag) { R(x, y - 10, 5, 5, '#c8a26a'); R(x, y - 10, 5, 1, '#a8844f'); R(x + 1, y - 8, 1, 1, '#141019'); R(x + 3, y - 8, 1, 1, '#141019'); }
+      else {
+        R(x + 1, y - 8, 3, 3, q.skin);
+        if (q.cap) { R(x + 1, y - 9, 3, 1, TEAM[q.team].jersey); R(q.team ? x : x + 4, y - 8, 1, 1, TEAM[q.team].dark); } else R(x + 1, y - 9, 3, 1, q.hair);
+      }
+      if (q.sign && !bag) {
+        const sg = q.sign, sx = x + 2 - (sg.w >> 1) + (cheer ? (Math.sin(t * 10 + q.ph) > 0 ? 1 : -1) : 0), sy = y - 17;
+        R(x - 1, y - 10, 1, 5, q.skin); R(x + 5, y - 10, 1, 5, q.skin);
+        R(sx, sy, sg.w, 7, sg.bg); R(sx, sy + 6, sg.w, 1, 'rgba(20,16,25,0.35)'); tiny(g, sg.text, sx + 1, sy + 1, sg.fg);
+      } else if (q.finger && !bag) {
+        const f = TEAM[q.team].light;
+        R(x + 5, y - 9, 1, 4, q.skin); R(x + 5, y - 12, 2, 3, f); R(x + 5, y - 14, 1, 2, f);
+        if (hop > 1) R(x - 1, y - 9, 1, 4, q.skin);
+      } else if (hop > 1) { R(x - 1, y - 9, 1, 4, q.skin); R(x + 5, y - 9, 1, 4, q.skin); }
     }
   } else if (key === 'park' || key === 'beach') {
     for (const c of G.clouds) { const x = Math.round(c.x), y = Math.round(c.y); R(x, y, c.w, 5, '#ffffff'); R(x + 4, y - 3, c.w * 0.5, 3, '#ffffff'); R(x + c.w * 0.45, y - 5, c.w * 0.35, 5, '#ffffff'); }
