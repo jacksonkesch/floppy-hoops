@@ -4911,7 +4911,7 @@ class Game {
     if (prev && prev !== p) {
       const wasDunk = !!prev.dunk;
       this.note(wasDunk ? 'block' : 'steal', p);
-      prev.grabCD = 0.5; prev.dunk = null; prev.holding = null; this.clearMeter(prev);
+      prev.grabCD = 0.5; prev.dunk = null; prev.holding = null; prev.front = false; prev.legA = null; prev.layer = null; prev.armScale = 1; this.clearMeter(prev);
       this.popup(wasDunk ? 'BLOCKED!' : 'STEAL!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 0.9); this.stat(p.team, wasDunk ? 'blocks' : 'steals'); this.sfx.steal();
     } else if (inFlight) { this.note('goaltend', p); this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks'); this.sfx.steal(); }
     else { this.note('grab', p); this.sfx.grab(); }
