@@ -469,6 +469,13 @@ const SOUND_REEL = [
   // Rocket League's splash goal explosion (the game's own sound, mixed down from 5.1 to stereo)
   { id: 'bigsplash', name: 'ROCKET LEAGUE BIG SPLASH', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'bigsplash', trim: [0, 3.3], gain: 1 },
   { id: 'ding', name: 'CORRECT ANSWER DING', when: 'GREEN RELEASE', demo: 'green', green: true, clip: 'ding', trim: [0.06, 1.0], gain: 1 },
+  // made in code (no clip): the same switch and the same GREEN RELEASE slot as the clips
+  { id: 'coinrush', name: 'COIN RUSH', when: 'GREEN RELEASE', demo: 'green', green: true },
+  { id: 'bassdrop', name: 'BASS DROP', when: 'GREEN RELEASE', demo: 'green', green: true },
+  { id: 'laserzap', name: 'LASER ZAP', when: 'GREEN RELEASE', demo: 'green', green: true },
+  { id: 'choirhit', name: 'CHOIR HIT', when: 'GREEN RELEASE', demo: 'green', green: true },
+  { id: 'register', name: 'CASH REGISTER', when: 'GREEN RELEASE', demo: 'green', green: true },
+  { id: 'airhorn', name: 'AIRHORN BLAST', when: 'GREEN RELEASE', demo: 'green', green: true },
   // cut at 7.2s: after that it's the TikTok end card
   { id: 'greenfn', name: 'GREEN FN', when: 'GAME-WINNING GREEN', demo: 'winner', clip: 'greenfn', trim: [0, 7.19], gain: 0.94 },
   { id: 'pipe', name: 'METAL PIPE', when: 'THE HOOP COLLAPSES', demo: 'collapse' },
@@ -697,6 +704,7 @@ class Sfx {
     const e = SOUND_BY_ID[id];
     if (e.clip) this.playClip(e);
     else if (id === 'pipe') this.metalPipe(when);
+    else this.greenSynth(id, when);
   }
   metalPipe(at = 0) {
     // a steel pipe hitting concrete: ringing, out-of-tune partials, then it bounces and rattles
@@ -712,6 +720,35 @@ class Sfx {
       this.hiss(0.06, 0.5 * amp, 'highpass', 2500, 0, 0.7, at + dt, this.bus);
     };
     hit(0, 0.6, 1); hit(0.21, 0.32, 0.5); hit(0.36, 0.2, 0.35); hit(0.46, 0.12, 0.25); hit(0.53, 0.07, 0.2);
+  }
+  // the green sounds made in code
+  greenSynth(id, at = 0) {
+    const K = id === 'bassdrop' ? 1 : 1.6;   // (the clips are loud, so these are a bit up on the plain effects)
+    const T = (type, f0, f1, dur, vol, when = 0) => this.tone(type, f0, f1, dur, vol * K, at + when);
+    if (id === 'coinrush') {
+      // coins: a fast rising run, each note a square and a bell an octave up, and a shimmer at the top
+      [988, 1319, 1568, 1976, 2637].forEach((f, k) => { T('square', f, f, 0.11, 0.07, k * 0.065); T('sine', f * 2, f * 2, 0.16, 0.05, k * 0.065); });
+      T('sine', 3951, 3951, 0.6, 0.06, 0.34); T('sine', 5274, 5274, 0.5, 0.035, 0.34);
+    } else if (id === 'bassdrop') {
+      // a sub boom falling away under a gust of noise, with sparkle coming in behind it
+      T('sine', 130, 34, 1.0, 0.5); T('triangle', 260, 60, 0.5, 0.18); this.hiss(0.5, 0.35, 'lowpass', 900, 80, 0.8, at);
+      [2093, 2637, 3136, 4186].forEach((f, k) => T('sine', f, f, 0.35, 0.045, 0.12 + k * 0.07));
+    } else if (id === 'laserzap') {
+      // two arcade zaps, the second a little lower
+      T('sawtooth', 2600, 160, 0.26, 0.1); T('square', 1900, 240, 0.22, 0.05); T('sawtooth', 2100, 140, 0.3, 0.1, 0.2); T('square', 1500, 200, 0.26, 0.05, 0.2);
+      this.hiss(0.05, 0.12, 'highpass', 5000, 0, 0.7, at); this.hiss(0.05, 0.1, 'highpass', 5000, 0, 0.7, at + 0.2);
+    } else if (id === 'choirhit') {
+      // a stacked, slightly detuned major chord with some breath on top
+      [261.6, 329.6, 392, 523.3, 659.3].forEach(f => { T('sawtooth', f * 0.997, f * 0.997, 0.95, 0.03); T('sawtooth', f * 1.004, f * 1.004, 0.95, 0.03); T('sine', f * 2, f * 2, 0.8, 0.02); });
+      this.hiss(0.7, 0.04, 'bandpass', 1800, 1200, 2, at);
+    } else if (id === 'register') {
+      // the drawer clunk, then the bell
+      this.hiss(0.06, 0.25, 'lowpass', 1400, 0, 0.8, at); T('sine', 180, 90, 0.12, 0.3);
+      T('sine', 2093, 2093, 1.0, 0.1, 0.1); T('sine', 3136, 3136, 0.9, 0.06, 0.1); T('sine', 4186, 4186, 0.7, 0.04, 0.1); T('sine', 2093, 2093, 0.9, 0.07, 0.3); T('sine', 3136, 3136, 0.8, 0.04, 0.3);
+    } else if (id === 'airhorn') {
+      // a stadium horn: three notes at once, a short blast and then a long one
+      [[0, 0.3], [0.38, 0.75]].forEach(([w, d]) => [466.2, 554.4, 698.5].forEach(f => { T('sawtooth', f, f * 0.99, d, 0.045, w); T('square', f * 2, f * 2 * 0.99, d, 0.012, w); }));
+    }
   }
   // one meme clip at a time: a new one cuts off whatever was playing
   playClip(e) {
