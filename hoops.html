@@ -4500,7 +4500,7 @@ class Game {
     this.ball = this.balls[0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
-    this.roundT = 0; this.whistled = false; this.cam.watch = null; this.cam.z = 1;
+    this.roundT = 0; this.cam.watch = null; this.cam.z = 1;
     if (!this.isShadow) this.bg = ownDice(courtImage)(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
     this.bannerItems = [court.key === 'gym' ? '' : court.name, ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
@@ -5290,7 +5290,6 @@ class Game {
     if (this.state === 'showcase') this.updateShow(dt);
     this.watchShot(dt);
     for (const p of this.players) p.update(dt);
-    if (this.roundT > 0.3 && !this.whistled) { this.whistled = true; if (this.state === 'play') this.sfx.whistle(); }
     for (const b of this.balls) {
       if (b.waiting) {
         if (this.roundT > 0.95) { b.waiting = false; b.body.setGravityScale(1); b.body.setLinearVelocity({ x: rand(-0.6, 0.6), y: 0 }); }
