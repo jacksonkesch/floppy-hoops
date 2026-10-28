@@ -844,14 +844,34 @@ function bodyExtras(g, w, h, jEnd, off, L, front) {
     const bx = front ? Math.round(mid) - 1 : Math.round(w - 4);
     for (let y = jEnd - 0; y <= jEnd + 1; y++) for (let x = bx; x <= bx + 2; x++) P(x, y, y === jEnd && x === bx + 1 ? '#fff0a0' : '#e0b030');   // the buckle
   }
-  if (L.outfit === 'lv') {   // the monogram, big enough to read: a bold LV, then the diamond star and ringed flower, tan on espresso brown
-    const tan = '#d9aa58', x0 = Math.floor((w - 7) / 2), dot = (X, Y) => { if (Y >= 1 && Y < jEnd - 1) P(X, Y, tan); };
-    for (let k = 0; k < 2; k++) { const bits = F3['LV'[k]]; for (let i = 0; i < 15; i++) if (bits[i] === '1') dot(x0 + k * 4 + i % 3, 1 + ((i / 3) | 0)); }
-  }
   if (L.bulge) {
     if (front) { for (let y = h - 6; y < h - 1; y++) for (let x = Math.round(mid) - 1; x <= Math.round(mid) + 1; x++) if (!(y === h - 6 && x !== Math.round(mid))) P(x, y, x === Math.round(mid) - 1 ? '#22222a' : '#33333f'); }
     else for (let k = 1; k <= 3; k++) for (let y = h - 6 + (k - 1); y < h - 2 - (k - 1) + (k === 1 ? 1 : 0); y++) { g.fillStyle = k === 3 ? '#22222a' : '#33333f'; g.fillRect(w - 1 + k, y, 1, 1); }
   }
+}
+// Louis Vuitton: the jersey's flat brown redrawn as smooth vector monogram at 10x, so it is not pixelated (spr.k tells the renderer)
+function lvTile() {
+  const N = 36, [c, g] = mk(N, N), tan = '#c9a05a', dk = '#2a190c';
+  g.fillStyle = '#3a2312'; g.fillRect(0, 0, N, N); g.scale(0.6, 0.6);
+  const star = (x, y, r, w) => { g.beginPath(); g.moveTo(x, y - r); g.quadraticCurveTo(x + w, y - w, x + r, y); g.quadraticCurveTo(x + w, y + w, x, y + r); g.quadraticCurveTo(x - w, y + w, x - r, y); g.quadraticCurveTo(x - w, y - w, x, y - r); g.closePath(); g.fill(); };
+  g.fillStyle = tan; g.strokeStyle = tan;
+  g.font = 'bold italic 26px Georgia, "Times New Roman", serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('LV', 17, 17); g.fillText('LV', 47, 47);
+  star(47, 15, 6, 1.6); star(17, 47, 6, 1.6);
+  star(30, 30, 9, 2.2);
+  g.fillStyle = tan; g.beginPath(); g.arc(30, 5, 4, 0, 7); g.fill(); g.fillStyle = dk; g.beginPath(); g.arc(30, 5, 1.6, 0, 7); g.fill();
+  g.fillStyle = tan; g.beginPath(); g.arc(30, 55, 4, 0, 7); g.fill(); g.fillStyle = dk; g.beginPath(); g.arc(30, 55, 1.6, 0, 7); g.fill();
+  return c;
+}
+function lvHiRes(spr, T) {
+  const K = 10, w = spr.c.width, h = spr.c.height, [c, g] = mk(w * K, h * K);
+  g.imageSmoothingEnabled = false; g.drawImage(spr.c, 0, 0, w * K, h * K);
+  const src = spr.c.getContext('2d').getImageData(0, 0, w, h).data, [m, mg] = mk(w * K, h * K), [jr, jg, jb] = hexRgb(T.jersey);
+  mg.fillStyle = '#000';
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (src[i + 3] > 200 && src[i] === jr && src[i + 1] === jg && src[i + 2] === jb) mg.fillRect(x * K, y * K, K, K); }
+  mg.globalCompositeOperation = 'source-in'; mg.fillStyle = g.createPattern(lvTile(), 'repeat'); mg.fillRect(0, 0, w * K, h * K);
+  g.drawImage(m, 0, 0);
+  return { c, ox: spr.ox * K, oy: spr.oy * K, k: K };
 }
 function torsoFrontSprite(w, h, T, num, belly = 0, L = {}) {
   const [c, g] = mk(w + 2 * belly, h); const P0 = painter(g), P = (x, y, col) => P0(x + belly, y, col);
@@ -1586,6 +1606,7 @@ class Player {
     s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy };
     s.headF = headFrontSprite(px(d.headR * 2), L, T);
     s.torsoF = torsoFrontSprite(px(d.torsoW) + 4, px(d.torsoH), T, L.num, L.belly ? L.belly - 1 : 0, L);
+    if (L.outfit === 'lv') { s.torso = lvHiRes(s.torso, T); s.torsoF = lvHiRes(s.torsoF, T); }
   }
   center() { return this.body.getWorldPoint(this.tc); }
   get x() { return this.center().x; }
@@ -6261,13 +6282,17 @@ const RENDER = {
   part(spr, body, flip, sx = 1, sy = 1) {
     const p = body.getPosition();
     ctx.save(); ctx.translate(SX(p.x), SY(p.y)); ctx.rotate(-body.getAngle()); if (sx !== 1 || sy !== 1) ctx.scale(sx, sy); if (flip) ctx.scale(-1, 1);
-    ctx.drawImage(spr.c, -spr.ox * S, -spr.oy * S, spr.c.width * S, spr.c.height * S);
+    const k = spr.k || 1; if (k > 1) ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(spr.c, -spr.ox * S / k, -spr.oy * S / k, spr.c.width * S / k, spr.c.height * S / k);
+    if (k > 1) ctx.imageSmoothingEnabled = false;
     ctx.restore();
   },
   local(spr, body, lx, ly, flip, sx = 1, rl = 0) {
     const p = body.getPosition();
     ctx.save(); ctx.translate(SX(p.x), SY(p.y)); ctx.rotate(-body.getAngle()); if (sx !== 1) ctx.scale(sx, 1); ctx.translate(lx * PPM * S, -ly * PPM * S); if (rl) ctx.rotate(-rl); if (flip) ctx.scale(-1, 1);
-    ctx.drawImage(spr.c, -spr.ox * S, -spr.oy * S, spr.c.width * S, spr.c.height * S);
+    const k = spr.k || 1; if (k > 1) ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(spr.c, -spr.ox * S / k, -spr.oy * S / k, spr.c.width * S / k, spr.c.height * S / k);
+    if (k > 1) ctx.imageSmoothingEnabled = false;
     ctx.restore();
   },
   ball(b) { RENDER.part(b.spr, b.body, false); },
