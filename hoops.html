@@ -217,6 +217,7 @@ const MODES = [
   { id: 'movehoop', cat: 'OBSTACLES', name: 'MOVING HOOPS', isNew: true },
   { id: 'tramp', cat: 'OBSTACLES', name: 'TRAMPOLINES', isNew: true },
   { id: 'wall', cat: 'OBSTACLES', name: 'CENTER WALL', isNew: true },
+  { id: 'bouncy', cat: 'OBSTACLES', name: 'BOUNCY WALLS', isNew: true },
   { id: 'twoball', cat: 'OBSTACLES', name: 'TWO BALLS', isNew: true },
 ];
 const MODE_CATS = ['COURTS', 'BALLS', 'PLAYERS', 'HOOPS', 'PHYSICS', 'OBSTACLES'];
@@ -266,12 +267,17 @@ const PHYS = {
   crazyspd:  { name: 'CRAZY SPEED BALL', grav: 1, jump: 1, wind: 0, spd: 'random' },
 };
 const SPD_RAMP = 1.15, SPD_MAX = 6;                       // SPEED-UP: x1.15 every second of the round (x4 at 11 s), up to 6x
+// BOUNCY WALLS: the side walls are rubber and kick the ball back 35% faster than it came in (up to a cap,
+// so a ball rolling between them can't wind itself up forever)
+const WALL_K = 1.35, WALL_VMAX = 17;
+const wallKick = vx => Math.min(WALL_K, WALL_VMAX / Math.max(1, Math.abs(vx)));
 const SPD_ROLLS = [0.25, 0.4, 0.6, 1.7, 2.5, 3.5, 5];     // CRAZY: the speeds it can roll, from 4x slower to 5x faster
 const OBST = {
   none:     { name: '' },
   movehoop: { name: 'MOVING HOOPS' },
   tramp:    { name: 'TRAMPOLINES' },
   wall:     { name: 'CENTER WALL' },
+  bouncy:   { name: 'BOUNCY WALLS' },
   twoball:  { name: 'TWO BALLS' },
 };
 const WALL_H = 2.2;
@@ -2096,7 +2102,7 @@ class ImpossibleCPU extends CPU {
       if (y < r) { y = r; if (vy < 0) { vy = vy < -1 ? -vy * fb : 0; vx *= 0.9; } }
       if (g.pads && y < r + 0.1 && vy <= 0.5) for (const pad of g.pads) if (Math.abs(x - pad.x) < pad.w / 2) { vy = Math.max(-vy * 1.05, 8.5); break; }
       if (y > VY1 - r && vy > 0) { y = VY1 - r; vy = -vy * rest; }
-      if (Math.abs(x) > 8 - r) { x = Math.sign(x) * (8 - r); vx = -vx * rest; }
+      if (Math.abs(x) > 8 - r && vx * x > 0) { x = Math.sign(x) * (8 - r); vx = -vx * (g.cfg.obst.bouncy ? wallKick(vx) : rest); }
       if (g.cfg.obst.wall && Math.abs(x) < 0.15 + r && y < WALL_H + r) {
         if (y > WALL_H && Math.abs(x) < 0.15) { y = WALL_H + r; vy = Math.abs(vy) * rest; } else { x = Math.sign(x || vx || 1) * (0.15 + r); vx = -vx * rest; }
       }
@@ -4383,10 +4389,11 @@ function migrateModes(m, ver) {
   if (ver < 2) m = m.filter(id => !OFF_BY_DEFAULT.includes(id));
   if (ver < 3) for (const id of ['tokyo', 'rome']) if (!m.includes(id)) m.push(id);
   if (ver < 5) for (const id of ['speedup', 'crazyspd']) if (!m.includes(id)) m.push(id);
+  if (ver < 6) for (const id of ['bouncy']) if (!m.includes(id)) m.push(id);
   return m;
 }
 function loadSettings() {
-  const def = { ver: 5, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [] };
+  const def = { ver: 6, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
@@ -4394,7 +4401,7 @@ function loadSettings() {
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       target: [3, 5, 7, 11].includes(s.target) ? s.target : s.target === 10 ? 11 : 5, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
-      ver: 5,
+      ver: 6,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
       always: Array.isArray(s.always) ? s.always.filter(id => MODES.some(m => m.id === id)) : [],
       // (a dunk added after the settings were saved starts switched on)
@@ -4498,7 +4505,7 @@ class Game {
     const gravity = court.gravity * phys.grav, jumpH = court.jumpH * phys.jump * body.jump;
     this.rc = rc; this.roundId = (this.roundId || 0) + 1;
     this.cfg = { court, ball, body, hoop, phys, gravity, spd: phys.spd || null, jumpV: Math.sqrt(2 * gravity * jumpH), wind: phys.wind ? rand(3, 4.5) : 0,
-      obst: { move: rc.obst === 'movehoop', tramp: rc.obst === 'tramp', wall: rc.obst === 'wall', two: rc.obst === 'twoball', name: obst.name } };
+      obst: { move: rc.obst === 'movehoop', tramp: rc.obst === 'tramp', wall: rc.obst === 'wall', two: rc.obst === 'twoball', bouncy: rc.obst === 'bouncy', name: obst.name } };
     const w = this.world = new pl.World({ gravity: { x: 0, y: -gravity } });
     w.on('begin-contact', c => this.onContact(c, 1));
     w.on('end-contact', c => this.onContact(c, -1));
@@ -4517,6 +4524,7 @@ class Game {
     this.balls = this.cfg.obst.two ? [new Ball(this, -1.3), new Ball(this, 1.3)] : [new Ball(this, 0)];
     this.ball = this.balls[0]; this.allBalls = this.balls.slice();   // (balls = the ones still in play; a scored one leaves that list)
     this.spdK = 1; this.spdTo = 1; this.spdT = rand(1.5, 2.5);
+    this.wallHit = [0, 0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
     this.roundT = 0; this.cam.watch = null; this.cam.z = 1;
@@ -5010,7 +5018,9 @@ class Game {
     }
     if (sign < 0 || A.kind !== 'ball') return;
     const b = A.ball, v = b.body.getLinearVelocity(), sp = Math.hypot(v.x, v.y);
-    if (B.kind === 'floor' || B.kind === 'wall' || B.kind === 'ceil' || B.kind === 'midwall') {
+    if (B.kind === 'wall' && this.cfg.obst.bouncy) {
+      this.sndQ.push(['boing', sp]); this.wallHit[b.body.getPosition().x > 0 ? 1 : 0] = 1;
+    } else if (B.kind === 'floor' || B.kind === 'wall' || B.kind === 'ceil' || B.kind === 'midwall') {
       this.sndQ.push(['bounce', sp]);
       // a shot that comes down without touching the rim or the backboard
       if (B.kind === 'floor' && b.shotBy && !b.holder && !(b.rimT > b.throwTime)) this.airballQ.push(b);
@@ -5035,6 +5045,7 @@ class Game {
     } else if (o.kind === 'rim') { if (b.ghost) c.setEnabled(false); else c.setRestitution(Math.min(b.rest, 0.5)); }
     else if (o.kind === 'board') { if (b.ghost) c.setEnabled(false); else c.setRestitution(Math.min(b.rest, 0.6)); }
     else if (o.kind === 'floor') c.setRestitution(b.rest * this.cfg.court.bounce);
+    else if (o.kind === 'wall' && this.cfg.obst.bouncy) c.setRestitution(wallKick(b.body.getLinearVelocity().x));
   }
   playImpact(kind, sp) {
     if ((this.sndCD[kind] || 0) > this.time) return;
@@ -5064,9 +5075,12 @@ class Game {
       this.score[team] += pts; this.scorePop[team] = 1;
       // TWO BALLS: with the other ball still in play the basket counts and the game goes on, and this ball
       // drops out of the net and rolls off the court (a shadow just ends its try, like any basket)
-      if (this.balls.length > 1 && !this.isShadow && !this.won(team)) {
+      // A first ball that wins it ends the game, unless it only wins by exactly 2 with win by 2 on: then the
+      // other team gets the last ball to answer (12-11 -> 13-11 -> 13-12 and play goes on)
+      const answer = this.winBy2 && this.won(team) && this.score[team] - this.score[1 - team] === 2;
+      if (this.balls.length > 1 && !this.isShadow && (!this.won(team) || answer)) {
         this.onStreak(team, h); this.sfx.jingle(team); this.sendOut(b, h);
-        this.popup('ONE BALL LEFT!', 0, 4.4, '#ffd23f', 8, 1.4);
+        this.popup(answer ? `${TEAM[1 - team].name} MUST ANSWER!` : 'ONE BALL LEFT!', 0, 4.4, answer ? TEAM[1 - team].light : '#ffd23f', 8, answer ? 2 : 1.4);
         b.green = false; b.dunked = null; b.greenClip = null;
         return;
       }
@@ -5487,6 +5501,7 @@ class Game {
 
     for (const h of this.hoops) h.update(dt, this.balls, this.players);
     if (this.pads) for (const pad of this.pads) pad.squash = Math.max(0, pad.squash - dt * 6);
+    if (this.wallHit) for (let i = 0; i < 2; i++) this.wallHit[i] = Math.max(0, this.wallHit[i] - dt * 4);
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const q = this.parts[i];
       q.life -= dt; if (q.life <= 0) { this.parts.splice(i, 1); continue; }
@@ -5631,6 +5646,12 @@ function drawLow(G, fr) {
     R(x0 - 1, 149, 1, 4, '#4a4f5c'); R(x0 + w, 149, 1, 4, '#4a4f5c');
     R(x0 - 2, 146 + sq, w + 4, 3, INK); R(x0 - 1, 146 + sq, w + 2, 2, '#2f6bd8'); R(x0 - 1, 146 + sq, w + 2, 1, '#86b2ff');
     R(x0 + 1, 148 + sq, w - 2, 1, '#1a1c24');
+  }
+  if (G.cfg.obst.bouncy) for (let i = 0; i < 2; i++) {   // rubber bumpers down both sides, bulging and lit when hit
+    const k = G.wallHit[i], w = 4 + Math.round(k * 3), x0 = i ? ART_W - w : 0, top = 30;
+    R(x0 - (i ? 1 : 0), top - 1, w + 1, 151 - top, INK);
+    R(x0 + (i ? 1 : 0), top, w - 1, 150 - top, k > 0.3 ? '#ffd23f' : '#e0453a');
+    for (let y = top + 4; y < 150; y += 10) R(x0 + (i ? 1 : 0), y, w - 1, 3, k > 0.3 ? '#fff3b0' : '#ff8a6a');
   }
   if (G.cfg.obst.wall) {
     const x0 = Math.round(ax(-0.15)), top = Math.round(ay(WALL_H));
