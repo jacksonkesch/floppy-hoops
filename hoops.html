@@ -1017,15 +1017,45 @@ function paintCourt(key) {
     for (let i = 0; i < 180; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#7c808a');
     lines('#f1f1ea', '#4f76a6');
   } else if (key === 'ice') {
-    R(0, 0, ART_W, 132, '#2e3850'); R(0, 0, ART_W, 6, '#232b3f');
-    for (let x = 20; x < ART_W; x += 40) { R(x - 6, 6, 12, 2, '#e8eefc'); }
-    for (let i = 0; i < 3; i++) R(0, 44 + i * 16, ART_W, 1, '#3a4561');
-    R(0, 84, ART_W, 24, 'rgba(200,228,255,0.18)');
-    for (let x = 0; x < ART_W; x += 40) R(x, 84, 2, 24, '#8fa3c0');
-    R(0, 108, ART_W, 24, '#f2f5fa'); R(0, 124, ART_W, 3, '#d9434a'); R(0, 108, ART_W, 2, '#c7ceda');
-    for (let i = 0, x = 6; x < ART_W; i++) { const t = ['FLOPPY HOOPS', 'ICE', 'DUNK CITY'][i % 3], w = t.length * 4 + 5; tiny(g, t, x + 3, 114, i % 2 ? '#2f6bd8' : '#d9434a'); x += w + 18; }
-    R(0, 132, ART_W, 48, '#d9f0fb');
-    for (let i = 0; i < 14; i++) { const x = rnd() * ART_W, y = 138 + rnd() * 36, l = 8 + rnd() * 14; line(x, y, x + l, y - l * 0.15, '#eefaff'); }
+    // a hockey arena: dark rafters with lights and title banners, an upper deck, the LED ribbon (scrolls in drawLow),
+    // the lower bowl the animated crowd sits in, then the glass (drawn over the crowd in drawLow) and the boards
+    R(0, 0, ART_W, 132, '#1b2133'); R(0, 0, ART_W, 3, '#121725');
+    for (let x = -10; x < ART_W; x += 20) { line(x, 3, x + 10, 12, '#2a3249'); line(x + 10, 12, x + 20, 3, '#2a3249'); }
+    R(0, 12, ART_W, 1, '#2a3249'); R(0, 3, ART_W, 1, '#2a3249');
+    for (const x of [44, 116, 204, 276]) { R(x - 5, 13, 10, 2, '#3a4157'); R(x - 4, 15, 8, 1, '#fffbe0'); R(x - 6, 16, 12, 1, 'rgba(255,251,224,0.18)'); }
+    const ban = [['#d9434a', '#ffffff', '23'], ['#2f6bd8', '#ffd23f', '24'], ['#ffffff', '#d9434a', '25']];
+    [40, 64, 256, 280].forEach((x, i) => {
+      const [bg, fg, yr] = ban[i % 3]; R(x, 6, 1, 3, '#5a627a');
+      R(x - 7, 9, 15, 17, bg); for (let k = 0; k < 4; k++) P(x - 7 + k * 4 + 2, 26, bg);
+      R(x - 7, 9, 15, 1, 'rgba(0,0,0,0.25)'); R(x - 5, 12, 11, 1, fg); tiny(g, yr, x - 3, 15, fg); R(x - 5, 22, 11, 1, fg);
+    });
+    // upper deck: dark seats and a dotty far-away crowd
+    R(0, 28, ART_W, 18, '#252c42'); R(0, 28, ART_W, 1, '#323a55');
+    const far = ['#d9434a', '#2f6bd8', '#e8e0d0', '#8a93ab', '#ffd23f'];
+    for (const y of [32, 37, 42]) { R(0, y + 2, ART_W, 1, '#1d2336'); for (let x = 1; x < ART_W; x += 3) if (rnd() < 0.7) { R(x, y, 2, 2, far[(rnd() * 5) | 0]); P(x, y - 1, '#c99a74'); } }
+    for (const x of [80, 160, 240]) { R(x - 2, 28, 4, 18, '#30384f'); for (let y = 30; y < 46; y += 3) R(x - 2, y, 4, 1, '#3c4560'); }
+    // the LED ribbon board's frame (the lit text is animated)
+    R(0, 46, ART_W, 9, '#0a0c12'); R(0, 46, ART_W, 1, '#4a5270'); R(0, 54, ART_W, 1, '#4a5270');
+    // lower bowl: rows of seats, stair aisles, section numbers
+    R(0, 55, ART_W, 53, '#33405e');
+    for (let i = 0; i < 5; i++) { const y = 57 + i * 12; R(0, y + 8, ART_W, 3, '#2a3550'); R(0, y + 11, ART_W, 1, '#222b42'); for (let x = 2; x < ART_W; x += 7) R(x, y + 6, 5, 2, '#3e4c70'); }
+    [[40, '101'], [120, '102'], [200, '103'], [280, '104']].forEach(([x, n]) => { R(x - 7, 56, 13, 7, '#e8eefc'); tiny(g, n, x - 6, 57, '#1b2133'); });
+    for (const x of [80, 160, 240]) { R(x - 3, 55, 6, 53, '#27304a'); for (let y = 57; y < 108; y += 4) R(x - 3, y, 6, 1, '#3b4563'); R(x - 4, 55, 1, 53, '#8f98b0'); }
+    // the boards: white, an ad in each panel, a yellow kickplate along the ice
+    R(0, 108, ART_W, 24, '#f2f5fa'); R(0, 108, ART_W, 3, '#c7ceda'); R(0, 111, ART_W, 1, '#e0e5ee');
+    const ads = [['FLOPPY', '#d9434a', '#ffffff'], ['ICE', '#2f6bd8', '#ffffff'], ['DUNK', '#ffffff', '#d9434a'], ['ZAMBO', '#1b2133', '#ffd23f'], ['HOOPS', '#ffffff', '#2f6bd8']];
+    for (let x = 0, i = 0; x < ART_W; x += 40, i++) {
+      R(x, 112, 1, 16, '#d4d9e2');
+      const [t, bg, fg] = ads[i % ads.length], w = t.length * 4 + 3;
+      R(x + 20 - (w >> 1), 114, w, 9, bg); if (bg === '#ffffff') R(x + 20 - (w >> 1), 114, w, 1, '#d4d9e2'); tiny(g, t, x + 22 - (w >> 1), 116, fg);
+    }
+    R(0, 125, ART_W, 1, '#d9434a'); R(0, 128, ART_W, 4, '#f2c230'); R(0, 128, ART_W, 1, '#c99a1a');
+    // the ice: hockey markings under the hoops court (center red line + dots, blue lines, faceoff circles), then scratches
+    R(0, 132, ART_W, 48, '#d9f0fb'); R(0, 132, ART_W, 2, '#c6e4f2');
+    for (let y = 134; y < 180; y++) { R(Math.round(dX(-3, y)), y, 6, 1, '#f0b7bb'); for (const s2 of [-1, 1]) R(Math.round(dX(s2 * 60, y)) - 2, y, 5, 1, '#b8cdf2'); }
+    for (let y = 134; y < 180; y += 3) R(Math.round(dX(-1, y)), y, 2, 1, '#e6a3a8');
+    for (const s2 of [-1, 1]) { ell(Math.round(dX(s2 * 112, 165)), 165, 22, 7, '#f0b7bb'); R(Math.round(dX(s2 * 112, 165)) - 1, 164, 3, 2, '#e8878e'); R(Math.round(dX(s2 * 100, 145)) - 1, 144, 3, 2, '#e8878e'); }
+    for (let i = 0; i < 18; i++) { const x = rnd() * ART_W, y = 138 + rnd() * 36, l = 8 + rnd() * 14; line(x, y, x + l, y - l * 0.15, '#eefaff'); }
     lines('#d9434a', null, '#2f6bd8');
   } else if (key === 'moon') {
     R(0, 0, ART_W, 132, '#05060c');
@@ -1216,9 +1246,6 @@ function paintCourt(key) {
     for (const lx of [44, 276]) { R(lx, 94, 2, 24, '#2f3a3a'); R(lx - 2, 90, 6, 4, '#2f3a3a'); R(lx - 1, 91, 4, 2, '#fff3b0'); }   // lamp posts
     for (const bx of [96, 202]) { R(bx, 120, 22, 2, '#8a5a2e'); R(bx, 116, 22, 2, '#8a5a2e'); R(bx + 2, 122, 1, 4, '#3a3a3a'); R(bx + 19, 122, 1, 4, '#3a3a3a'); }   // benches
     R(150, 112, 18, 10, INK); R(151, 113, 16, 8, '#e8e0d0'); R(151, 113, 16, 2, '#d9434a'); R(154, 108, 10, 5, '#d9434a'); R(152, 122, 3, 3, INK); R(163, 122, 3, 3, INK); tiny(g, 'HOT', 153, 116, '#d9434a');   // a hot dog cart
-  } else if (key === 'ice') {
-    const shirts = ['#d9434a', '#2f6bd8', '#e8e0d0', '#ffd23f', '#3a3f4f'], skins = ['#e2ad84', '#b07a52', '#f0c8a0', '#7a4e30'];
-    for (const yb of [59, 75]) for (let x = 3; x < ART_W; x += 6) { if (rnd() < 0.18) continue; R(x, yb - 5, 4, 5, shirts[(rnd() * 5) | 0]); R(x + 1, yb - 8, 2, 3, skins[(rnd() * 4) | 0]); }   // the crowd
   } else if (key === 'moon') {
     R(232, 112, 16, 10, INK); R(233, 113, 14, 8, '#d9a93a'); for (let x = 234; x < 247; x += 3) R(x, 114, 1, 6, '#b8862a');   // a lunar lander
     R(236, 104, 8, 8, INK); R(237, 105, 6, 6, '#c9ced8'); R(239, 106, 2, 2, '#1d2547');
@@ -6232,7 +6259,7 @@ function drawLow(G, fr) {
   const g = lg, t = G.time, key = G.cfg.court.key;
   g.drawImage(G.bg, 0, 0);
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
-  if (key === 'gym') {
+  if (key === 'gym' || key === 'ice') {
     const ex = G.excite, lead = G.score[0] - G.score[1], need = Math.max(2, Math.ceil(G.target * 0.6));
     // in a blowout the losing side's fans pull paper bags over their heads, more of them the worse it gets
     const sad = Math.abs(lead) >= need ? (lead > 0 ? 1 : 0) : -1, bags = sad < 0 ? 0 : Math.min(0.85, 0.45 + 0.2 * (Math.abs(lead) - need));
@@ -6258,6 +6285,17 @@ function drawLow(G, fr) {
         R(x + 5, y - 9, 1, 4, q.skin); R(x + 5, y - 12, 2, 3, f); R(x + 5, y - 14, 1, 2, f);
         if (hop > 1) R(x - 1, y - 9, 1, 4, q.skin);
       } else if (hop > 1) { R(x - 1, y - 9, 1, 4, q.skin); R(x + 5, y - 9, 1, 4, q.skin); }
+    }
+    if (key === 'ice') {
+      // the LED ribbon scrolls; it flashes the scorer's colour after a bucket
+      const msg = G.excite > 0.3 && G.scorer != null ? (G.scorer ? '  BLUE SCORES!  ' : '  RED SCORES!  ') : '  WELCOME TO THE ICE    MAKE SOME NOISE    FLOPPY HOOPS    ',
+        col = G.excite > 0.3 && G.scorer != null ? TEAM[G.scorer].light : '#ffb347', tw = msg.length * 4, off = Math.floor(t * 18) % tw;
+      for (let x = -off; x < ART_W; x += tw) tiny(g, msg, x, 48, col);
+      // the glass: a pale sheet over the front rows, stanchions between panes and a couple of streaky reflections
+      R(0, 84, ART_W, 24, 'rgba(205,232,255,0.16)'); R(0, 84, ART_W, 1, 'rgba(235,246,255,0.55)');
+      for (let x = 0; x < ART_W; x += 40) { R(x, 84, 2, 24, '#9fb2cc'); R(x, 84, 1, 24, '#d6e2f2'); }
+      g.fillStyle = 'rgba(255,255,255,0.22)';
+      for (let x = 10; x < ART_W; x += 40) for (let k = 0; k < 14; k++) { g.fillRect(x + 6 + k, 104 - k, 1, 2); if (k < 8) g.fillRect(x + 14 + k, 100 - k, 1, 1); }
     }
   } else if (key === 'park') {
     for (const c of G.clouds) { const x = Math.round(c.x), y = Math.round(c.y); R(x, y, c.w, 5, '#ffffff'); R(x + 4, y - 3, c.w * 0.5, 3, '#ffffff'); R(x + c.w * 0.45, y - 5, c.w * 0.35, 5, '#ffffff'); }

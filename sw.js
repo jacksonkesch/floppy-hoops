@@ -3,7 +3,7 @@
 // cache, so an upload shows up on the next load), with the saved copy as backup; the big unchanging files
 // (sounds, physics) come straight from the cache. build.sh stamps VERSION with a
 // hash of the site files, so every upload replaces the old cache.
-const VERSION = 'ed074d73cb';
+const VERSION = '4884a5b693';
 const CACHE = 'floppy-' + VERSION, FONTS = 'floppy-fonts';
 const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'clips.js', 'net.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
