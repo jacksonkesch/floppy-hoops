@@ -29,15 +29,51 @@
   #menu button[data-lock="1"]::after { content: " \2605 ALWAYS"; font-size: 10px; }
   #menu button:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
   #menu button:active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
-  .modes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; padding-top: 14px; border-top: 2px solid #2b3350; }
   .note { margin: 6px 0 4px; font-size: 11px; color: #7d88a8; }
-  .group { margin-top: 10px; }
-  .group h3 { margin: 0 0 6px; font-size: 11px; font-weight: 400; color: #7d88a8; letter-spacing: 0.1em; }
   .new { margin-left: 6px; color: #43f07a; font-size: 10px; }
   #menu button[aria-pressed="true"] .new { color: #0e5a25; }
   .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
   #menu #done { background: #43f07a; color: #141019; font-size: 20px; padding: 10px 28px; }
   .hint { font-size: 11px; color: #7d88a8; }
+  /* settings: a header with tabs, one scrolling page at a time, DONE pinned at the bottom */
+  #menu .panel { display: flex; flex-direction: column; width: min(880px, 100%); padding: 0; overflow: hidden; }
+  .m-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 16px 20px 12px; border-bottom: 2px solid #2b3350; }
+  .m-head h2 { margin: 0 !important; }
+  .m-tabs { display: flex; gap: 6px; }
+  #menu .m-tabs button { font-size: 14px; padding: 8px 14px; }
+  #menu .m-tabs button[aria-selected="true"] { background: #ff8a2a; color: #141019; }
+  .m-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 20px 6px; }
+  .m-page { display: grid; gap: 12px; }
+  .m-page[hidden] { display: none; }
+  .card { background: #20263a; border: 2px solid #141019; box-shadow: inset 0 0 0 2px #2b3350; padding: 12px 14px 4px; }
+  .card h3 { margin: 0 0 10px; font-size: 12px; font-weight: 700; color: #ff8a2a; letter-spacing: 0.12em; }
+  .card .lbl { min-width: 150px; }
+  .m-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .pill { display: inline-block; font-size: 10px; letter-spacing: 0.08em; padding: 3px 6px; color: #8a93ad; background: #141019; border: 1px solid #2b3350; }
+  .pill.rnd { color: #141019; background: #ff8a2a; border-color: #ff8a2a; }
+  .pill.alw { color: #141019; background: #ffd23f; border-color: #ffd23f; }
+  .pill.on { color: #141019; background: #43f07a; border-color: #43f07a; }
+  #mode-groups { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .mgrp { background: #20263a; border: 2px solid #141019; box-shadow: inset 0 0 0 2px #2b3350; padding: 10px 10px 8px; display: grid; gap: 4px; align-content: start; }
+  .mgrp h3 { display: flex; justify-content: space-between; margin: 0 2px 4px; font-size: 12px; font-weight: 700; color: #ff8a2a; letter-spacing: 0.12em; }
+  .mgrp h3 span { color: #7d88a8; font-weight: 400; }
+  #menu .mrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; box-shadow: 0 2px 0 #141019; }
+  #menu .mrow .nm { display: grid; gap: 2px; }
+  #menu .mrow .sub { font-size: 9px; color: #7d88a8; letter-spacing: 0.06em; }
+  #menu .mrow, #menu .evrow { background: #1a1e2c; color: #6c748f; }
+  #menu .mrow[aria-pressed="true"], #menu .evrow[aria-pressed="true"] { background: #2a3150; color: #fff6e0; }
+  #menu .mrow[data-lock="1"] { background: #3d3820; color: #fff6e0; box-shadow: 0 2px 0 #141019; }
+  #menu .mrow[data-lock="1"]::after { content: none; }
+  #menu .mrow .new { margin-left: 4px; }
+  #menu .mrow[aria-pressed="true"] .new { color: #43f07a; }
+  #event-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  #menu .evrow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; width: 100%; text-align: left; padding: 10px 12px; }
+  #menu .evrow .nm { font-size: 14px; color: #fff6e0; }
+  #menu .evrow .sub { grid-column: 1; font-size: 10px; color: #7d88a8; line-height: 1.4; }
+  #menu .evrow .pill { grid-row: 1 / span 2; grid-column: 2; }
+  #menu .evrow[aria-pressed="false"] .nm { color: #6c748f; }
+  #menu .foot { margin: 0; padding: 12px 20px 14px; border-top: 2px solid #2b3350; }
   #reelpanel[hidden] { display: none; }
   #reelpanel { position: fixed; top: 16px; left: 16px; bottom: 16px; width: min(290px, calc(100vw - 32px)); font-family: Silkscreen, "Courier New", monospace; }
   .rp { box-sizing: border-box; height: 100%; overflow: auto; background: rgba(27, 32, 49, 0.94); border: 3px solid #141019; box-shadow: 0 6px 0 #141019, inset 0 0 0 3px #2b3350; padding: 14px 14px 16px; }
@@ -96,25 +132,46 @@
 <div id="err" hidden>The physics engine didn't load. Check your connection and reload the page.</div>
 <div id="menu" hidden role="dialog" aria-labelledby="menu-title">
   <div class="panel">
-    <h2 id="menu-title">GAME MODES</h2>
-    <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
-    <div class="row"><span class="lbl">CPU LEVEL</span><div class="seg" data-key="level"><button type="button" id="opt-level-easy" data-v="easy">EASY</button><button type="button" id="opt-level-normal" data-v="normal">NORMAL</button><button type="button" id="opt-level-hard" data-v="hard">HARD</button><button type="button" id="opt-level-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
-    <div class="row"><span class="lbl">CPU VS CPU RED</span><div class="seg" data-key="cvcRed"><button type="button" id="opt-cvcred-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcred-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcred-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcred-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
-    <div class="row"><span class="lbl">CPU VS CPU BLUE</span><div class="seg" data-key="cvcBlue"><button type="button" id="opt-cvcblue-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcblue-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcblue-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcblue-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
-    <div class="row"><span class="lbl">ALLEY-OOP MODE</span><div class="seg" data-key="cvcOop"><button type="button" id="opt-cvcoop-off" data-v="off">OFF</button><button type="button" id="opt-cvcoop-on" data-v="on">ON</button></div></div>
-    <p class="note" id="imp-note">IMPOSSIBLE plays out every fought-over moment a second ahead in silent copies of the game, and does whatever wins.</p>
-    <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
-    <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
-    <div class="modes-head"><span class="lbl">RANDOM MODES</span><span class="lbl" style="font-size:11px;opacity:.8">click once = random, twice = ALWAYS every round, thrice = off</span><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div>
-    <p class="note">After every point, one or more of the modes you leave on kicks in. Round 1 is always a normal gym. The CPU tournament uses these settings too.</p>
-    <div id="mode-groups"></div>
+    <div class="m-head">
+      <h2 id="menu-title">SETTINGS</h2>
+      <div class="m-tabs" role="tablist" aria-label="Settings pages"><button type="button" id="mtab-match" data-tab="match">MATCH</button><button type="button" id="mtab-modes" data-tab="modes">MODES</button><button type="button" id="mtab-events" data-tab="events">EVENTS</button></div>
+    </div>
+    <div class="m-body">
+    <section class="m-page" data-page="match">
+      <div class="card"><h3>GAME</h3>
+      <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
+      <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
+      <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
+      </div>
+      <div class="card"><h3>CPU</h3>
+      <div class="row"><span class="lbl">VS CPU</span><div class="seg" data-key="level"><button type="button" id="opt-level-easy" data-v="easy">EASY</button><button type="button" id="opt-level-normal" data-v="normal">NORMAL</button><button type="button" id="opt-level-hard" data-v="hard">HARD</button><button type="button" id="opt-level-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
+      <div class="row"><span class="lbl">CPU VS CPU RED</span><div class="seg" data-key="cvcRed"><button type="button" id="opt-cvcred-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcred-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcred-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcred-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
+      <div class="row"><span class="lbl">CPU VS CPU BLUE</span><div class="seg" data-key="cvcBlue"><button type="button" id="opt-cvcblue-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcblue-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcblue-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcblue-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
+      <div class="row"><span class="lbl">ALLEY-OOP ONLY</span><div class="seg" data-key="cvcOop"><button type="button" id="opt-cvcoop-off" data-v="off">OFF</button><button type="button" id="opt-cvcoop-on" data-v="on">ON</button></div></div>
+        <p class="note" id="imp-note">IMPOSSIBLE plays out every fought-over moment a second ahead in silent copies of the game, and does whatever wins. ALLEY-OOP ONLY is for CPU VS CPU.</p>
+      </div>
+    </section>
+    <section class="m-page" data-page="modes" hidden>
+      <div class="m-bar">
+        <div class="legend"><span class="pill">OFF</span><span class="pill rnd">RANDOM</span><span class="pill alw">ALWAYS</span><span class="hint">CLICK A MODE TO STEP THROUGH THESE</span></div>
+        <div class="seg"><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div>
+      </div>
+      <p class="note">After every point, one or more of the RANDOM modes kicks in. ALWAYS modes are in every round. Round 1 is always a plain gym. The CPU tournament uses these too.</p>
+      <div id="mode-groups"></div>
+    </section>
+    <section class="m-page" data-page="events" hidden>
+      <p class="note">Rare happenings on some courts, about two in a game to 11 played on that court. Watch each one in PREVIEWS on the main menu.</p>
+      <div class="m-bar"><span></span><div class="seg"><button type="button" id="ev-all-on">ALL ON</button><button type="button" id="ev-all-off">ALL OFF</button></div></div>
+      <div id="event-list"></div>
+    </section>
+    </div>
     <div class="foot"><button type="button" id="done">DONE</button><span class="hint">SAVED FOR NEXT TIME. ESC ALSO CLOSES.</span></div>
   </div>
 </div>
 <div id="reelpanel" hidden>
   <div class="rp">
     <h2 id="reel-title">DUNK REEL</h2>
-    <div class="rp-tabs" role="tablist" aria-label="Reel kind"><button type="button" id="reel-tab-dunk" aria-pressed="true">DUNKS</button><button type="button" id="reel-tab-sound" aria-pressed="false">SOUNDS</button></div>
+    <div class="rp-tabs" role="tablist" aria-label="Reel kind"><button type="button" id="reel-tab-dunk" aria-pressed="true">DUNKS</button><button type="button" id="reel-tab-sound" aria-pressed="false">SOUNDS</button><button type="button" id="reel-tab-event" aria-pressed="false">EVENTS</button></div>
     <p class="note" id="reel-note">Click a dunk to watch it on loop. Switch a dunk off to keep it out of your games.</p>
     <div class="rp-actions"><button type="button" id="reel-all-play">PLAY ALL</button><button type="button" id="reel-all-on">ALL ON</button><button type="button" id="reel-all-off">ALL OFF</button><button type="button" id="reel-mute" hidden>SOUND: ON</button></div>
     <ol id="reel-list"></ol>
@@ -225,14 +282,14 @@ const MODE_CATS = ['COURTS', 'BALLS', 'PLAYERS', 'HOOPS', 'PHYSICS', 'OBSTACLES'
 const COURTS = {
   gym:   { key: 'gym',   name: 'GYM',       fric: 0.9,   gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#e9cf9f' },
   beach: { key: 'beach', name: 'BEACH',     fric: 1.2,   gravity: 20, jumpH: 1.5,  bounce: 0.6,  dust: '#f3dfae' },
-  snow:  { key: 'snow',  name: 'SNOW',      fric: 0.08,  gravity: 20, jumpH: 1.55, bounce: 0.75, dust: '#ffffff' },
-  park:  { key: 'park',  name: 'CITY PARK', fric: 0.95,  gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#c3c6cc' },
+  snow:  { key: 'snow',  name: 'SNOW',      fric: 0.08,  gravity: 20, jumpH: 1.55, bounce: 0.75, dust: '#ffffff', event: 'storm' },
+  park:  { key: 'park',  name: 'CITY PARK', fric: 0.95,  gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#c3c6cc', event: 'sprinkler' },
   ice:   { key: 'ice',   name: 'ICE',       fric: 0.004, gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#ffffff' },
-  moon:  { key: 'moon',  name: 'MOON',      fric: 0.8,   gravity: 8,  jumpH: 2.5,  bounce: 1,    dust: '#c9c9d3' },
+  moon:  { key: 'moon',  name: 'MOON',      fric: 0.8,   gravity: 8,  jumpH: 2.5,  bounce: 1,    dust: '#c9c9d3', event: 'meteor' },
   // (Tokyo's gimmick: neon BOOST PADS in the street that fling you at the nearer hoop)
   tokyo: { key: 'tokyo', name: 'DOWNTOWN TOKYO', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#9aa0b8', boost: true },
-  rome:  { key: 'rome',  name: 'ROME COLOSSEUM', fric: 1.05, gravity: 20, jumpH: 1.55, bounce: 0.8, dust: '#ecd6a6' },
-  castle: { key: 'castle', name: 'DRAGON CASTLE', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#b9b2a4' },
+  rome:  { key: 'rome',  name: 'ROME COLOSSEUM', fric: 1.05, gravity: 20, jumpH: 1.55, bounce: 0.8, dust: '#ecd6a6', event: 'lion' },
+  castle: { key: 'castle', name: 'DRAGON CASTLE', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#b9b2a4', event: 'dragon' },
   // the whole floor is a trampoline (springy) and the walls and ceiling are padded (bouncy: the ball comes off
   // them faster than it hit). Players stay upright and sweep their lean steadily, so a bounce goes where you aim it
   bouncehouse: { key: 'bouncehouse', name: 'BOUNCY HOUSE', fric: 0.7, gravity: 20, jumpH: 2.1, bounce: 1.12, dust: '#ffe27a', bouncy: true, springy: true },
@@ -291,6 +348,17 @@ const WALL_H = 2.2;
 const BOOST_X = 3, BOOST_W = 1.4;
 // BOUNCY HOUSE: the lean sweeps side to side at a steady beat instead of rocking, so you can read where a
 // bounce will send you; a press a moment before landing still counts
+// COURT EVENTS: a rare happening on some courts (snowball storm, meteor, sprinkler, lion, dragon fire). Each round
+// on one of those courts has this chance of one, a few seconds in: about two in a game to 11 played on that court
+const EVENT_P = 0.13;
+// the EVENTS reel: each one staged on its court, with somebody getting caught and somebody dodging it
+const EVENT_LIST = [
+  { id: 'storm', name: 'SNOWBALL STORM', court: 'snow', isNew: true, when: 'SNOW: A HIT DROPS THE BALL' },
+  { id: 'meteor', name: 'METEOR STRIKE', court: 'moon', isNew: true, when: 'MOON: BLAST + A CRATER HOP' },
+  { id: 'sprinkler', name: 'SPRINKLER', court: 'park', isNew: true, when: 'PARK: THE JET SHOVES YOU' },
+  { id: 'lion', name: 'LION RUN', court: 'rome', isNew: true, when: 'ROME: JUMP IT OR GET BOWLED' },
+  { id: 'dragon', name: 'DRAGON FIRE', court: 'castle', isNew: true, when: 'CASTLE: JUMP THE FIRE' },
+];
 const SPRING_AIM = 0.4, SPRING_W = 3.6, SPRING_BUF = 0.2;
 const CLASSIC_ROUND = { court: 'gym', ball: null, body: null, hoop: null, phys: null, obst: null };
 const TOURNEY = [
@@ -304,8 +372,8 @@ const MENU_ITEMS = [
   { id: 'local', label: 'SAME KEYBOARD', sub: [{ id: '2p', label: '1 V 1' }, { id: '4p', label: '2 V 2' }, { id: '6p', label: '3 V 3' }] },
   { id: 'online', label: 'PLAY ONLINE' },
   { id: 'cvc', label: 'CPU VS CPU' },
-  { id: 'modes', label: 'GAME MODES' },
-  { id: 'reels', label: 'DUNKS + SOUNDS' },
+  { id: 'modes', label: 'SETTINGS' },
+  { id: 'reels', label: 'PREVIEWS' },
   { id: 'switch', label: 'SWITCH GAME' },
 ];
 // the rows on screen right now: the top level, with the open dropdown's options spliced in under it
@@ -733,6 +801,7 @@ class Sfx {
   thud(i) { this.tone('sine', 110, 60, 0.08, 0.25 * i); }
   swish() { this.hiss(0.32, 0.4, 'bandpass', 2600, 7000, 0.9); }
   jump() { this.tone('square', 210, 330, 0.06, 0.03); }
+  roar() { this.tone('sawtooth', 140, 55, 0.9, 0.12); this.hiss(0.8, 0.25, 'lowpass', 900, 200); }
   boing() { this.tone('sine', 160, 540, 0.2, 0.22); this.tone('triangle', 80, 270, 0.2, 0.12); }
   boost() { this.tone('sawtooth', 200, 900, 0.22, 0.06); this.tone('square', 400, 1600, 0.18, 0.04, 0.05); }
   grab() { this.tone('triangle', 660, 880, 0.05, 0.1); }
@@ -1486,6 +1555,12 @@ class Player {
     return null;
   }
   release() { this.armsUp = false; }
+  // knocked loose by a court event: the ball pops out of the hand
+  dropBall() {
+    const b = this.holding; if (!b || this.dunk) return;
+    b.holder = null; b.setHeld(false); this.holding = null; this.game.clearMeter(this);
+    b.body.setLinearVelocity({ x: rand(-2.5, 2.5), y: rand(2, 4) }); b.lastThrower = this; b.throwTime = this.game.time;
+  }
   jump(off) {
     const on = off || (this.standOn && this.feet > 0 && this.footY() > 0.8 ? this.standOn : null);
     if (on) {
@@ -1494,7 +1569,7 @@ class Player {
       this.headJumpT = this.game.time; this.standOn = null; this.game.note('headjump', this);
       const hp = this.head.getPosition(); this.game.popup('HEAD JUMP!', hp.x, hp.y + 0.8, '#ff8a2a', 8, 0.9); this.game.sfx.boing();
     }
-    const th = this.angle(), v = this.game.cfg.jumpV;
+    const th = this.angle(), v = this.game.cfg.jumpV * (this.game.crater !== null && this.game.crater !== undefined && Math.abs(this.x - this.game.crater) < 1.3 ? 1.35 : 1);
     if (on) {
       // a head is a springboard: it sends you up and on toward the hoop you attack, whichever way you were leaning
       const sv = springVel(this);
@@ -4578,7 +4653,7 @@ function migrateModes(m, ver) {
   return m;
 }
 function loadSettings() {
-  const def = { ver: 8, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [] };
+  const def = { ver: 8, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
@@ -4594,6 +4669,7 @@ function loadSettings() {
       dunksSeen: ALL_DUNKS.slice(),
       // the sound list was redone in v4, so older switches start fresh
       soundsOff: (s.ver || 0) >= 4 && Array.isArray(s.soundsOff) ? s.soundsOff.filter(id => SOUND_BY_ID[id]) : [],
+      eventsOff: Array.isArray(s.eventsOff) ? s.eventsOff.filter(id => EVENT_LIST.some(e => e.id === id)) : [],
     };
   } catch (e) { /* storage unavailable */ }
   return def;
@@ -4711,6 +4787,9 @@ class Game {
     this.spdK = 1; this.spdTo = 1; this.spdT = rand(1.5, 2.5);
     this.wallHit = [0, 0, 0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
+    const evRoll = court.event && this.state !== 'showcase' && (this.forceEvent || Math.random() < EVENT_P);
+    this.ev = evRoll && (this.online || this.eventOn(court.event)) ? { kind: court.event, at: rand(2.5, 7), t: -1, hit: [] } : null;
+    this.crater = null;
     this.boosts = court.boost ? [{ x: -BOOST_X, side: -1, lit: 0, cd: 0.8 }, { x: BOOST_X, side: 1, lit: 0, cd: 0.8 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
     this.roundT = 0; this.cam.watch = null; this.cam.punch = null; this.cam.z = 1;
@@ -4863,7 +4942,7 @@ class Game {
     buildReel(kind);
     this.nextShow();
   }
-  showList() { return this.show.kind === 'sound' ? SOUND_LIST : REEL; }
+  showList() { return this.show.kind === 'sound' ? SOUND_LIST : this.show.kind === 'event' ? EVENT_LIST : REEL; }
   showPick(i) {
     const n = this.showList().length;
     this.show.mode = 'one'; this.show.i = (i + n) % n; this.sfx.stopClip();
@@ -4882,6 +4961,7 @@ class Game {
   setupShow() {
     this.replay = null; this.state = 'showcase';
     if (this.show.kind === 'sound') { this.setupSoundShow(); return; }
+    if (this.show.kind === 'event') { this.setupEventShow(); return; }
     const Sh = this.show, id = REEL[Sh.i].id;
     Sh.t = 0; Sh.step = 0; this.forceDunk = null; this.forceFx = null; Sh.jumped = false; Sh.air = false;
     this.held = [false, false];
@@ -4898,6 +4978,54 @@ class Game {
     else if (st.req && st.req.air !== undefined) { this.placeAt(red[0], -0.5); this.placeAt(red[1], id === 'through' ? 4.1 : 3.0); this.grab(red[1], 0, b); Sh.air = true; Sh.dur += 0.6; }
     else { this.placeAt(red[0], -0.5); this.placeAt(red[1], 3.9); this.grab(red[1], 0, b); }
     if (id === 'collapse') this.placeAt(blue[0], 5.7);
+  }
+  // each event is staged so you see it work: one player gets caught (dropping the ball), another jumps clear.
+  // Sh.hops: [show time, team, slot, sideways speed] for the scripted jumps; a hit gets a moment of slow motion
+  setupEventShow() {
+    const Sh = this.show, e = EVENT_LIST[Sh.i];
+    Sh.t = 0; Sh.step = 0; this.forceDunk = null; this.forceFx = null; this.held = [false, false]; this.streak = { team: -1, n: 0 };
+    this.setupRound(Object.assign({}, CLASSIC_ROUND, { court: e.court }), 2);
+    const red = this.players.filter(p => p.team === 0), blue = this.players.filter(p => p.team === 1), b = this.ball;
+    b.waiting = false; b.body.setGravityScale(1);
+    const E = this.ev = { kind: e.id, at: 1, t: -1, hit: [] };
+    const at = (p, x) => this.placeAt(p, x);
+    Sh.hops = []; Sh.hits = 0;
+    if (e.id === 'storm') {
+      at(red[0], -4.5); at(red[1], -1.2); at(blue[0], 1.8); at(blue[1], 4.6); this.grab(red[1], 0, b);
+      E.balls = [[-1.2, 0.7], [1.8, 1.5], [4.6, 2.3], [-4.5, 3.1]].map(([x, t0]) => ({ x, t0, y: 9, done: false }));
+      Sh.hops = [[1 + 2.3 + 0.1, 1, 1, -3.5]]; Sh.dur = 7;   // (the last blue player sees it coming and hops out of the way)
+    } else if (e.id === 'meteor') {
+      E.x = 1.4; at(red[0], -4.5); at(red[1], 1.0); at(blue[0], 2.4); at(blue[1], 5.6); this.grab(red[1], 0, b);
+      Sh.crater = true; Sh.dur = 7.5;
+    } else if (e.id === 'sprinkler') {
+      E.x = -0.6; E.dir = 1; at(red[0], -4.5); at(red[1], -0.1); at(blue[0], 3.6); at(blue[1], 5.6); this.grab(red[1], 0, b);
+      Sh.hops = [[3.2, 0, 1]]; Sh.dur = 6.4;
+    } else if (e.id === 'lion') {
+      E.dir = 1; at(red[0], -4.2); at(red[1], -1.2); at(blue[0], 2.6); at(blue[1], 5.4); this.grab(red[1], 0, b);
+      Sh.hops = [[1 + 1 + (2.6 + 9.5) / 10 - 0.28, 1, 0], [1 + 1 + (5.4 + 9.5) / 10 - 0.28, 1, 1]]; Sh.dur = 5.6;
+    } else {
+      at(red[0], -4.8); at(red[1], -2.2); at(blue[0], 3.2); at(blue[1], 5.6); this.grab(red[1], 0, b);
+      Sh.hops = [[1 + 0.7 + 3.2 / 6 - 0.3, 1, 0], [1 + 0.7 + 5.6 / 6 - 0.3, 1, 1]]; Sh.dur = 5.4;
+    }
+  }
+  updateEventShow(dt) {
+    const Sh = this.show, E = this.ev;
+    Sh.t += dt;
+    for (const h of Sh.hops) if (!h.done && Sh.t >= h[0]) {
+      h.done = true; const p = this.players.find(q => q.team === h[1] && q.slot === h[2]);
+      if (p && !p.fallen) { for (const q of p.parts) q.setLinearVelocity({ x: h[3] || 0, y: this.cfg.jumpV * 1.05 }); p.body.setAngularVelocity(-p.angle() * 4); const hp = p.head.getPosition(); this.popup('DODGED!', hp.x, hp.y + 1.2, GREEN, 8, 1); }
+    }
+    if (E && E.hit.length > Sh.hits) { Sh.hits = E.hit.length; this.slowmo(0.4, 0.7); }
+    // the meteor scene ends with somebody hopping out of the crater, higher than a normal jump
+    if (Sh.crater && this.crater !== null && Sh.t > 4.6 && !Sh.hopped) {
+      Sh.hopped = true; const p = this.players.find(q => q.team === 1 && q.slot === 1); this.placeAt(p, this.crater);
+      Sh.hopAt = Sh.t + 0.5;
+    }
+    if (Sh.hopAt && Sh.t > Sh.hopAt) {
+      Sh.hopAt = 0; const p = this.players.find(q => q.team === 1 && q.slot === 1); p.body.setAngularVelocity(0); p.jump();
+      const hp = p.head.getPosition(); this.popup('CRATER HOP!', hp.x, hp.y + 1.2, GREEN, 8, 1.2);
+    }
+    if (Sh.t > Sh.dur) this.nextShow();
   }
   // each sound gets a little scene that sets it off: a green jumper, a game-winner and its replay, a hoop coming down
   setupSoundShow() {
@@ -4940,6 +5068,7 @@ class Game {
   }
   updateShow(dt) {
     if (this.show.kind === 'sound') { this.updateSoundShow(dt); return; }
+    if (this.show.kind === 'event') { this.updateEventShow(dt); return; }
     const Sh = this.show, id = REEL[Sh.i].id, red = this.players.filter(p => p.team === 0), b = this.ball;
     Sh.t += dt;
     if (id === 'oop' || id === 'tip') {
@@ -5394,6 +5523,81 @@ class Game {
   }
   // HOOP COLLAPSE gets the glass-break treatment: slow motion all the way down with the camera riding the pole,
   // then a hit of extra-slow motion, a white pop and a big dust cloud when it slams into the floor
+  // ------------------------------------------------ court events
+  eventOn(id) { return !(this.settings && (this.settings.eventsOff || []).includes(id)); }
+  knock(p, vx, vy, k, word) {
+    if (this.ev.hit.includes(p.id) || p.dunk || p.hang) return;
+    this.ev.hit.push(p.id);
+    for (const b of p.parts) { const v = b.getLinearVelocity(); b.setLinearVelocity({ x: v.x * 0.3 + vx, y: vy }); }
+    p.dropBall(); p.flail(k); const hp = p.head.getPosition();
+    if (word) this.popup(word, hp.x, hp.y + 0.9, '#ffd23f', 8, 1);
+  }
+  stepEvent(dt) {
+    const E = this.ev;
+    if (E.t < 0) {
+      if ((this.state !== 'play' && this.state !== 'showcase') || this.roundT < E.at) return;
+      E.t = 0; this.startEvent(E);
+    }
+    if (E.done) return;
+    E.t += dt; const t = E.t, low = p => !p.fallen && p.footY() < 0.45;
+    if (E.kind === 'storm') {
+      for (const q of E.balls) {
+        if (q.done || t < q.t0) continue;
+        q.y = 9 - 10 * (t - q.t0);
+        if (q.y < 0.15) { q.done = true; for (let i = 0; i < 8; i++) this.addPart(q.x, 0.1, rand(-2, 2), rand(1, 3), 12, rand(0.3, 0.6), '#ffffff', pick([1, 2])); continue; }
+        for (const p of this.players) {
+          const hp = p.head.getPosition(), c = p.center();
+          if (Math.hypot(hp.x - q.x, hp.y - q.y) < p.d.headR + 0.22 || Math.hypot(c.x - q.x, c.y - q.y) < 0.38) {
+            q.done = true; this.sfx.thud(1); E.hit = E.hit.filter(id => id !== p.id); this.knock(p, Math.sign(p.x - q.x || 1) * 2.5, -1, 0.6, 'BONK!');
+            for (let i = 0; i < 10; i++) this.addPart(q.x, q.y, rand(-2, 2), rand(0, 3), 12, rand(0.3, 0.6), '#ffffff', pick([1, 2]));
+            break;
+          }
+        }
+      }
+      if (E.balls.every(q => q.done)) E.done = true;
+    } else if (E.kind === 'meteor') {
+      if (t >= 1.6 && !E.boom) {
+        E.boom = true; this.crater = E.x; this.addShake(22); if (!REDUCED) this.flash = 0.45; this.sfx.boom(); this.sfx.crash(); this.excite = 1;
+        this.popup('BOOM!', E.x, 3.6, '#ff8a2a', 16, 1.4);
+        for (let i = 0; i < 60; i++) this.addPart(E.x + rand(-0.6, 0.6), 0.1, rand(-7, 7), rand(2, 9), 16, rand(0.5, 1.2), pick(['#ffd23f', '#ff8a2a', '#ffffff', this.cfg.court.dust]), pick([1, 2, 2]));
+        for (const p of this.players) { const d = p.x - E.x; if (Math.abs(d) < 2.6) this.knock(p, Math.sign(d || 1) * lerp(9, 3, Math.abs(d) / 2.6), 6, 0.8); }
+        for (const b of this.balls) { if (b.holder) continue; const bp = b.body.getPosition(), d = bp.x - E.x; if (Math.abs(d) < 2.6) b.body.setLinearVelocity({ x: Math.sign(d || 1) * 7, y: 7 }); }
+        E.done = true;
+      }
+    } else if (E.kind === 'sprinkler') {
+      if (t > 4.6) { E.done = true; return; }
+      if (t > 0.4 && t < 4.3) {
+        for (const p of this.players) if (Math.abs(p.x - E.x - E.dir * 0.5) < 0.8 && p.footY() < 1.6) for (const b of p.parts) { const v = b.getLinearVelocity(); b.setLinearVelocity({ x: v.x + E.dir * 30 * dt, y: v.y + 12 * dt }); }
+        for (const b of this.balls) { if (b.holder) continue; const bp = b.body.getPosition(); if (Math.abs(bp.x - E.x - E.dir * 0.5) < 0.8 && bp.y < 2) { const v = b.body.getLinearVelocity(); b.body.setLinearVelocity({ x: v.x + E.dir * 20 * dt, y: v.y + 10 * dt }); } }
+      }
+    } else if (E.kind === 'lion') {
+      if (t < 1) return;
+      E.lx = -E.dir * 9.5 + E.dir * 10 * (t - 1);
+      if (Math.abs(E.lx) > 9.6) { E.done = true; return; }
+      for (const p of this.players) if (low(p) && Math.abs(p.x - E.lx) < 0.75) this.knock(p, E.dir * 8, 5, 1, 'RAWR!');
+    } else if (E.kind === 'dragon') {
+      // two walls of fire run out from under the dragon along the floor, one each way
+      if (t > 2.9) { E.done = true; return; }
+      if (t > 0.7) {
+        E.r = Math.min(8.2, (t - 0.7) * 6);
+        for (const p of this.players) { const d = Math.abs(p.x); if (low(p) && d < E.r && d > E.r - 1.6) this.knock(p, Math.sign(p.x || 1) * 1.5, 5.5, 0.4, 'TOASTED!'); }
+      }
+    }
+  }
+  startEvent(E) {
+    if (E.kind === 'storm') {
+      E.balls = E.balls || []; for (let i = 0; i < 10; i++) E.balls.push({ x: rand(-7.2, 7.2), t0: rand(0.6, 4), y: 9, done: false });
+      this.popup('SNOWBALL STORM!', 0, 5.4, '#dff3ff', 16, 1.8);
+    } else if (E.kind === 'meteor') {
+      E.x = E.x ?? rand(-5, 5); this.popup('INCOMING!', E.x, 5.2, '#ff8173', 16, 1.4);
+    } else if (E.kind === 'sprinkler') {
+      E.x = E.x ?? rand(-5, 5); E.dir = E.dir || pick([-1, 1]); this.popup('SPRINKLER!', E.x, 3.4, '#7fd0ff', 8, 1.2);
+    } else if (E.kind === 'lion') {
+      E.dir = E.dir || pick([-1, 1]); E.lx = -E.dir * 9.5; this.sfx.roar(); this.popup('LION!', 0, 5.4, '#ffd23f', 16, 1.6);
+    } else if (E.kind === 'dragon') {
+      E.r = 0; this.dragonFire = this.realTime; this.sfx.roar(); this.popup('THE DRAGON WAKES!', 0, 5.6, '#ff8a2a', 16, 1.8);
+    }
+  }
   // which way a boost pad points: at the ball, or with a carrier, the way the carrier attacks
   boostBall() { return this.balls.find(b => b.holder) || this.balls[0]; }
   boostDir(q) { const b = this.boostBall(); return b.holder ? b.holder.dir : Math.sign(b.body.getPosition().x - q.x) || q.side; }
@@ -5588,6 +5792,7 @@ class Game {
   fixed(dt) {
     if (this.online && this.trans) this.stepTrans(dt);
     this.time += dt; this.stateT += dt; this.roundT += dt;
+    if (this.ev && !this.isShadow) this.stepEvent(dt);
     for (const c of this.cpus) c.update(dt);
     for (const ev of this.evq) this.handleEvent(ev);
     this.evq.length = 0;
@@ -6064,6 +6269,33 @@ function drawLow(G, fr) {
       for (const [dx, dy] of [[0, 147], [sd, 148], [0, 149]]) if (cx + dx >= x0 && cx + dx < x0 + w) P1(g, cx + dx, dy, col);
     }
   }
+  if (G.crater !== null && G.crater !== undefined) {   // the meteor's crater, for the rest of the round
+    const cx = Math.round(ax(G.crater)); R(cx - 14, 148, 28, 3, '#55555f'); R(cx - 12, 151, 24, 2, '#3e3e48'); R(cx - 17, 147, 4, 1, '#d6d6de'); R(cx + 13, 147, 4, 1, '#d6d6de');
+  }
+  const E = !fr && G.ev && G.ev.t >= 0 && !G.ev.done ? G.ev : null;
+  if (E && E.kind === 'storm') for (const q of E.balls) { if (q.done || E.t < q.t0) continue; const x = Math.round(ax(q.x)), y = Math.round(ay(q.y)); R(x - 3, y - 3, 6, 6, '#aebfd6'); R(x - 2, y - 2, 4, 4, '#ffffff'); }
+  if (E && E.kind === 'meteor') {
+    const x = Math.round(ax(E.x));
+    if (E.t < 1.6) R(x - 14, 149, 28, 2, `rgba(255,90,60,${(0.3 + 0.3 * Math.sin(E.t * 30)).toFixed(2)})`);
+    if (E.t > 0.9 && E.t < 1.6) { const q = (E.t - 0.9) / 0.7, mx = ax(E.x - 6 * (1 - q)), my = ay(10 * (1 - q)); for (let k = 0; k < 7; k++) R(mx - k * 4 - 3, my - k * 6 - 3, 7 - k * 0.7, 7 - k * 0.7, k ? (k < 3 ? '#ffd23f' : '#ff8a2a') : '#ffffff'); }
+  }
+  if (E && E.kind === 'sprinkler') {
+    const x = Math.round(ax(E.x)), up = Math.min(1, E.t / 0.3) * Math.min(1, Math.max(0, (4.6 - E.t) / 0.3));
+    R(x - 2, 150 - Math.round(4 * up), 5, Math.round(4 * up) + 1, '#5a606b'); R(x - 1, 149 - Math.round(4 * up), 3, 1, '#9aa0aa');
+    if (E.t > 0.4 && E.t < 4.3) for (let k = 0; k < 40; k++) { const q = (E.t * 2.2 + k / 40) % 1; R(Math.round(x + E.dir * q * 34 + (k % 3) - 1), Math.round(145 - Math.sin(q * Math.PI) * 36 - (k % 4)), 2, 2, k % 3 ? '#7fd0ff' : '#ffffff'); }
+  }
+  if (E && E.kind === 'lion' && E.t >= 1) {
+    const x = Math.round(ax(E.lx)), y = 150, d = E.dir, run = Math.floor(E.t * 14) % 2;
+    const L = (dx, dy, w, h, c) => { dx = Math.round(dx * 1.5); dy = Math.round(dy * 1.5); w = Math.round(w * 1.5); h = Math.round(h * 1.5); R(d > 0 ? x + dx : x - dx - w, y + dy, w, h, c); };   // (drawn half as big again)
+    L(-16, -16, 26, 10, INK); L(-15, -15, 24, 8, '#d99a3a'); L(-15, -9, 24, 2, '#c4862e');
+    L(6, -24, 13, 14, '#8a4a1a'); L(9, -21, 9, 9, '#e0a848'); L(15, -19, 1, 1, INK); L(16, -15, 3, 1, INK);
+    L(-20, -15, 5, 1, '#d99a3a'); L(-22, -16, 3, 3, '#8a4a1a');
+    for (const [lx, ph] of [[-14, 0], [-7, 1], [2, 0], [7, 1]]) L(lx + (run === ph ? 2 : -1), -6, 3, 6, '#c4862e');
+  }
+  if (E && E.kind === 'dragon' && E.r > 0) for (const sd of [-1, 1]) {
+    const x1 = ax(sd * E.r);
+    for (let k = 0; k < 30; k++) { const fx = x1 - sd * k * 1.2, fy = 149 - ((k * 7 + Math.floor(G.time * 40)) % 6) - (k < 6 ? 3 : 0); R(Math.round(fx), fy, 3, 3, ['#ff8a2a', '#ffd23f', '#ff5a2a', '#ffffff'][k % 4]); }
+  }
   if (G.cfg.court.springy && !fr) for (const p of G.players) {   // an arrow on the floor under each player: which way, and how far, a bounce sends you
     if (p.fallen || p.dunk || p.hang) continue;
     const lean = -Math.sin(p.angle()), len = Math.round(lean * JUMP_LEAN * (lean * p.dir > 0 ? 1.15 : 1) * 14), x0 = Math.round(ax(p.x)), sg = Math.sign(len), col = TEAM[p.team].light;
@@ -6213,7 +6445,7 @@ function drawScoreboard(G) {
 }
 function drawHUD(G) {
   if (G.state === 'showcase' || (G.replay && G.replay.back === 'showcase')) {
-    const Sh = G.show, list = G.showList(), e = list[Sh.i], cx = 222, snd = Sh.kind === 'sound';
+    const Sh = G.show, list = G.showList(), e = list[Sh.i], cx = 222, snd = Sh.kind === 'sound' || Sh.kind === 'event';
     txt(`${Sh.mode === 'all' ? 'PLAYING ALL' : 'ON LOOP'}  ${Sh.i + 1} / ${list.length}`, AX(cx), AY(11), 8, CREAM, { ow: 0.8 });
     txt(e.name, AX(cx), AY(25), e.name.length > 16 ? 8 : 16, ORANGE, { bold: true });
     if (snd) txt(e.when, AX(cx), AY(37), 8, '#b9c3dd', { ow: 0.7 });
@@ -6454,33 +6686,59 @@ const menuEl = document.getElementById('menu');
 let draft = null;
 (function buildMenu() {
   const wrapEl = document.getElementById('mode-groups');
+  // one card per category; each mode is a row with its state (OFF / RANDOM / ALWAYS) on the right, and courts say what's special
   for (const cat of MODE_CATS) {
-    const grp = document.createElement('div'); grp.className = 'group';
-    const h = document.createElement('h3'); h.textContent = cat; grp.appendChild(h);
-    const chips = document.createElement('div'); chips.className = 'chips';
+    const grp = document.createElement('div'); grp.className = 'mgrp';
+    const h = document.createElement('h3'); h.textContent = cat; const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.dataset.cat = cat; h.appendChild(cnt); grp.appendChild(h);
     for (const m of MODES.filter(m => m.cat === cat)) {
-      const b = document.createElement('button'); b.type = 'button'; b.id = 'mode-' + m.id; b.dataset.mode = m.id; b.textContent = m.name;
-      if (m.isNew) { const n = document.createElement('span'); n.className = 'new'; n.textContent = 'NEW'; b.appendChild(n); }
-      chips.appendChild(b);
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'mode-' + m.id; b.dataset.mode = m.id; b.className = 'mrow';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = m.name;
+      if (m.isNew) { const n = document.createElement('span'); n.className = 'new'; n.textContent = 'NEW'; nm.appendChild(n); }
+      const c = COURTS[m.id], tag = c && (c.event ? 'EVENT: ' + EVENT_LIST.find(e => e.id === c.event).name : c.boost ? 'BOOST PADS' : c.springy ? 'TRAMPOLINE FLOOR' : m.id === 'ice' ? 'SLIPPERY' : '');
+      if (tag) { const t = document.createElement('span'); t.className = 'sub'; t.textContent = tag; nm.appendChild(t); }
+      const pl = document.createElement('span'); pl.className = 'pill';
+      b.append(nm, pl); grp.appendChild(b);
     }
-    grp.appendChild(chips); wrapEl.appendChild(grp);
+    wrapEl.appendChild(grp);
+  }
+  const evEl = document.getElementById('event-list');
+  for (const e of EVENT_LIST) {
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'event-' + e.id; b.dataset.event = e.id; b.className = 'evrow';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e.name;
+    const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = e.when;
+    const pl = document.createElement('span'); pl.className = 'pill';
+    b.append(nm, pl, sub); evEl.appendChild(b);
   }
 })();
 function syncMenu() {
   for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
-  for (const b of menuEl.querySelectorAll('[data-mode]')) { const lk = draft.always.includes(b.dataset.mode); b.setAttribute('aria-pressed', String(lk || draft.modes.includes(b.dataset.mode))); if (lk) b.dataset.lock = '1'; else delete b.dataset.lock; }
+  for (const b of menuEl.querySelectorAll('[data-mode]')) {
+    const lk = draft.always.includes(b.dataset.mode), on = lk || draft.modes.includes(b.dataset.mode), pl = b.querySelector('.pill');
+    b.setAttribute('aria-pressed', String(on)); if (lk) b.dataset.lock = '1'; else delete b.dataset.lock;
+    pl.textContent = lk ? 'ALWAYS' : on ? 'RANDOM' : 'OFF'; pl.className = 'pill' + (lk ? ' alw' : on ? ' rnd' : '');
+  }
+  for (const c of menuEl.querySelectorAll('.cnt')) { const ids = MODES.filter(m => m.cat === c.dataset.cat).map(m => m.id); c.textContent = `${ids.filter(id => draft.modes.includes(id) || draft.always.includes(id)).length}/${ids.length} ON`; }
+  const off = draft.eventsOff || [];
+  for (const b of menuEl.querySelectorAll('[data-event]')) { const on = !off.includes(b.dataset.event), pl = b.querySelector('.pill'); b.setAttribute('aria-pressed', String(on)); pl.textContent = on ? 'ON' : 'OFF'; pl.className = 'pill' + (on ? ' on' : ''); }
+  for (const t of menuEl.querySelectorAll('[data-tab]')) t.setAttribute('aria-selected', String(t.dataset.tab === menuTab));
+  for (const pg of menuEl.querySelectorAll('[data-page]')) pg.hidden = pg.dataset.page !== menuTab;
 }
+let menuTab = 'match';
 function openMenu() {
   draft = JSON.parse(JSON.stringify(G.settings));
   syncMenu(); menuEl.hidden = false; G.menuOpen = true;
   document.getElementById('done').focus({ preventScroll: true });
-  menuEl.querySelector('.panel').scrollTop = 0;
+  menuEl.querySelector('.m-body').scrollTop = 0;
 }
 function closeMenu() { if (draft) { G.settings = draft; saveSettings(draft); } menuEl.hidden = true; G.menuOpen = false; cv.focus(); }
 menuEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.id === 'done') { closeMenu(); return; }
-  if (b.id === 'all-on') draft.modes = MODES.map(m => m.id);
+  if (b.dataset.tab) { menuTab = b.dataset.tab; menuEl.querySelector('.m-body').scrollTop = 0; }
+  else if (b.dataset.event) { const o = draft.eventsOff || [], id = b.dataset.event; draft.eventsOff = o.includes(id) ? o.filter(x => x !== id) : [...o, id]; }
+  else if (b.id === 'ev-all-on') draft.eventsOff = [];
+  else if (b.id === 'ev-all-off') draft.eventsOff = EVENT_LIST.map(e => e.id);
+  else if (b.id === 'all-on') draft.modes = MODES.map(m => m.id);
   else if (b.id === 'all-off') { draft.modes = []; draft.always = []; }
   else if (b.dataset.mode) {
     // off -> random -> ALWAYS (every round) -> off
@@ -6497,16 +6755,18 @@ menuEl.addEventListener('click', e => {
 const reelEl = document.getElementById('reelpanel'), reelList = document.getElementById('reel-list');
 const REEL_TEXT = {
   dunk: ['DUNK REEL', 'Click a dunk to watch it on loop. Switch a dunk off to keep it out of your games. Press TAB or click SOUNDS to switch reels.'],
+  event: ['EVENTS', 'The rare things that can happen on some courts (about two in a game to 11 on that court). Click one to watch it on loop. Switch one off to keep it out of your games. Press TAB to switch reels.'],
   sound: ['SOUNDS', 'Click a sound to hear it in action. Switch one off to keep it out of your games. Every green plays one of the green sounds you leave on. A green that wins the game plays GREEN FN instead. M mutes everything. Press TAB or click DUNKS to switch reels.'],
 };
 function buildReel(kind) {
   const [title, note] = REEL_TEXT[kind];
   document.getElementById('reel-title').textContent = title; document.getElementById('reel-note').textContent = note;
   document.getElementById('reel-mute').hidden = kind !== 'sound';
-  document.getElementById('reel-tab-dunk').setAttribute('aria-pressed', String(kind !== 'sound'));
+  document.getElementById('reel-tab-dunk').setAttribute('aria-pressed', String(kind === 'dunk'));
+  document.getElementById('reel-tab-event').setAttribute('aria-pressed', String(kind === 'event'));
   document.getElementById('reel-tab-sound').setAttribute('aria-pressed', String(kind === 'sound'));
   reelList.textContent = '';
-  (kind === 'sound' ? SOUND_LIST : REEL).forEach((e, i) => {
+  (kind === 'sound' ? SOUND_LIST : kind === 'event' ? EVENT_LIST : REEL).forEach((e, i) => {
     const li = document.createElement('li');
     const w = document.createElement('button'); w.type = 'button'; w.className = 'watch'; w.id = 'reel-watch-' + e.id; w.dataset.i = i; w.textContent = e.name;
     if (e.isNew) { const n = document.createElement('span'); n.className = 'new'; n.textContent = 'NEW'; w.appendChild(n); }
@@ -6515,7 +6775,7 @@ function buildReel(kind) {
     li.append(w, t); reelList.appendChild(li);
   });
 }
-function entryOn(id) { return G.show.kind === 'sound' ? !G.settings.soundsOff.includes(id) : G.dunkOn(id); }
+function entryOn(id) { return G.show.kind === 'sound' ? !G.settings.soundsOff.includes(id) : G.show.kind === 'event' ? G.eventOn(id) : G.dunkOn(id); }
 function syncReel(scroll) {
   if (!G.show) return;
   const list = G.showList();
@@ -6530,11 +6790,13 @@ function syncReel(scroll) {
 }
 function toggleEntry(id) {
   if (G.show.kind === 'sound') { const o = G.settings.soundsOff; G.settings.soundsOff = o.includes(id) ? o.filter(x => x !== id) : [...o, id]; }
+  else if (G.show.kind === 'event') { const o = G.settings.eventsOff || []; G.settings.eventsOff = o.includes(id) ? o.filter(x => x !== id) : [...o, id]; }
   else { const d = G.settings.dunks; G.settings.dunks = d.includes(id) ? d.filter(x => x !== id) : [...d, id]; }
   saveSettings(G.settings); syncReel();
 }
 function setAllEntries(on) {
   if (G.show.kind === 'sound') G.settings.soundsOff = on ? [] : SOUND_LIST.map(e => e.id);
+  else if (G.show.kind === 'event') G.settings.eventsOff = on ? [] : EVENT_LIST.map(e => e.id);
   else G.settings.dunks = on ? ALL_DUNKS.slice() : [];
   saveSettings(G.settings); syncReel();
 }
@@ -6547,6 +6809,7 @@ reelEl.addEventListener('click', e => {
   else if (b.classList.contains('tog')) toggleEntry(b.dataset.id);
   else if (b.id === 'reel-tab-dunk') G.switchShowKind('dunk');
   else if (b.id === 'reel-tab-sound') G.switchShowKind('sound');
+  else if (b.id === 'reel-tab-event') G.switchShowKind('event');
   else if (b.id === 'reel-all-play') G.showAll();
   else if (b.id === 'reel-all-on') setAllEntries(true);
   else if (b.id === 'reel-all-off') setAllEntries(false);
@@ -6622,7 +6885,7 @@ ${ON.err ? `<p class="err" role="alert">${ON.err}</p>` : ''}
 <div class="row"><span class="lbl">TEAMS</span>${sizeSeg(ON.size)}</div>
 <div class="row"><span class="lbl">PEOPLE</span>${maxSeg(ON.max, ON.size)}</div>
 <div class="row"><span class="lbl">NEW ROOM</span><button type="button" class="go" id="on-create">CREATE ROOM</button></div>
-<p class="note">You get a 4-letter code. Your friends open this same link, pick PLAY ONLINE and type it in. The room plays your GAME MODES.</p>
+<p class="note">You get a 4-letter code. Your friends open this same link, pick PLAY ONLINE and type it in. The room plays your SETTINGS and MODES.</p>
 <div class="row"><span class="lbl">HAVE A CODE?</span><input id="on-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" placeholder="ABCD" value="${ON.code}"><button type="button" id="on-join">JOIN</button></div>
 <div class="foot"><button type="button" id="on-back">BACK</button><span class="hint">ONE KEY EACH: HOLD TO JUMP, LET GO TO SHOOT</span></div>`;
   if (v.phase === 'joining') return `<h2 id="online-title">${v.isHost ? 'OPENING A ROOM' : 'JOINING ' + v.code}</h2>
@@ -6748,7 +7011,7 @@ window.addEventListener('keydown', e => {
   }
   if (G.state === 'showcase') {
     if (code === 'Escape' || code === 'KeyQ') G.toTitle();
-    else if (code === 'Tab') { e.preventDefault(); G.switchShowKind(G.show.kind === 'sound' ? 'dunk' : 'sound'); }
+    else if (code === 'Tab') { e.preventDefault(); G.switchShowKind({ dunk: 'sound', sound: 'event', event: 'dunk' }[G.show.kind]); }
     else if (code === 'ArrowUp' || code === 'KeyW') G.showPick(G.show.i - 1);
     else if (code === 'ArrowDown' || code === 'KeyS') G.showPick(G.show.i + 1);
     else if (code === 'Enter' || code === 'Space') { toggleEntry(G.showList()[G.show.i].id); }
