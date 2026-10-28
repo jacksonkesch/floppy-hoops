@@ -976,49 +976,49 @@ function paintCourt(key) {
     for (const [sx, , , , cn] of TOKYO_SIGNS) for (let y = 134; y < 172; y += 2) R(sx, y, 7, 1, cn + '22');
     lines('#39e6ff', '#3b2a5a');
   } else if (key === 'castle') {
-    // a great hall at night: stone walls, tall windows, team banners, and in the alcove at the back a dragon asleep on its gold
-    R(0, 0, ART_W, 132, '#4a4652');
-    for (let row = 0; row * 8 < 118; row++) { const y = row * 8; R(0, y, ART_W, 1, '#3b3843'); for (let x = (row % 2) * 10; x < ART_W; x += 20) R(x, y, 1, 8, '#3b3843'); }
-    for (let i = 0; i < 260; i++) P((rnd() * ART_W) | 0, (rnd() * 118) | 0, rnd() < 0.5 ? '#56525f' : '#423e4a');
-    for (const wx of [20, 286]) {   // pointed windows with the night sky in them
-      for (let y = 14; y < 66; y++) { const half = y < 22 ? Math.round(7 * Math.sqrt(Math.max(0, 1 - ((22 - y) / 8) ** 2))) : 7; R(wx + 7 - half - 1, y, half * 2 + 2, 1, '#2c2933'); R(wx + 7 - half, y, half * 2, 1, y < 40 ? '#1d2547' : '#24305a'); }
-      for (let i = 0; i < 6; i++) P(wx + 2 + ((rnd() * 10) | 0), 18 + ((rnd() * 40) | 0), '#c9d2ff');
-      R(wx + 7, 15, 1, 51, '#2c2933'); R(wx, 40, 14, 1, '#2c2933'); R(wx - 2, 66, 18, 2, '#5f5a68');
+    // the great hall: it runs a long way back, columns marching off into the dark, moonlight through the far
+    // window, and in the middle of it all a black dragon asleep on its hoard (drawLow poses the dragon itself)
+    bands(0, 96, ['#16141b', '#1a1820', '#1e1b24', '#211e28']);
+    R(70, 12, 180, 85, '#2f2b37');   // the far wall
+    for (let y = 12; y < 97; y += 5) { R(70, y, 180, 1, '#28252f'); for (let x = 70 + ((y / 5) % 2) * 5; x < 250; x += 10) R(x, y, 1, 5, '#28252f'); }
+    for (let y = 18; y < 64; y++) {   // the far window, with the moon in it
+      const half = y < 32 ? Math.round(12 * Math.sqrt(Math.max(0, 1 - ((32 - y) / 13) ** 2))) : 12;
+      R(160 - half - 2, y, half * 2 + 4, 1, '#4a4552'); R(160 - half, y, half * 2, 1, y < 44 ? '#16204a' : '#1d2a5c');
     }
-    for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (x * x + y * y <= 16 && (x + 1.5) ** 2 + y * y > 9) P(298 + x, 28 + y, '#f3ecc4');   // a crescent moon in the right window
-    for (const [bx, col, dark] of [[54, '#d93a3f', '#8f2328'], [252, '#2f6bd8', '#1d4590']]) {   // team banners
-      R(bx - 2, 8, 18, 2, '#6b4a2e');
-      for (let y = 10; y < 58; y++) { const cut = y > 50 ? Math.max(0, 7 - Math.abs(y - 50) * 0 - (57 - y)) : 0; R(bx, y, 14, 1, col); if (cut) R(bx + 7 - (y - 50), y, (y - 50) * 2, 1, '#4a4652'); }
-      R(bx, 10, 14, 2, dark); R(bx + 4, 24, 6, 8, '#e8c35a'); R(bx + 5, 25, 4, 6, dark); R(bx + 6, 26, 2, 3, '#e8c35a');
+    for (let i = 0; i < 10; i++) P(150 + ((rnd() * 20) | 0), 24 + ((rnd() * 38) | 0), '#c9d2ff');
+    for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (x * x + y * y <= 16 && (x + 1.5) ** 2 + y * y > 9) P(166 + x, 32 + y, '#f3ecc4');
+    R(160, 20, 1, 44, '#4a4552'); R(148, 44, 24, 1, '#4a4552'); R(144, 64, 32, 3, '#5a5563');
+    g.fillStyle = 'rgba(160,180,255,0.06)'; g.beginPath(); g.moveTo(148, 66); g.lineTo(172, 66); g.lineTo(200, 114); g.lineTo(128, 114); g.closePath(); g.fill();   // moonlight
+    bands(96, 132, ['#29262f', '#2f2c35', '#36323b', '#3e3a42', '#47424a', '#504b52']);   // the long floor, laid in flagstones
+    for (const y of [98, 101, 105, 110, 116, 123]) R(0, y, ART_W, 1, 'rgba(0,0,0,0.22)');
+    for (let k = -9; k <= 9; k++) line(160 + k * 24 * 0.647, 96, 160 + k * 24, 132, 'rgba(0,0,0,0.2)');
+    for (let x = 0; x < 70; x++) { const bot = Math.round(132 - 36 * x / 70); R(x, 0, 1, bot, '#24212b'); R(ART_W - 1 - x, 0, 1, bot, '#24212b'); }   // the side walls
+    for (const d of [0.84, 0.62, 0.38, 0.1]) {   // columns down both sides, far ones first and darker
+      const x = Math.round(70 * d), w = Math.max(3, Math.round(15 * (1 - d * 0.75))), top = Math.round(14 * d), bot = Math.round(132 - 36 * d);
+      for (const cx of [x, ART_W - x - w]) {
+        R(cx, top, w, bot - top, '#3e3946'); R(cx, top, 1, bot - top, '#55505e'); R(cx + w - 1, top, 1, bot - top, '#2a2630');
+        R(cx - 1, bot - 4, w + 2, 4, '#4a4552'); R(cx - 1, top, w + 2, 3, '#4a4552');
+        R(cx - 1, top, w + 2, bot - top, `rgba(10,8,16,${(d * 0.55).toFixed(2)})`);
+      }
     }
-    for (const tx of [88, 232]) { R(tx - 1, 66, 3, 6, '#2a2228'); R(tx - 2, 64, 5, 2, '#6b4a2e'); }   // torch brackets (the flames are lit in drawLow)
-    // the alcove: a pointed arch with the dragon's hoard in it
-    for (let y = 30; y < 118; y++) { const top = y < 58 ? Math.sqrt(Math.max(0, 1 - ((58 - y) / 28) ** 2)) : 1, half = Math.round(62 * top); R(160 - half - 2, y, half * 2 + 4, 1, '#5f5a68'); R(160 - half, y, half * 2, 1, y < 50 ? '#1e1b24' : '#25212c'); }
-    for (let x = 98; x < 222; x++) {   // the pile of gold
-      const q = (x - 160) / 60, top = Math.round(118 - 22 * Math.pow(Math.max(0, 1 - q * q), 0.7));
-      for (let y = top; y < 118; y++) P(x, y, (x * 7 + y * 13) % 11 === 0 ? '#fff0a0' : (x + y) % 3 === 0 ? '#c48a1c' : '#e8b83a');
+    for (const [bx, col, dark] of [[17, '#a8282e', '#6e1a1f'], [296, '#22509e', '#163670']]) {   // team banners between the near columns
+      R(bx - 1, 5, 9, 1, '#6b4a2e');
+      for (let y = 6; y < 48; y++) { const cut = y > 41 ? y - 41 : 0; R(bx, y, 7, 1, col); if (cut) R(bx + 3 - (cut >> 1), y, cut, 1, '#24212b'); }
+      R(bx, 6, 7, 2, dark); R(bx + 2, 18, 3, 5, '#e8c35a'); R(bx + 3, 19, 1, 3, dark);
+    }
+    for (const [tx, ty] of [[32, 58], [47, 55], [287, 58], [273, 55]]) { R(tx - 1, ty, 3, 5, '#1a1418'); R(tx - 2, ty - 1, 5, 1, '#6b4a2e'); }   // torch brackets (lit in drawLow)
+    for (let y = -22; y <= 22; y++) { const half = Math.round(110 * Math.sqrt(1 - (y / 22.5) ** 2)); R(167 - half, 104 + y, half * 2, 1, 'rgba(255,180,60,0.05)'); }   // the gold lights the floor
+    for (let x = 72; x < 263; x++) {   // the hoard
+      const q = (x - 167) / 95, top = Math.round(117 - 24 * Math.pow(Math.max(0, 1 - q * q), 0.8) + Math.sin(x * 0.7) * 1.2);
+      for (let y = top; y < 118; y++) P(x, y, (x * 7 + y * 13) % 11 === 0 ? '#fff0a0' : (x + y) % 3 === 0 ? '#a8761a' : y > 112 ? '#c48a1c' : '#e0ae34');
       P(x, top, '#fff0a0');
     }
-    for (let i = 0; i < 26; i++) { const x = 104 + ((rnd() * 112) | 0), y = 110 + ((rnd() * 8) | 0); P(x, y, ['#ff4a5a', '#4ab0ff', '#5aff7a', '#ffffff'][i % 4]); }
-    R(200, 104, 14, 9, INK); R(201, 105, 12, 7, '#7a4a28'); R(201, 108, 12, 1, '#e8c35a'); R(206, 105, 2, 7, '#e8c35a'); R(200, 100, 14, 4, '#5a361c'); R(201, 101, 12, 1, '#e8c35a');   // an open chest
-    const blob = (cx, cy, rx, ry, f) => { for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) { const d = (x / rx) ** 2 + (y / ry) ** 2; if (d <= 1) { const col = f(x, y, d); if (col) P(Math.round(cx + x), Math.round(cy + y), col); } } };
-    const scale = (x, y, d) => d > 0.8 ? '#1f4a28' : y > 3 ? '#2f6b3a' : (x + y * 2) % 5 === 0 ? '#5cb868' : '#3f8a4a';
-    for (let k = 0; k <= 40; k++) {   // the tail curls round the front of the pile
-      const u = k / 40, x = (1 - u) ** 2 * 194 + 2 * (1 - u) * u * 228 + u * u * 150, y = (1 - u) ** 2 * 98 + 2 * (1 - u) * u * 120 + u * u * 116, r = Math.max(1, Math.round(4 * (1 - u)));
-      blob(x, y, r, r, scale);
-      if (k === 40) { P(x - 2, y - 1, '#2f6b3a'); P(x - 3, y, '#2f6b3a'); P(x - 2, y + 1, '#2f6b3a'); }
-    }
-    blob(168, 96, 30, 11, scale);
-    for (let x = -22; x <= 22; x += 6) { const y = Math.round(96 - 11 * Math.sqrt(1 - (x / 30) ** 2)); P(168 + x, y - 1, '#c9c26a'); P(168 + x, y - 2, '#c9c26a'); P(169 + x, y - 1, '#c9c26a'); }
-    for (let y = 72; y < 92; y++) { const a = 150 + (92 - y) * 1.1, b = 192 - (92 - y) * 0.9; R(Math.round(a), y, Math.round(b - a), 1, (y % 4) ? '#2f6b3a' : '#25572f'); }   // a folded wing
-    for (let k = 0; k <= 14; k++) blob(144 - k * 1.2, 96 + k * 0.4, 5, 4, scale);   // the neck
-    blob(122, 102, 9, 5, scale); blob(112, 104, 5, 3, scale);
-    R(108, 103, 1, 1, INK); R(121, 100, 4, 1, '#163018'); R(122, 101, 2, 1, '#163018');
-    for (let k = 0; k < 6; k++) { P(127 + k, 97 - (k >> 1), '#e8e0c8'); P(126 + k, 96 - (k >> 1), '#e8e0c8'); }
-    blob(140, 109, 5, 3, scale); for (const cx of [136, 138, 140]) P(cx, 112, '#f4f0e0');
-    R(0, 118, ART_W, 14, '#57525f'); R(0, 118, ART_W, 2, '#6c6776'); R(0, 130, ART_W, 2, '#3b3843');
-    for (let x = 0; x < ART_W; x += 16) R(x, 120, 1, 10, '#47434f');
-    for (const [cx, cy] of [[2, 2], [317, 2]]) for (let k = 0; k < 9; k++) { P(cx + (cx < 9 ? k : -k), cy + k, '#8e8a98'); P(cx + (cx < 9 ? k : -k) * 0.5, cy + k * 0.4, '#8e8a98'); }   // cobwebs
+    for (let i = 0; i < 46; i++) P(56 + ((rnd() * 232) | 0), 114 + ((rnd() * 15) | 0), rnd() < 0.5 ? '#e8b83a' : '#a8761a');   // coins strewn across the floor
+    for (let i = 0; i < 18; i++) P(80 + ((rnd() * 170) | 0), 104 + ((rnd() * 12) | 0), ['#ff4a5a', '#4ab0ff', '#5aff7a', '#ffffff'][i % 4]);
+    R(230, 104, 15, 10, INK); R(231, 105, 13, 8, '#6a3e20'); R(231, 108, 13, 1, '#e8c35a'); R(236, 105, 3, 8, '#e8c35a'); R(230, 99, 15, 5, '#4f2f18'); R(231, 100, 13, 1, '#e8c35a');   // a chest
+    R(252, 85, 1, 4, '#6b4a2e'); P(252, 84, '#e8c35a'); R(249, 89, 7, 1, '#e8c35a'); R(252, 90, 1, 14, '#c9ced8');   // a sword stuck in the gold
+    for (let y = -5; y <= 5; y++) for (let x = -5; x <= 5; x++) { const d = x * x + y * y; if (d <= 25) P(82 + x, 108 + y, d > 18 ? '#e8c35a' : d < 3 ? '#e8c35a' : '#7a2a2a'); }   // a shield
+    R(98, 108, 5, 1, '#e8c35a'); R(99, 109, 3, 2, '#e8c35a'); R(100, 111, 1, 3, '#e8c35a'); R(98, 114, 5, 1, '#e8c35a');   // a goblet
     R(0, 132, ART_W, 48, '#7d776c');
     for (const y of [137, 143, 150, 158, 167]) R(0, y, ART_W, 1, '#6b665c');
     for (let row = 0, ys = [132, 137, 143, 150, 158, 167, 180]; row < 6; row++) for (let x = (row % 2) * 13; x < ART_W; x += 26) R(x, ys[row], 1, ys[row + 1] - ys[row], '#6b665c');
@@ -1116,7 +1116,17 @@ class Hoop {
     this.body.setLinearVelocity({ x: 0, y: (this.yAt(time + dt) - this.base - this.body.getPosition().y) / dt });
   }
   sync() { if (this.falling) return; this.prevY = this.y; this.y = this.base + this.body.getPosition().y; }
-  shatter() { if (this.shattered) return; this.shattered = true; this.body.destroyFixture(this.boardFix); }
+  // the board blows out into glass shards: their whole flight is worked out here from fixed dice, so the
+  // replay can redraw them from nothing but the time since the break
+  shatter(time) {
+    if (this.shattered) return;
+    this.shattered = true; this.shatterAt = time; this.body.destroyFixture(this.boardFix);
+    let sd = 7 + (this.side > 0 ? 1 : 0); const rr = (a, b) => { sd = (sd * 16807) % 2147483647; return a + (sd / 2147483647) * (b - a); };
+    const bx = this.side * (BOARD_X + 0.06);
+    this.shards = [];
+    for (let i = 0; i < 46; i++) this.shards.push({ x: bx + rr(-0.08, 0.08), y: this.y + rr(-0.2, 1.7), vx: -this.side * rr(0.4, 5.5) + rr(-1, 1), vy: rr(-1, 4.5),
+      a: rr(0, 6.3), va: rr(-14, 14), len: rr(1, 3.6) | 0, col: ['#dff3ff', '#bfe3f5', '#ffffff', '#9fd0ea'][i % 4] });
+  }
   fallArt() { return this.side > 0 ? 314 : 6; }
   update(dt, balls, players) {
     const { cols, rows, pts } = this, ry = this.y;
@@ -4626,7 +4636,7 @@ class Game {
     this.wallHit = [0, 0, 0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
-    this.roundT = 0; this.cam.watch = null; this.cam.z = 1;
+    this.roundT = 0; this.cam.watch = null; this.cam.punch = null; this.cam.z = 1;
     if (!this.isShadow) this.bg = ownDice(courtImage)(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
     this.bannerItems = [court.key === 'gym' ? '' : court.name, court.bouncy ? 'BOUNCY WALLS' : '', ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
@@ -5290,10 +5300,13 @@ class Game {
       h.collapseAt = this.time + 0.3;
       if (p.hang) p.hang.dur = Math.max(p.hang.dur, 1.7);
     } else if (fx === 'glass' || (!fx && hard && this.dunkOn('glass') && Math.random() < (style.id === 'shatter' ? 1 / 3 : 1 / 12))) {
-      h.shatter(); this.sfx.glass(); this.addShake(14);
+      h.shatter(this.time); this.sfx.glass(); this.addShake(20); this.excite = 1;
+      // the cinematic bit: everything drops to slow motion, a white pop, and the camera punches in on the board
+      this.slowmo(0.22, 0.9);
+      if (!REDUCED) { this.flash = 0.55; this.cam.punch = { x: h.cx - h.side * 0.4, y: h.y + 0.5, t: 1.15 }; }
       this.popup('GLASS BROKEN!', h.cx - h.side * 1.8, h.y + 2.6, '#bfe3f5', 8, 1.6);
       const bx = h.side * (BOARD_X + 0.06);
-      for (let i = 0; i < 60; i++) this.addPart(bx + rand(-0.1, 0.1), h.y + rand(-0.2, 1.7), rand(-4, 4) - h.side * 2, rand(-1, 4), 18, rand(0.8, 1.6), pick(['#dff3ff', '#bfe3f5', '#ffffff', '#9fd0ea']), pick([1, 1, 2]));
+      for (let i = 0; i < 30; i++) this.addPart(bx + rand(-0.1, 0.1), h.y + rand(-0.2, 1.7), rand(-4, 4) - h.side * 2, rand(-1, 4), 18, rand(0.5, 1.1), pick(['#dff3ff', '#bfe3f5', '#ffffff', '#9fd0ea']), pick([1, 1, 2]));
     }
   }
   onHoopLand(h) {
@@ -5338,7 +5351,7 @@ class Game {
     this.rec.push({
       pl: this.players.map(p => [...pose(p.body), ...pose(p.head), ...pose(p.arms[0]), p.spinA, p.front ? 1 : 0, p.armScale, p.legA ? p.legA[0] : 0, p.legA ? p.legA[1] : 0, p.layer === 'between' ? 1 : p.layer === 'back' ? 2 : 0]),
       b: this.allBalls.map(b => { const p = b.body.getPosition(); return [p.x, p.y, b.body.getAngle(), b.holder ? this.players.indexOf(b.holder) : -1]; }),
-      h: this.hoops.map(h => ({ y: h.y, bend: h.bend, shake: h.shake, fall: h.fall || 0, pts: h.pts.map(q => [q.x, q.y]) })),
+      h: this.hoops.map(h => ({ y: h.y, bend: h.bend, shake: h.shake, fall: h.fall || 0, shattered: h.shattered, st: h.shattered ? this.time - h.shatterAt : -1, pts: h.pts.map(q => [q.x, q.y]) })),
     });
     if (this.rec.length > 240) this.rec.shift();
     this.recCount++;
@@ -5640,8 +5653,10 @@ class Game {
     this.shakeA = Math.max(0, this.shakeA - rdt * 22);
     this.flash = Math.max(0, this.flash - rdt * 1.6);
     const C = this.cam, on = C.watch && C.watch.on;
-    C.z += ((on ? 2.3 : 1) - C.z) * Math.min(1, rdt * (on ? 3.2 : 5));
-    if (C.z < 1.002 && !on) C.z = 1;
+    if (C.punch && !on) { C.punch.t -= rdt; C.fx = C.punch.x; C.fy = C.punch.y; if (C.punch.t <= 0 || this.state === 'replay') C.punch = null; }
+    const punch = C.punch && !on;
+    C.z += ((on ? 2.3 : punch ? 1.7 : 1) - C.z) * Math.min(1, rdt * (on ? 3.2 : punch ? 9 : 5));
+    if (C.z < 1.002 && !on && !punch) C.z = 1;
     C.x += (C.fx - C.x) * Math.min(1, rdt * 7); C.y += (C.fy - C.y) * Math.min(1, rdt * 7);
   }
 }
@@ -5703,6 +5718,140 @@ const RENDER = {
   ball(b) { RENDER.part(b.spr, b.body, false); },
 };
 
+// ---------------------------------------------------------------- the castle's dragon
+// Built once as pixel sprites (body, folded and spread wing, head, jaw) plus shaded discs for the neck and tail;
+// drawLow poses it every frame: it breathes, its tail sways, now and then it stirs in its sleep or snorts
+// smoke, and a big play wakes it just long enough to blow a jet of fire across the back of the hall.
+const DRG = { ol: '#0e0d12', dk: '#1c1b21', body: '#2b2a31', mid: '#35343d', hi: '#4a4954', belly: '#57504a', belly2: '#463f3a', bone: '#9a9184', bone2: '#5e5850', mem: '#232229', vein: '#1a1920' };
+let dragonCache = null;
+const P1 = (g, x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+function dragonArt() {
+  if (dragonCache) return dragonCache;
+  const D = DRG;
+  const sprite = draw => { const [c, g] = mk(ART_W, ART_H); draw((x, y, col) => P1(g, Math.round(x), Math.round(y), col)); return c; };
+  const ln = (P, x0, y0, x1, y1, col, w = 1) => { const n = Math.max(1, Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) for (let k = 0; k < w; k++) P(lerp(x0, x1, i / n), lerp(y0, y1, i / n) + k, col); };
+  // a union of ovals with an ink outline, a lit top edge and (on the belly ovals) striped plates
+  const shape = (P, blobs) => {
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const b of blobs) { x0 = Math.min(x0, b[0] - b[2] - 1); x1 = Math.max(x1, b[0] + b[2] + 1); y0 = Math.min(y0, b[1] - b[3] - 1); y1 = Math.max(y1, b[1] + b[3] + 1); }
+    const hit = (x, y) => { let best = null, bd = 1; for (const b of blobs) { const d = ((x - b[0]) / b[2]) ** 2 + ((y - b[1]) / b[3]) ** 2; if (d <= bd) { bd = d; best = b; } } return best; };
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const b = hit(x, y); if (!b) continue;
+      if (!hit(x - 1, y) || !hit(x + 1, y) || !hit(x, y - 1) || !hit(x, y + 1)) { P(x, y, D.ol); continue; }
+      const ly = (y - b[1]) / b[3];
+      let col = (x * 3 + y * 5) % 7 === 0 ? D.mid : D.body;
+      if (b[4] && ly > 0.3) col = y % 3 === 0 ? D.belly2 : D.belly;
+      else if (!hit(x, y - 2) || !hit(x, y - 3)) col = D.hi;
+      else if (ly > 0.55) col = D.dk;
+      P(x, y, col);
+    }
+    return hit;
+  };
+  const poly = (P, pts) => {
+    const inside = (x, y) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, yi] = pts[i], [xj, yj] = pts[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    for (let y = Math.min(...ys); y <= Math.max(...ys); y++) for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
+      if (!inside(x + 0.5, y + 0.5)) continue;
+      const edge = !inside(x - 0.5, y + 0.5) || !inside(x + 1.5, y + 0.5) || !inside(x + 0.5, y - 0.5) || !inside(x + 0.5, y + 1.5);
+      P(x, y, edge ? D.ol : (x * 2 + y) % 9 === 0 ? D.vein : D.mem);
+    }
+  };
+  const wing = (pts, elbow, tips) => sprite(P => {
+    poly(P, pts);
+    ln(P, pts[0][0], pts[0][1], elbow[0], elbow[1], D.mid, 2);
+    for (const q of tips) ln(P, elbow[0], elbow[1], q[0], q[1], D.mid);
+    P(elbow[0], elbow[1] - 1, D.bone); P(elbow[0] - 1, elbow[1] - 2, D.bone);
+  });
+  const horn = (P, x0, y0, x1, y1, w) => { for (let i = 0; i <= 16; i++) { const u = i / 16, x = lerp(x0, x1, u), y = lerp(y0, y1, u) - Math.sin(u * Math.PI) * 2; P(x, y, D.bone); if (u < 0.6 && w > 1) P(x, y + 1, D.bone2); } };
+  const discs = {};
+  for (const [k, col] of [['ol', D.ol], ['body', D.body], ['hi', D.hi]]) discs[k] = [];
+  for (let r = 0; r <= 10; r++) for (const k of ['ol', 'body', 'hi']) {
+    const [c, g] = mk(2 * r + 1, 2 * r + 1); g.fillStyle = DRG[k];
+    for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r + r * 0.8) g.fillRect(x + r, y + r, 1, 1);
+    discs[k][r] = c;
+  }
+  dragonCache = {
+    discs,
+    body: sprite(P => {
+      const hit = shape(P, [[140, 96, 19, 12, 1], [167, 94, 30, 14, 1], [197, 90, 22, 15], [200, 100, 13, 10], [134, 105, 6, 8], [129, 112, 8, 3], [187, 111, 10, 3]]);
+      for (let x = 150; x <= 216; x += 5) { let y = 60; while (y < 120 && !hit(x, y)) y++; if (y < 120) { P(x, y - 1, D.dk); P(x + 1, y - 1, D.dk); P(x, y - 2, D.dk); P(x, y - 3, D.bone2); } }
+      for (const [cx, cy] of [[121, 114], [124, 114], [127, 114], [177, 113], [180, 113]]) { P(cx, cy, D.bone); P(cx + 1, cy, D.bone2); }   // claws
+    }),
+    wingF: wing([[140, 86], [156, 66], [172, 57], [192, 63], [222, 80], [208, 84], [198, 78], [186, 85], [174, 79], [162, 86], [150, 89]], [172, 57], [[222, 80], [198, 78], [174, 79]]),
+    wingR: wing([[140, 86], [150, 60], [164, 40], [192, 44], [230, 56], [214, 70], [202, 66], [190, 73], [178, 68], [164, 76], [152, 86]], [164, 40], [[230, 56], [202, 66], [178, 68]]),
+    jaw: sprite(P => shape(P, [[92, 109, 11, 2]])),
+    head: sprite(P => {
+      shape(P, [[103, 101, 10, 6], [88, 104, 12, 4], [97, 98, 6, 3]]);
+      horn(P, 107, 97, 123, 89, 2); horn(P, 103, 96, 114, 87, 1);
+      P(78, 103, D.ol); P(79, 103, D.ol);   // nostril
+      for (let x = 98; x <= 102; x++) P(x, 100, D.ol);   // the eye, shut
+      for (const tx of [80, 84, 89]) P(tx, 108, '#d8d0c0');
+      for (const [sx, sy] of [[96, 108], [100, 108], [104, 107]]) P(sx, sy, D.dk);
+    }),
+  };
+  return dragonCache;
+}
+// a run of shaded discs along a path (the neck, the tail): outlines first, then fill, then a lit top
+function dragonChain(g, A, pts) {
+  for (const k of ['ol', 'body', 'hi']) for (const q of pts) {
+    const r = k === 'ol' ? q.r + 1 : k === 'body' ? q.r : Math.max(0, Math.round(q.r * 0.4));
+    const oy = k === 'hi' ? -Math.round(q.r * 0.45) : 0;
+    g.drawImage(A.discs[k][Math.min(10, r)], Math.round(q.x) - r, Math.round(q.y) - r + oy);
+  }
+}
+function drawDragon(g, G) {
+  const A = dragonArt(), t = G.realTime, ex = G.excite;
+  // a big play wakes it: it lifts its head and breathes fire (no more than once every ten seconds)
+  if (ex > 0.8 && !(t - (G.dragonFire ?? -99) < 10)) G.dragonFire = t;
+  const fa = t - (G.dragonFire ?? -99), fire = fa >= 0 && fa < 1.7 ? Math.sin(fa / 1.7 * Math.PI) : 0;
+  const sp = t % 46, stir = sp > 30 && sp < 35 ? Math.sin((sp - 30) / 5 * Math.PI) : 0;   // turning over in its sleep
+  const sn = t % 19, snort = sn > 12 && sn < 13.4 ? (sn - 12) / 1.4 : -1;
+  const hy = -Math.round(Math.max(stir * 7, fire * 7)), hx = -Math.round(fire * 2), jo = Math.round(fire * 3) + (snort >= 0 && snort < 0.4 ? 1 : 0);
+  const br = Math.sin(t * 1.1) > 0.3 ? -1 : 0;
+  // the tail, behind the body where it leaves the haunch and curling round in front of the hoard
+  const s1 = Math.sin(t * 0.6) * 5, s2 = Math.sin(t * 0.45 + 1) * 10 + stir * 14 * Math.sin(t * 6);
+  const tail = [];
+  for (let i = 0; i <= 40; i++) {
+    const u = i / 40, v = 1 - u;
+    tail.push({ x: v ** 3 * 214 + 3 * v * v * u * 262 + 3 * v * u * u * 278 + u ** 3 * (228 + s2), y: v ** 3 * 92 + 3 * v * v * u * (80 + s1) + 3 * v * u * u * 121 + u ** 3 * 122, r: Math.max(1, Math.round(7 * (1 - u * 0.9))) });
+  }
+  g.drawImage(A.body, 0, 0);
+  g.drawImage(stir > 0.45 ? A.wingR : A.wingF, 0, br);
+  // the neck runs from the shoulders down to wherever the head is
+  const neck = [];
+  for (let i = 0; i <= 14; i++) { const u = i / 14, v = 1 - u; neck.push({ x: v * v * 136 + 2 * v * u * 122 + u * u * (110 + hx), y: v * v * 90 + 2 * v * u * (88 + hy * 0.6) + u * u * (100 + hy), r: Math.round(8 - u * 2.5) }); }
+  dragonChain(g, A, neck);
+  if (jo > 0) { g.fillStyle = '#5a1414'; g.fillRect(79 + hx, 107 + hy, 22, jo + 1); }
+  g.drawImage(A.jaw, hx, hy + jo);
+  g.drawImage(A.head, hx, hy);
+  if (ex > 0.4 || fire > 0 || stir > 0.6) {   // one eye cracks open
+    g.fillStyle = 'rgba(255,170,40,0.25)'; g.fillRect(96 + hx, 97 + hy, 9, 6);
+    g.fillStyle = '#ffb02e'; g.fillRect(98 + hx, 99 + hy, 5, 2); g.fillStyle = '#3a1a00'; g.fillRect(100 + hx, 99 + hy, 1, 2);
+  }
+  dragonChain(g, A, tail);
+  for (let i = 4; i < 36; i += 4) {   // spines down the tail
+    const a = tail[i], b = tail[i + 1]; let nx = b.y - a.y, ny = -(b.x - a.x); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    P1(g, Math.round(a.x + nx * (a.r + 1)), Math.round(a.y + ny * (a.r + 1)), DRG.dk); P1(g, Math.round(a.x + nx * (a.r + 2)), Math.round(a.y + ny * (a.r + 2)), DRG.bone2);
+  }
+  const tp = tail[40], tq = tail[37], dx = tp.x - tq.x, dy = tp.y - tq.y, dl = Math.hypot(dx, dy) || 1;
+  for (let k = 0; k < 4; k++) for (let w = -k; w <= k; w++) P1(g, Math.round(tp.x + dx / dl * (4 - k) - dy / dl * w), Math.round(tp.y + dy / dl * (4 - k) + dx / dl * w), k === 3 && Math.abs(w) === 3 ? DRG.ol : DRG.body);   // the spade at its tip
+  const nx = 77 + hx, ny = 103 + hy;
+  if (snort >= 0) for (let k = 0; k < 3; k++) {   // a snort of smoke (and a spark)
+    const p = snort + k * 0.15; if (p > 1) continue;
+    g.fillStyle = `rgba(150,150,160,${(0.5 * (1 - p)).toFixed(2)})`; g.fillRect(Math.round(nx - 3 - p * 14), Math.round(ny - 1 - p * 8 - k), 2 + Math.round(p * 3), 2);
+    if (k === 0 && p < 0.3) P1(g, nx - 2, ny + 1, '#ff8a2a');
+  }
+  if (fire > 0) {   // the fire: a roar up at the rafters (steep, so it never crosses the hoop) that lights up the hall
+    g.fillStyle = `rgba(255,120,40,${(0.09 * fire).toFixed(3)})`; g.fillRect(0, 0, ART_W, 132);
+    const len = 58 * Math.min(1, fa / 0.35);
+    for (let d = 0; d < len; d += 2) {
+      const u = d / 58, r = 1 + u * 7, wob = Math.sin(t * 40 + d) * u * 2;
+      const col = u < 0.15 ? '#fff0a0' : u < 0.45 ? '#ffb02e' : u < 0.8 ? '#ff5a1f' : '#a8330d';
+      g.fillStyle = col; g.fillRect(Math.round(nx - d * 0.5 + wob - r / 2), Math.round(ny - d * 0.85 - r / 2), Math.ceil(r), Math.ceil(r));
+    }
+  }
+}
 function drawLow(G, fr) {
   const g = lg, t = G.time, key = G.cfg.court.key;
   g.drawImage(G.bg, 0, 0);
@@ -5737,19 +5886,12 @@ function drawLow(G, fr) {
   } else if (key === 'park') {
     for (const c of G.clouds) { const x = Math.round(c.x), y = Math.round(c.y); R(x, y, c.w, 5, '#ffffff'); R(x + 4, y - 3, c.w * 0.5, 3, '#ffffff'); R(x + c.w * 0.45, y - 5, c.w * 0.35, 5, '#ffffff'); }
   } else if (key === 'castle') {
-    for (const tx of [88, 232]) {   // torches
-      const f = (Math.random() * 3) | 0;
-      R(tx - 6, 54, 13, 14, 'rgba(255,170,80,0.10)');
-      R(tx - 1, 60 - f, 3, 4 + f, '#ff8a2a'); R(tx, 61 - f, 1, 3, '#ffe07a'); if (Math.random() < 0.3) R(tx + ((Math.random() * 3) | 0) - 1, 57 - f, 1, 1, '#ffd23f');
+    for (const [tx, ty] of [[32, 58], [47, 55], [287, 58], [273, 55]]) {   // torches
+      const f = (Math.sin(t * 17 + tx) + Math.sin(t * 23 + ty) > 0.6 ? 1 : 0) + (Math.sin(t * 11 + tx * 3) > 0.5 ? 1 : 0);
+      R(tx - 7, ty - 12, 15, 16, 'rgba(255,160,70,0.07)'); R(tx - 4, ty - 8, 9, 10, 'rgba(255,160,70,0.07)');
+      R(tx - 1, ty - 4 - f, 3, 4 + f, '#ff8a2a'); R(tx, ty - 3 - f, 1, 3, '#ffe07a'); if (f > 1) P1(g, tx + (tx & 1 ? 1 : -1), ty - 7, '#ffd23f');
     }
-    // the dragon sleeps through it all: Zs drift up off its snout, its belly rises, and a big play opens one eye
-    const breath = Math.sin(t * 1.3);
-    if (breath > 0.6) R(106 - Math.round((breath - 0.6) * 10), 102 - Math.round((breath - 0.6) * 6), 2, 1, 'rgba(200,200,210,0.6)');
-    for (let i = 0; i < 3; i++) {
-      const p = (t * 0.3 + i / 3) % 1, a = p < 0.15 ? p / 0.15 : 1 - (p - 0.15) / 0.85;
-      tiny(g, 'Z', Math.round(114 - p * 14 + Math.sin(p * 9) * 2), Math.round(94 - p * 34), `rgba(230,236,255,${(0.75 * a).toFixed(2)})`);
-    }
-    if (G.excite > 0.35) { R(121, 99, 4, 2, '#ffd23f'); R(123, 99, 1, 2, INK); }
+    drawDragon(g, G);
   } else if (key === 'moon') {
     const r = rng(99);
     for (let i = 0; i < 24; i++) { const x = (r() * ART_W) | 0, y = (r() * 90) | 0; if (Math.sin(t * 3 + i * 2.1) > 0.7) R(x, y, 1, 1, '#ffffff'); }
@@ -5849,7 +5991,7 @@ function drawLow(G, fr) {
     const bx = Math.floor(ax(s > 0 ? BOARD_X : -BOARD_X - 0.12));
     const armX0 = s > 0 ? bx + 3 : px + 4, armX1 = s > 0 ? px : bx;
     R(armX0, poleTop + 1 + sh, armX1 - armX0, 3, L.pole);
-    if (h.shattered) {
+    if (hv.shattered) {
       R(bx - 1, boardTop - 1 + sh, 5, 2, INK); R(bx - 1, boardBot - 1 + sh, 5, 2, INK); R(bx - 1, boardTop + sh, 1, boardBot - boardTop, INK); R(bx + 3, boardTop + sh, 1, boardBot - boardTop, INK);
       for (const [dy, len] of [[1, 4], [3, 2], [9, 1], [-3, 3], [-6, 1]]) R(bx, (dy > 0 ? boardTop + dy : boardBot + dy) + sh, 3, len, '#dff3ff');
     } else {
@@ -5897,6 +6039,25 @@ function drawHoopFront(G, h, hv) {
     const a = i / 44 * Math.PI, c = Math.cos(a), bend = Math.round(hv.bend * 3 * Math.max(0, -h.side * c));
     const x = Math.round(cx + c * rx), y = Math.round(cy + Math.sin(a) * 2) + bend;
     artRect(x, y, 1, 1, '#ff5a1f', true); artRect(x, y + 1, 1, 1, '#a8330d', true);
+  }
+  if (hv.shattered && h.shards) drawShards(G, h, hv === h ? G.time - h.shatterAt : hv.st);
+}
+// each shard flies, spins, hits the floor, skips once and lies there glinting for the rest of the round
+function drawShards(G, h, age) {
+  const GR = 14, FL = 0.05;
+  for (const q of h.shards) {
+    const tl = (q.vy + Math.sqrt(q.vy * q.vy + 2 * GR * (q.y - FL))) / GR;
+    let x, y, a;
+    if (age < tl) { x = q.x + q.vx * age; y = q.y + q.vy * age - GR / 2 * age * age; a = q.a + q.va * age; }
+    else {
+      const v = (GR * tl - q.vy) * 0.22, t2 = age - tl, hop = 2 * v / GR, tt = Math.min(t2, hop);
+      x = q.x + q.vx * tl + q.vx * 0.3 * tt; y = FL + Math.max(0, v * tt - GR / 2 * tt * tt);
+      a = t2 < hop ? q.a + q.va * age : 0;
+    }
+    x = clamp(x, -7.8, 7.8);
+    const px = ax(x), py = ay(y), c = Math.cos(a), s = Math.sin(a);
+    const col = age > tl && Math.sin(G.realTime * 3 + q.a * 9) > 0.93 ? '#ffffff' : q.col;
+    artLine(Math.round(px - c * q.len / 2), Math.round(py - s * q.len / 2), Math.round(px + c * q.len / 2), Math.round(py + s * q.len / 2), col);
   }
 }
 function drawMeter(m) {
@@ -6113,9 +6274,13 @@ function render(G) {
   const sa = replay ? 0 : G.shakeA * S; SHX = sa ? rand(-sa, sa) : 0; SHY = sa ? rand(-sa, sa) : 0;
   ctx.save(); ctx.beginPath(); ctx.rect(OX, OY, ART_W * S, ART_H * S); ctx.clip();
   // the game-winner camera: zoom in around a point on the court, never showing past the edges
-  const C = G.cam, zoom = !fr && C.z > 1.001;
+  // (in the replay a glass break gets the same punch-in, worked out from the frame's time since the break)
+  const C = G.cam, rb = fr ? fr.h.findIndex(x => x.st >= 0 && x.st < 1.6) : -1, rh = rb >= 0 ? G.hoops[rb] : null;
+  const rz = rh && !REDUCED ? 1 + 0.7 * Math.min(1, fr.h[rb].st * 8) * Math.min(1, (1.6 - fr.h[rb].st) * 3) : 1;
+  const zoom = fr ? rz > 1.001 : C.z > 1.001;
   if (zoom) {
-    const Z = C.z, px = clamp(ax(C.x), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(C.y), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
+    const Z = fr ? rz : C.z, cxw = fr ? rh.cx - rh.side * 0.4 : C.x, cyw = fr ? fr.h[rb].y + 0.5 : C.y;
+    const px = clamp(ax(cxw), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(cyw), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
     ctx.save(); ctx.translate(OX + ART_W * S / 2, OY + ART_H * S / 2); ctx.scale(Z, Z); ctx.translate(-(OX + px * S), -(OY + py * S));
   }
   drawLow(G, fr);
@@ -6129,6 +6294,8 @@ function render(G) {
     });
     fr.b.forEach((x, i) => { if (x[3] < 0) RENDER.part(G.allBalls[i].spr, new Pose(x[0], x[1], x[2]), false); });
     G.hoops.forEach((h, i) => drawHoopFront(G, h, fr.h[i]));
+    if (zoom) ctx.restore();
+    if (rb >= 0 && fr.h[rb].st < 0.25 && !REDUCED) { ctx.fillStyle = `rgba(255,255,255,${(0.55 * (1 - fr.h[rb].st / 0.25)).toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
     drawHUD(G);
     drawReplayOverlay(G);
   } else {
