@@ -194,6 +194,7 @@ const MODES = [
   { id: 'tokyo', cat: 'COURTS', name: 'DOWNTOWN TOKYO', isNew: true },
   { id: 'rome', cat: 'COURTS', name: 'ROME COLOSSEUM', isNew: true },
   { id: 'castle', cat: 'COURTS', name: 'DRAGON CASTLE', isNew: true },
+  { id: 'bouncehouse', cat: 'COURTS', name: 'BOUNCY HOUSE', isNew: true },
   { id: 'light', cat: 'BALLS', name: 'LIGHT BALL' },
   { id: 'heavy', cat: 'BALLS', name: 'HEAVY BALL' },
   { id: 'colorful', cat: 'BALLS', name: 'COLORFUL BALL (2 PTS)' },
@@ -228,10 +229,13 @@ const COURTS = {
   park:  { key: 'park',  name: 'CITY PARK', fric: 0.95,  gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#c3c6cc' },
   ice:   { key: 'ice',   name: 'ICE',       fric: 0.004, gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#ffffff' },
   moon:  { key: 'moon',  name: 'MOON',      fric: 0.8,   gravity: 8,  jumpH: 2.5,  bounce: 1,    dust: '#c9c9d3' },
-  tokyo: { key: 'tokyo', name: 'DOWNTOWN TOKYO', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#9aa0b8' },
+  // (Tokyo's gimmick: neon BOOST PADS in the street that fling you at the nearer hoop)
+  tokyo: { key: 'tokyo', name: 'DOWNTOWN TOKYO', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#9aa0b8', boost: true },
   rome:  { key: 'rome',  name: 'ROME COLOSSEUM', fric: 1.05, gravity: 20, jumpH: 1.55, bounce: 0.8, dust: '#ecd6a6' },
-  // (the castle's walls and ceiling are padded like a bouncy castle: the ball comes off them faster than it hit)
-  castle: { key: 'castle', name: 'DRAGON CASTLE', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#b9b2a4', bouncy: true },
+  castle: { key: 'castle', name: 'DRAGON CASTLE', fric: 0.95, gravity: 20, jumpH: 1.55, bounce: 1, dust: '#b9b2a4' },
+  // the whole floor is a trampoline (springy) and the walls and ceiling are padded (bouncy: the ball comes off
+  // them faster than it hit). Players stay upright and sweep their lean steadily, so a bounce goes where you aim it
+  bouncehouse: { key: 'bouncehouse', name: 'BOUNCY HOUSE', fric: 0.7, gravity: 20, jumpH: 2.1, bounce: 1.12, dust: '#ffe27a', bouncy: true, springy: true },
 };
 const BALLS = {
   classic:   { name: '',                      r: 0.3,  density: 2.5,  rest: 0.74, pts: 1, look: 'classic' },
@@ -282,6 +286,12 @@ const OBST = {
   twoball:  { name: 'TWO BALLS' },
 };
 const WALL_H = 2.2;
+// BOOST PADS (Tokyo): a strip on each side of center; step on one and you're flung up and at the nearer hoop,
+// coming down about a metre in front of the rim (so they help a fast break and a defender getting back alike)
+const BOOST_X = 3, BOOST_W = 0.9;
+// BOUNCY HOUSE: the lean sweeps side to side at a steady beat instead of rocking, so you can read where a
+// bounce will send you; a press a moment before landing still counts
+const SPRING_AIM = 0.4, SPRING_W = 3.6, SPRING_BUF = 0.2;
 const CLASSIC_ROUND = { court: 'gym', ball: null, body: null, hoop: null, phys: null, obst: null };
 const TOURNEY = [
   { name: 'ROOKIES', level: 'easy', target: 3 },
@@ -724,6 +734,7 @@ class Sfx {
   swish() { this.hiss(0.32, 0.4, 'bandpass', 2600, 7000, 0.9); }
   jump() { this.tone('square', 210, 330, 0.06, 0.03); }
   boing() { this.tone('sine', 160, 540, 0.2, 0.22); this.tone('triangle', 80, 270, 0.2, 0.12); }
+  boost() { this.tone('sawtooth', 200, 900, 0.22, 0.06); this.tone('square', 400, 1600, 0.18, 0.04, 0.05); }
   grab() { this.tone('triangle', 660, 880, 0.05, 0.1); }
   steal() { this.tone('square', 880, 440, 0.12, 0.06); }
   shot() { this.hiss(0.12, 0.08, 'bandpass', 900, 2500, 1.2); }
@@ -1024,6 +1035,37 @@ function paintCourt(key) {
     for (let row = 0, ys = [132, 137, 143, 150, 158, 167, 180]; row < 6; row++) for (let x = (row % 2) * 13; x < ART_W; x += 26) R(x, ys[row], 1, ys[row + 1] - ys[row], '#6b665c');
     for (let i = 0; i < 150; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, rnd() < 0.5 ? '#8a8478' : '#726d62');
     lines('#e9dcb8', '#6e3236');
+  } else if (key === 'bouncehouse') {
+    // inside a giant inflatable: puffy striped tubes all round, net windows onto a sunny back yard, a quilted floor
+    R(0, 0, ART_W, 132, '#c8303a');
+    const tubes = ['#e8343f', '#ffd23a', '#2f7bf0', '#ffd23a'];
+    for (let i = 0, x = 0; x < ART_W; i++, x += 20) {
+      const col = tubes[i % 4];
+      R(x, 10, 20, 122, col);
+      R(x + 3, 10, 3, 122, 'rgba(255,255,255,0.28)'); R(x + 16, 10, 4, 122, 'rgba(0,0,0,0.18)');
+      for (let y = 30; y < 132; y += 26) R(x, y, 20, 1, 'rgba(0,0,0,0.16)');   // the stitched seams
+    }
+    for (let x = 0; x < ART_W; x += 16) for (let y = -8; y <= 8; y++) {   // the puffy row along the top
+      const half = Math.round(8 * Math.sqrt(1 - (y / 8.5) ** 2)); R(x + 8 - half, 10 + y, half * 2, 1, ((x / 16) | 0) % 2 ? '#e8343f' : '#2f7bf0');
+      if (y === -4) R(x + 8 - half + 2, 10 + y, 3, 2, 'rgba(255,255,255,0.4)');
+    }
+    for (const wx of [72, 204]) {   // net windows: blue sky, a fence and a tree outside
+      R(wx - 2, 34, 48, 44, INK); R(wx - 1, 35, 46, 42, '#ffd23a');
+      R(wx, 36, 44, 40, '#8fd3ff'); R(wx, 62, 44, 14, '#5cc85a'); R(wx, 60, 44, 2, '#e8e0c8');
+      for (let k = 0; k < 44; k += 6) R(wx + k, 56, 2, 6, '#e8e0c8');
+      R(wx + 30, 44, 8, 8, '#3f9a48'); R(wx + 33, 52, 2, 8, '#6d4a2e');
+      if (wx < 100) { R(wx + 6, 40, 6, 6, '#ffe680'); R(wx + 7, 41, 4, 4, '#fff6c0'); }
+      for (let k = 0; k <= 44; k += 4) R(wx + k, 36, 1, 40, 'rgba(20,16,25,0.35)');
+      for (let k = 0; k <= 40; k += 4) R(wx, 36 + k, 44, 1, 'rgba(20,16,25,0.35)');
+    }
+    R(0, 112, ART_W, 20, '#e8343f');   // the puffy kick wall at the back of the floor
+    for (let x = 0; x < ART_W; x += 20) { R(x, 112, 20, 3, 'rgba(255,255,255,0.3)'); R(x + 18, 112, 2, 20, 'rgba(0,0,0,0.18)'); }
+    R(0, 130, ART_W, 2, '#8a1f28');
+    R(0, 132, ART_W, 48, '#2f7bf0');
+    for (let y = 132; y < 180; y += 8) R(0, y, ART_W, 1, '#2a6ad0');
+    for (let x = 0; x < ART_W; x += 16) R(x, 132, 1, 48, '#2a6ad0');
+    for (let y = 136; y < 180; y += 8) for (let x = 6; x < ART_W; x += 16) R(x, y, 3, 1, '#5d9bff');   // the quilting puffs catch the light
+    lines('#ffffff', '#2766c8');
   }
   // the little extras each court keeps in the background
   if (key === 'gym') {
@@ -1100,13 +1142,13 @@ class Hoop {
     if (this.collapseAt && time >= this.collapseAt && !this.falling) {
       this.falling = true; this.fall = 0; this.fallV = 0.5; this.moving = false; this.body.setLinearVelocity({ x: 0, y: 0 });
       this.pivot = { x: this.side * 7.7, y: 0.5 }; const o = this.body.getPosition(); this.origin0 = { x: o.x, y: o.y };
-      this.game.sfx.creak();
+      this.fallAt = time; this.game.sfx.creak(); this.game.onHoopTip(this);
     }
     if (this.falling) {
       if (!this.landed) {
         this.fallV += 6 * Math.sin(this.fall + 0.25) * dt;
         this.fall = Math.min(1.2, this.fall + this.fallV * dt);
-        if (this.fall >= 1.2) { this.landed = true; this.game.onHoopLand(this); }
+        if (this.fall >= 1.2) { this.landed = true; this.landAt = time; this.game.onHoopLand(this); }
       }
       const th = this.side * this.fall, o = rot({ x: this.origin0.x - this.pivot.x, y: this.origin0.y - this.pivot.y }, th);
       this.body.setTransform({ x: this.pivot.x + o.x, y: this.pivot.y + o.y }, th);
@@ -1128,6 +1170,8 @@ class Hoop {
       a: rr(0, 6.3), va: rr(-14, 14), len: rr(1, 3.6) | 0, col: ['#dff3ff', '#bfe3f5', '#ffffff', '#9fd0ea'][i % 4] });
   }
   fallArt() { return this.side > 0 ? 314 : 6; }
+  // where the camera looks while the hoop comes down: partway up the pole, wherever the pole has got to
+  fallFocus(fall) { const o = rot({ x: this.cx - this.pivot.x, y: this.base - this.pivot.y }, this.side * fall); return { x: this.pivot.x + o.x * 0.55, y: this.pivot.y + o.y * 0.55 }; }
   update(dt, balls, players) {
     const { cols, rows, pts } = this, ry = this.y;
     const solids = [];
@@ -1201,7 +1245,7 @@ class Player {
     this.dir = TEAM[team].dir; this.id = team * 3 + slot;
     const bm = game.cfg.body;
     this.d = { legLen: 1.0 * bm.leg, legW: 0.2, torsoW: 0.46, torsoH: 0.86, headR: 0.27 * bm.head, armLen: 1.02 * bm.arm, armW: 0.2 };
-    this.armsUp = false; this.celebrate = false; this.jumpCD = 0; this.grabCD = 0; this.grabT = -9; this.fallenT = 0; this.padCD = 0; this.upT = 0;
+    this.armsUp = false; this.celebrate = false; this.jumpCD = 0; this.grabCD = 0; this.grabT = -9; this.fallenT = 0; this.padCD = 0; this.upT = 0; this.bufT = -9;
     this.phase = rand(0, 6.28); this.swayPh = rand(0, 6.28); this.swayW = SWAY_W * rand(0.88, 1.12);
     this.feet = 0; this.grounded = false; this.fallen = false;
     this.wob = 0; this.swaySign = 1; this.airT = 0; this.airVy = 0; this.flailT = 0; this.flailCD = 0; this.flailK = 0; this.flailPh = 0; this.flailTick = 0;
@@ -1305,6 +1349,9 @@ class Player {
     else { if (this.airT > 0.15) this.landed(); this.airT = 0; this.airVy = 0; this.wob = Math.max(0, this.wob - dt * 0.36); }
     if (this.spinA) { const tgt = Math.round(this.spinA / (2 * Math.PI)) * 2 * Math.PI; this.spinA += (tgt - this.spinA) * Math.min(1, 8 * dt); if (Math.abs(tgt - this.spinA) < 0.03) this.spinA = 0; }
     if (g.pads && this.grounded && this.padCD <= 0) this.checkPad();
+    if (g.boosts && onFeet && !this.fallen && this.padCD <= 0) this.checkBoost();
+    const spr = g.cfg.court.springy;
+    if (spr && this.grounded && this.jumpCD <= 0 && g.time - this.bufT < SPRING_BUF) { this.bufT = -9; this.jump(); }
     if (this.flailT > 0) {
       // the physics has gone weird for a moment: the arm windmills and the body gets yanked around
       this.flailT -= dt; this.flailPh += dt * 15;
@@ -1340,13 +1387,14 @@ class Player {
       // The rocking starts when you land or get knocked and dies away over a couple of seconds, so a player
       // left alone ends up standing still. It leans a little toward the hoop you attack, and pushes back
       // harder near tipping over.
-      const k = smooth(this.wob), tgt = (this.swaySign * SWAY_A * Math.sin(g.time * this.swayW + this.swayPh) - dir * 0.08) * k;
+      const k = smooth(this.wob), tgt = spr ? this.aimA() : (this.swaySign * SWAY_A * Math.sin(g.time * this.swayW + this.swayPh) - dir * 0.08) * k;
       const acc = (Math.abs(th) > 0.8 ? 1.8 : 1) * BAL_KP * (tgt - th) - BAL_KD * om;
       body.applyTorque(this.I * acc - this.M * g.cfg.gravity * this.h * Math.sin(th) * 0.9, true);
     } else if (!this.fallen || !lowBody) {
       // in the air: slowly right yourself. Harder just after getting up, and in low gravity (longer hang time),
       // so nobody cartwheels over and over.
-      const wt = clamp(-th * 2, -3, 3), rate = (this.upT > 0 ? 4 : 0.6) * Math.sqrt(20 / this.game.cfg.gravity);
+      // (in the bouncy house you hold your line in the air and follow the aim sweep: no flopping about)
+      const wt = spr ? clamp((this.aimA() - th) * 6, -5, 5) : clamp(-th * 2, -3, 3), rate = (spr ? 8 : this.upT > 0 ? 4 : 0.6) * Math.sqrt(20 / this.game.cfg.gravity);
       body.setAngularVelocity(om + (wt - om) * Math.min(1, rate * dt));
     }
   }
@@ -1366,14 +1414,23 @@ class Player {
     }
     this.wob = a;
   }
+  // the bouncy house lean: a steady sweep, a touch toward the hoop you attack, each player on their own beat
+  aimA() { return SPRING_AIM * Math.sin(this.game.time * SPRING_W + this.id * 2.3) - this.dir * 0.08; }
   landed() {
     const sp = -this.airVy, th = Math.abs(this.angle());
+    if (this.game.cfg.court.springy) {
+      // the floor gives some of the fall back as a small bounce; it dies away if you don't press
+      const vy = clamp(sp * 0.5, 0, 6.5);
+      if (vy > 1.5 && !(this.game.time - this.bufT < SPRING_BUF)) for (const b of this.parts) { const v = b.getLinearVelocity(); b.setLinearVelocity({ x: v.x * 0.6, y: vy }); }
+      this.wob = 0;
+      return;
+    }
     this.rock(clamp(0.75 + this.airT * 0.6, 0.75, 1), true);
     // coming down hard and nearly sideways now and then sends you flailing
     if (sp > 8 && th > 0.7) this.maybeFlail(0.05 + (th - 0.7) * 0.12, 0.6);
   }
   maybeFlail(chance, k) {
-    if (this.flailCD > 0 || this.game.state === 'showcase' || Math.random() >= chance) return;
+    if (this.flailCD > 0 || this.game.state === 'showcase' || this.game.cfg.court.springy || Math.random() >= chance) return;
     this.flail(k);
   }
   flail(k) {
@@ -1383,6 +1440,19 @@ class Player {
     this.game.flails++;
   }
   endFlail() { this.flailT = 0; this.neck.setFrequency(NECK_HZ); }
+  checkBoost() {
+    const g = this.game, fx = (this.footPoint(0).x + this.footPoint(1).x) / 2;
+    for (const q of g.boosts) {
+      if (Math.abs(fx - q.x) > BOOST_W / 2 || q.cd > 0) continue;
+      const h = g.hoops.find(o => o.side === q.side), vy = g.cfg.jumpV * 1.2, T = 2 * vy / g.cfg.gravity * 0.9;
+      const vx = q.side * clamp((Math.abs(h.cx - fx) - 1.1) / T, 1.5, 7);
+      for (const b of this.parts) b.setLinearVelocity({ x: vx, y: vy });
+      this.body.setAngularVelocity(-this.angle() * 3);
+      this.padCD = 0.8; this.jumpCD = 0.25; this.upT = 1; q.lit = 1; q.cd = 1.2; g.sfx.boost(); g.note('pad', this);
+      for (let i = 0; i < 10; i++) g.addPart(fx + rand(-0.4, 0.4), 0.05, -q.side * rand(0.5, 2), rand(0.5, 2.5), 6, rand(0.2, 0.45), pick(['#39e6ff', '#ff4fa3', '#ffffff']), 1);
+      return;
+    }
+  }
   checkPad() {
     const g = this.game, fx = (this.footPoint(0).x + this.footPoint(1).x) / 2;
     for (const pad of g.pads) {
@@ -1398,7 +1468,7 @@ class Player {
     if (this.dunk || this.hang) return;
     if (this.fallen) { if (this.center().y < 1.2 && this.jumpCD <= 0) this.getUp(); return; }   // mashing doesn't re-spin you
     if (this.grounded && this.jumpCD <= 0) this.jump();
-    else if (!this.grounded && this.jumpCD <= 0) { const o = this.headBelow(); if (o) this.jump(o); }   // off somebody's head, mid-air
+    else if (!this.grounded && this.jumpCD <= 0) { const o = this.headBelow(); if (o) this.jump(o); else if (this.game.cfg.court.springy) this.bufT = this.game.time; }   // off somebody's head, mid-air
   }
   // a head right under our feet, close enough to jump off (coming down onto it, or it coming up to meet us)
   headBelow() {
@@ -1680,7 +1750,7 @@ class CPU {
 // from where the real game is right now and run a second or so ahead. It can't see what chance will do in the real
 // game (every try rolls its own dice), so each answer is a guess, and it plays the other side as it would play itself.
 const NOOP = () => {};
-const SHADOW_NOOPS = ['popup', 'addPart', 'flame', 'slowmo', 'addShake', 'cue', 'greenSound', 'watchShot', 'recordFrame', 'startReplay', 'playImpact'];
+const SHADOW_NOOPS = ['popup', 'addPart', 'flame', 'slowmo', 'addShake', 'cue', 'greenSound', 'watchShot', 'recordFrame', 'startReplay', 'playImpact', 'onHoopTip'];
 function getShadow(g, slot = 0) {
   const all = g.shadows || (g.shadows = []);
   let S = all[slot];
@@ -3720,7 +3790,7 @@ class ImpossibleCPU extends CPU {
 // from where the real game is right now and run a second or so ahead. It can't see what chance will do in the real
 // game (every try rolls its own dice), so each answer is a guess, and it plays the other side as it would play itself.
 const NOOP_SEER = () => {};
-const SHADOW_NOOPS_SEER = ['popup', 'addPart', 'flame', 'slowmo', 'addShake', 'cue', 'greenSound', 'watchShot', 'recordFrame', 'startReplay', 'playImpact'];
+const SHADOW_NOOPS_SEER = ['popup', 'addPart', 'flame', 'slowmo', 'addShake', 'cue', 'greenSound', 'watchShot', 'recordFrame', 'startReplay', 'playImpact', 'onHoopTip'];
 function getShadowSeer(g, slot = 0) {
   const all = g.shadowsSeer || (g.shadowsSeer = []);
   let S = all[slot];
@@ -4499,10 +4569,11 @@ function migrateModes(m, ver) {
   if (ver < 3) for (const id of ['tokyo', 'rome']) if (!m.includes(id)) m.push(id);
   if (ver < 5) for (const id of ['speedup', 'crazyspd']) if (!m.includes(id)) m.push(id);
   if (ver < 7) { m = m.filter(id => id !== 'speedup' && id !== 'crazyspd'); if (!m.includes('castle')) m.push('castle'); }   // the speed balls went back to off
+  if (ver < 8 && !m.includes('bouncehouse')) m.push('bouncehouse');
   return m;
 }
 function loadSettings() {
-  const def = { ver: 7, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [] };
+  const def = { ver: 8, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
@@ -4510,7 +4581,7 @@ function loadSettings() {
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       target: [3, 5, 7, 11].includes(s.target) ? s.target : s.target === 10 ? 11 : 5, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
-      ver: 7,
+      ver: 8,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
       always: Array.isArray(s.always) ? s.always.filter(id => MODES.some(m => m.id === id)) : [],
       // (a dunk added after the settings were saved starts switched on)
@@ -4635,11 +4706,12 @@ class Game {
     this.spdK = 1; this.spdTo = 1; this.spdT = rand(1.5, 2.5);
     this.wallHit = [0, 0, 0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
+    this.boosts = court.boost ? [{ x: -BOOST_X, side: -1, lit: 0, cd: 0 }, { x: BOOST_X, side: 1, lit: 0, cd: 0 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
     this.roundT = 0; this.cam.watch = null; this.cam.punch = null; this.cam.z = 1;
     if (!this.isShadow) this.bg = ownDice(courtImage)(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
-    this.bannerItems = [court.key === 'gym' ? '' : court.name, court.bouncy ? 'BOUNCY WALLS' : '', ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
+    this.bannerItems = [court.key === 'gym' ? '' : court.name, court.boost ? 'BOOST PADS' : '', ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
     this.bannerLines = packLines(this.bannerItems, 36);
     if (!this.isShadow) this.makeCrowd();
   }
@@ -5309,10 +5381,21 @@ class Game {
       for (let i = 0; i < 30; i++) this.addPart(bx + rand(-0.1, 0.1), h.y + rand(-0.2, 1.7), rand(-4, 4) - h.side * 2, rand(-1, 4), 18, rand(0.5, 1.1), pick(['#dff3ff', '#bfe3f5', '#ffffff', '#9fd0ea']), pick([1, 1, 2]));
     }
   }
+  // HOOP COLLAPSE gets the glass-break treatment: slow motion all the way down with the camera riding the pole,
+  // then a hit of extra-slow motion, a white pop and a big dust cloud when it slams into the floor
+  onHoopTip(h) {
+    this.slowmo(0.35, 2); this.addShake(5); this.excite = 1;
+    if (!REDUCED) this.cam.punch = { hoop: h, z: 1.55, t: 3 };
+    for (let i = 0; i < 16; i++) this.addPart(h.pivot.x - h.side * 0.1, rand(0.1, 0.8), -h.side * rand(0.5, 3.5), rand(1, 4.5), 16, rand(0.3, 0.7), pick(['#ffd23f', '#ffffff', ORANGE]), 1);   // the bolts at the base snap
+  }
   onHoopLand(h) {
-    this.addShake(16); this.sfx.crash(); this.excite = 1; this.cue('pipe');
+    this.addShake(18); this.sfx.crash(); this.sfx.boom(); this.excite = 1; this.cue('pipe');
+    this.slowmo(0.15, 0.4);
+    if (!REDUCED) { this.flash = 0.5; if (this.cam.punch && this.cam.punch.hoop === h) this.cam.punch.t = 1.2; }
     this.popup('HOOP DOWN!', h.side * 3.2, 4.4, '#ff8173', 16, 2);
-    for (let i = 0; i < 50; i++) this.addPart(h.pivot.x - h.side * rand(0.5, 5), 0.1, rand(-3, 3), rand(0.5, 3), 4, rand(0.5, 1.2), this.cfg.court.dust, pick([1, 2, 2]));
+    const o = rot({ x: h.cx - h.pivot.x, y: h.base - h.pivot.y }, h.side * 1.2), rim = { x: h.pivot.x + o.x, y: 0 };
+    for (let i = 0; i < 24; i++) this.addPart(rim.x + rand(-0.4, 0.4), 0.15, rand(-5, 5), rand(1, 6), 18, rand(0.4, 0.9), pick(['#ffd23f', '#ffffff', ORANGE]), 1);   // sparks where the rim hits
+    for (let i = 0; i < 80; i++) this.addPart(h.pivot.x - h.side * rand(0.5, 5), 0.1, rand(-3, 3), rand(0.5, 3), 4, rand(0.5, 1.2), this.cfg.court.dust, pick([1, 2, 2]));
     for (const o of this.players) {
       const ox = (h.pivot.x - o.x) * h.side;
       if (ox > 0.3 && ox < 5.2 && !o.hang) { for (const b of o.parts) { const v = b.getLinearVelocity(); b.setLinearVelocity({ x: v.x - h.side * rand(1, 3), y: 3 }); } o.body.setAngularVelocity(rand(-6, 6)); o.flail(0.7); }
@@ -5351,7 +5434,7 @@ class Game {
     this.rec.push({
       pl: this.players.map(p => [...pose(p.body), ...pose(p.head), ...pose(p.arms[0]), p.spinA, p.front ? 1 : 0, p.armScale, p.legA ? p.legA[0] : 0, p.legA ? p.legA[1] : 0, p.layer === 'between' ? 1 : p.layer === 'back' ? 2 : 0]),
       b: this.allBalls.map(b => { const p = b.body.getPosition(); return [p.x, p.y, b.body.getAngle(), b.holder ? this.players.indexOf(b.holder) : -1]; }),
-      h: this.hoops.map(h => ({ y: h.y, bend: h.bend, shake: h.shake, fall: h.fall || 0, shattered: h.shattered, st: h.shattered ? this.time - h.shatterAt : -1, pts: h.pts.map(q => [q.x, q.y]) })),
+      h: this.hoops.map(h => ({ y: h.y, bend: h.bend, shake: h.shake, fall: h.fall || 0, ct: h.falling ? this.time - h.fallAt : -1, lt: h.landed ? this.time - h.landAt : -1, shattered: h.shattered, st: h.shattered ? this.time - h.shatterAt : -1, pts: h.pts.map(q => [q.x, q.y]) })),
     });
     if (this.rec.length > 240) this.rec.shift();
     this.recCount++;
@@ -5360,7 +5443,8 @@ class Game {
   startReplay(back = null) {
     const frames = this.rec.slice(), si = frames.length - 1 - (this.recCount - this.scoreRec);
     if (si < 0 || frames.length < 10) { if (back) this.nextShow(); else this.finishReplay(); return; }
-    this.replay = { frames, a: Math.max(0, si - 130), z: Math.min(frames.length - 1, si + 40), back };
+    const fell = frames.some(f => f.h.some(x => x.ct >= 0));   // (a hoop collapse plays right through to the crash)
+    this.replay = { frames, a: Math.max(0, si - 130), z: fell ? frames.length - 1 : Math.min(frames.length - 1, si + 40), back };
     this.replay.pos = this.replay.a;
     this.state = 'replay'; this.stateT = 0; this.cam.watch = null; this.cam.z = 1;
   }
@@ -5620,6 +5704,7 @@ class Game {
 
     for (const h of this.hoops) h.update(dt, this.balls, this.players);
     if (this.pads) for (const pad of this.pads) pad.squash = Math.max(0, pad.squash - dt * 6);
+    if (this.boosts) for (const q of this.boosts) { q.lit = Math.max(0, q.lit - dt * 2.5); q.cd -= dt; }
     if (this.wallHit) for (let i = 0; i < 3; i++) this.wallHit[i] = Math.max(0, this.wallHit[i] - dt * 4);
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const q = this.parts[i];
@@ -5639,7 +5724,7 @@ class Game {
 
     if (this.state === 'title' && !this.trans && ((this.titleRollAt && this.time > this.titleRollAt) || this.roundT > 22)) this.rollTitle();
     if (this.state === 'scored') {
-      if (this.pendingReplay && this.stateT > 1.1) { this.pendingReplay = false; this.startReplay(); }
+      if (this.pendingReplay && this.stateT > 1.1 && !this.hoops.some(h => h.falling && !(h.landed && this.time - h.landAt > 0.7))) { this.pendingReplay = false; this.startReplay(); }
       else if (!this.pendingReplay && this.stateT > 1.9) this.afterScore();
     }
     this.recordFrame();
@@ -5653,9 +5738,12 @@ class Game {
     this.shakeA = Math.max(0, this.shakeA - rdt * 22);
     this.flash = Math.max(0, this.flash - rdt * 1.6);
     const C = this.cam, on = C.watch && C.watch.on;
-    if (C.punch && !on) { C.punch.t -= rdt; C.fx = C.punch.x; C.fy = C.punch.y; if (C.punch.t <= 0 || this.state === 'replay') C.punch = null; }
+    if (C.punch && !on) {
+      C.punch.t -= rdt; const f = C.punch.hoop ? C.punch.hoop.fallFocus(C.punch.hoop.fall || 0) : C.punch;
+      C.fx = f.x; C.fy = f.y; if (C.punch.t <= 0 || this.state === 'replay') C.punch = null;
+    }
     const punch = C.punch && !on;
-    C.z += ((on ? 2.3 : punch ? 1.7 : 1) - C.z) * Math.min(1, rdt * (on ? 3.2 : punch ? 9 : 5));
+    C.z += ((on ? 2.3 : punch ? C.punch.z || 1.7 : 1) - C.z) * Math.min(1, rdt * (on ? 3.2 : punch ? 9 : 5));
     if (C.z < 1.002 && !on && !punch) C.z = 1;
     C.x += (C.fx - C.x) * Math.min(1, rdt * 7); C.y += (C.fy - C.y) * Math.min(1, rdt * 7);
   }
@@ -5951,6 +6039,23 @@ function drawLow(G, fr) {
     R(x0 - 2, 146 + sq, w + 4, 3, INK); R(x0 - 1, 146 + sq, w + 2, 2, '#2f6bd8'); R(x0 - 1, 146 + sq, w + 2, 1, '#86b2ff');
     R(x0 + 1, 148 + sq, w - 2, 1, '#1a1c24');
   }
+  if (G.boosts) for (const q of G.boosts) {   // neon boost strips, chevrons racing toward the hoop they fling you at
+    const x0 = Math.round(ax(q.x - BOOST_W / 2)), w = Math.round(BOOST_W * PPM), on = q.lit > 0.3, pulse = 0.5 + 0.5 * Math.sin(t * 6);
+    for (let k = 1; k <= 6; k++) R(x0, 147 - k, w, 1, `rgba(57,230,255,${((0.05 + 0.05 * pulse + 0.5 * q.lit) * (1 - k / 7)).toFixed(3)})`);
+    R(x0 - 1, 146, w + 2, 5, INK); R(x0, 147, w, 3, on ? '#ffffff' : '#2a1050'); R(x0, 146, w, 1, on ? '#ffffff' : '#39e6ff');
+    const ph = Math.floor(t * 12) % 5;
+    for (let k = -5; k < w + 5; k += 5) {
+      const cx = q.side > 0 ? x0 + k + ph : x0 + w - 1 - k - ph, col = on ? '#39e6ff' : '#ff4fa3';
+      for (const [dx, dy] of [[0, 147], [q.side, 148], [0, 149]]) if (cx + dx >= x0 && cx + dx < x0 + w) P1(g, cx + dx, dy, col);
+    }
+  }
+  if (G.cfg.court.springy && !fr) for (const p of G.players) {   // an arrow on the floor under each player: which way, and how far, a bounce sends you
+    if (p.fallen || p.dunk || p.hang) continue;
+    const lean = -Math.sin(p.angle()), len = Math.round(lean * JUMP_LEAN * (lean * p.dir > 0 ? 1.15 : 1) * 14), x0 = Math.round(ax(p.x)), sg = Math.sign(len), col = TEAM[p.team].light;
+    if (Math.abs(len) < 2) { R(x0 - 1, 151, 3, 2, col); continue; }
+    for (let k = 0; k <= Math.abs(len); k += 2) R(x0 + sg * k, 152, 1, 1, col);
+    const tx = x0 + len; R(tx, 151, 1, 3, col); R(tx - sg, 150, 1, 5, col);
+  }
   if (G.cfg.bouncy) {   // bouncy-castle cushions down both sides and along the top, bulging and lit when hit
     for (let i = 0; i < 2; i++) {
       const k = G.wallHit[i], w = 4 + Math.round(k * 3), x0 = i ? ART_W - w : 0, top = 8;
@@ -6016,6 +6121,7 @@ const HOOP_LOOK = {
   tokyo:  { pole: '#2a2d3a', base: '#1a1c26', board: '#1a1036', box: 'rgba(255,79,163,0.75)', edge: '#39e6ff' },
   rome:   { pole: '#e6d6b0', base: '#b8966a', board: '#efe4c8', box: 'rgba(155,31,42,0.5)', trim: '#c4ad80', edge: '#e8c35a' },
   castle: { pole: '#6b4a2e', base: '#55515e', board: '#b58a52', box: 'rgba(120,40,40,0.5)', trim: '#523720', edge: '#e8c35a', flag: true },
+  bouncehouse: { pole: '#ffd23a', base: '#e8343f', board: '#ffffff', box: 'rgba(47,123,240,0.5)', trim: '#e8343f', edge: '#ffd23a' },
 };
 function drawHoopFront(G, h, hv) {
   hv = hv || h;
@@ -6275,11 +6381,14 @@ function render(G) {
   ctx.save(); ctx.beginPath(); ctx.rect(OX, OY, ART_W * S, ART_H * S); ctx.clip();
   // the game-winner camera: zoom in around a point on the court, never showing past the edges
   // (in the replay a glass break gets the same punch-in, worked out from the frame's time since the break)
-  const C = G.cam, rb = fr ? fr.h.findIndex(x => x.st >= 0 && x.st < 1.6) : -1, rh = rb >= 0 ? G.hoops[rb] : null;
-  const rz = rh && !REDUCED ? 1 + 0.7 * Math.min(1, fr.h[rb].st * 8) * Math.min(1, (1.6 - fr.h[rb].st) * 3) : 1;
+  // (and a hoop collapse rides the falling pole down, the same as it did live)
+  const C = G.cam, rb = fr ? fr.h.findIndex(x => (x.st >= 0 && x.st < 1.6) || (x.ct >= 0 && !(x.lt > 1.1))) : -1, rh = rb >= 0 ? G.hoops[rb] : null, rv = rh && fr.h[rb];
+  const rz = !rh || REDUCED ? 1 : rv.ct >= 0 ? 1 + 0.55 * Math.min(1, rv.ct * 6) * (rv.lt >= 0 ? Math.min(1, (1.1 - rv.lt) * 3) : 1)
+    : 1 + 0.7 * Math.min(1, rv.st * 8) * Math.min(1, (1.6 - rv.st) * 3);
   const zoom = fr ? rz > 1.001 : C.z > 1.001;
   if (zoom) {
-    const Z = fr ? rz : C.z, cxw = fr ? rh.cx - rh.side * 0.4 : C.x, cyw = fr ? fr.h[rb].y + 0.5 : C.y;
+    const ff = rv && rv.ct >= 0 ? rh.fallFocus(rv.fall) : null;
+    const Z = fr ? rz : C.z, cxw = fr ? (ff ? ff.x : rh.cx - rh.side * 0.4) : C.x, cyw = fr ? (ff ? ff.y : rv.y + 0.5) : C.y;
     const px = clamp(ax(cxw), ART_W / (2 * Z), ART_W - ART_W / (2 * Z)), py = clamp(ay(cyw), ART_H / (2 * Z), ART_H - ART_H / (2 * Z));
     ctx.save(); ctx.translate(OX + ART_W * S / 2, OY + ART_H * S / 2); ctx.scale(Z, Z); ctx.translate(-(OX + px * S), -(OY + py * S));
   }
@@ -6295,7 +6404,8 @@ function render(G) {
     fr.b.forEach((x, i) => { if (x[3] < 0) RENDER.part(G.allBalls[i].spr, new Pose(x[0], x[1], x[2]), false); });
     G.hoops.forEach((h, i) => drawHoopFront(G, h, fr.h[i]));
     if (zoom) ctx.restore();
-    if (rb >= 0 && fr.h[rb].st < 0.25 && !REDUCED) { ctx.fillStyle = `rgba(255,255,255,${(0.55 * (1 - fr.h[rb].st / 0.25)).toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
+    if (rb >= 0 && fr.h[rb].ct >= 0 && fr.h[rb].lt >= 0 && fr.h[rb].lt < 0.25 && !REDUCED) { ctx.fillStyle = `rgba(255,255,255,${(0.5 * (1 - fr.h[rb].lt / 0.25)).toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
+    else if (rb >= 0 && fr.h[rb].st >= 0 && fr.h[rb].st < 0.25 && !REDUCED) { ctx.fillStyle = `rgba(255,255,255,${(0.55 * (1 - fr.h[rb].st / 0.25)).toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
     drawHUD(G);
     drawReplayOverlay(G);
   } else {
