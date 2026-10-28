@@ -126,7 +126,7 @@
   #reelpanel #reel-all-play[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
   #reelpanel #reel-exit { width: 100%; }
   .rp-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
-  .rp-tabs button { flex: 1; }
+  #reelpanel .rp-tabs button { flex: 1 1 0; min-width: 0; padding: 6px 2px; font-size: 10px; text-align: center; }
   .rp-tabs button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
   #touchbar { position: fixed; left: 8px; bottom: 8px; display: none; gap: 8px; z-index: 5; }
   body.touch #touchbar { display: flex; }
@@ -666,13 +666,13 @@ function darken(src, a) { const [c, g] = mk(src.width, src.height); g.drawImage(
 function painter(g) { return (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); }; }
 
 // the big hair of the meme characters: [x, y, radius] circles in head radii (+x is the way the face looks), painted behind the head
-const HAIR_PAD = { afro: 2, mohawk: 2, swoop: 3, curly: 3, frosted: 4 };
+const HAIR_PAD = { afro: 2, mohawk: 2, swoop: 3, curly: 2, frosted: 4 };
 function hairBlobs(style, front) {
   const b = [];
   if (style === 'swoop') b.push([-0.05, -0.8, 0.92]);   // the domed bowl on top
   if (style === 'curly') {   // loose ringlets: an outer ring round the head and a few more across the top
-    for (let a = 20; a <= 340; a += 30) { const t = a * Math.PI / 180; b.push([Math.sin(t) * 1.0, -Math.cos(t) * 0.95 - 0.1, 0.38]); }
-    for (const x of [-0.5, 0, 0.5]) b.push([x, -0.95, 0.36]);
+    for (let a = 40; a <= 320; a += 40) { const t = a * Math.PI / 180; b.push([Math.sin(t) * 0.88, -Math.cos(t) * 0.82 - 0.08, 0.3]); }
+    for (const x of [-0.4, 0.1, 0.55]) b.push([x, -0.82, 0.3]);
   }
   return front ? b : b.map(([x, y, r]) => [x - 0.15, y, r]);
 }
@@ -701,13 +701,13 @@ function paintFringe(P, look, cx, cy, r, d, front) {
     if (!front) {
       const len = Math.round(r * 1.25);
       for (let k = 0; k <= len; k++) {
-        const x = Math.round(cx + r * 0.05 + k), y = Math.round(cy - r * 0.6 + k * 0.42), th = k > len - 2 ? 1 : k > len - 4 ? 2 : 3;
+        const x = Math.round(cx + r * 0.05 + k), y = Math.round(cy - r * 0.8 + k * 0.3), th = k > len - 2 ? 1 : k > len - 4 ? 2 : 3;
         for (let j = 0; j < th; j++) P(x, y + j, j === 0 ? hi : j === th - 1 && th > 1 ? lo : hair);
       }
-      for (let k = 0; k < 3; k++) P(Math.round(cx + r * 0.05) + k * 2, Math.round(cy - r * 0.6 + k * 0.8), hair);
+      for (let k = 0; k < 3; k++) P(Math.round(cx + r * 0.05) + k * 2, Math.round(cy - r * 0.8 + k * 0.6), hair);
     } else {
       for (let x = Math.round(cx - r * 0.9); x <= Math.round(cx + r * 0.95); x++) {
-        const t = (x - (cx - r * 0.9)) / (r * 1.85), y = Math.round(cy - r * 0.55 + t * r * 0.5), th = t > 0.8 ? 2 : 3;
+        const t = (x - (cx - r * 0.9)) / (r * 1.85), y = Math.round(cy - r * 0.78 + t * r * 0.3), th = t > 0.8 ? 2 : 3;
         for (let j = 0; j < th; j++) P(x, y + j, j === 0 ? hi : j === th - 1 ? lo : hair);
       }
     }
@@ -748,14 +748,14 @@ function headSprite(d, look, T) {
       case 'headband': h = ny < -0.5 || (nx < -0.4 && ny < 0); break;
       case 'mohawk': h = ny < -0.65 && nx > -0.5 && nx < 0.35; break;
       case 'teacher': h = ny < -0.5 + 0.12 * nx || (nx < -0.35 && ny < 0.05); break;
-      case 'bigforehead': h = ny < -0.8 || (nx < -0.4 && ny < -0.1); break;
-      case 'swoop': h = ny < -0.32 || (nx < -0.2 && ny < 0.0); break;
-      case 'curly': h = ny < -0.35 || (nx < -0.3 && ny < 0.2); break;
+      case 'bigforehead': h = ny < -0.95 || (nx < -0.5 && ny < -0.3); break;
+      case 'swoop': h = ny < -0.4 || (nx < -0.2 && ny < -0.1); break;
+      case 'curly': h = ny < -0.5 || (nx < -0.5 && ny < 0.1); break;
       case 'frosted': h = ny < -0.5 || (nx < -0.35 && ny < 0.05); break;
     }
     P(x, y, h ? hairAt(look, x, y, nx, ny) : look.beard && ny > 0.2 && nx > -0.55 ? look.beard : skin);
     if (look.style === 'swoop' && !h && nx < -0.2 && ny < 0.3 && ny >= 0) P(x, y, shade(skin, -0.2));   // the faded side
-    if (look.style === 'bigforehead' && !h && ny < -0.45 && ny > -0.6 && nx > 0.05 && nx < 0.35) P(x, y, shade(skin, 0.22));   // the shine on it
+    if (look.style === 'bigforehead' && !h && ny < -0.3 && ny > -0.5 && nx > 0.05 && nx < 0.4) P(x, y, shade(skin, 0.22));   // the shine on it
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
   if (look.style === 'mohawk') for (let x = Math.round(cx - r * 0.45); x < Math.round(cx + r * 0.3); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
@@ -793,9 +793,9 @@ function headFrontSprite(d, look, T) {
       case 'headband': h = ny < -0.5; break;
       case 'mohawk': h = ny < -0.65 && Math.abs(nx) < 0.25; break;
       case 'teacher': h = ny < -0.48 + 0.1 * nx || (Math.abs(nx) > 0.75 && ny < -0.1); break;
-      case 'bigforehead': h = ny < -0.8 || (Math.abs(nx) > 0.8 && ny < -0.1); break;
-      case 'swoop': h = ny < -0.32; break;
-      case 'curly': h = ny < -0.35 || (Math.abs(nx) > 0.75 && ny < 0.2); break;
+      case 'bigforehead': h = ny < -0.95 || (Math.abs(nx) > 0.85 && ny < -0.3); break;
+      case 'swoop': h = ny < -0.4; break;
+      case 'curly': h = ny < -0.5 || (Math.abs(nx) > 0.85 && ny < 0.1); break;
       case 'frosted': h = ny < -0.5 || (Math.abs(nx) > 0.75 && ny < -0.1); break;
     }
     P(x, y, h ? hairAt(look, x, y, nx, ny) : look.beard && ny > 0.2 ? look.beard : skin);
@@ -876,7 +876,7 @@ function legSprite(w, h, T, skin, L = {}) {
   for (let y = 0; y < shoeTop; y++) for (let x = x0; x < x0 + w; x++) {
     let col = y < shortsEnd ? T.dark : y < sockTop ? skin : '#f4f4f4';
     if (jeans) col = x === x0 ? '#34569a' : '#2c4a86';   // jeans all the way down
-    else if (L.buff && col === skin && (x + y * 2) % 5 === 0 && y > shortsEnd + 1) col = shade(skin, -0.28);   // veins
+    else if (L.buff && col === skin && y > shortsEnd) col = x === x0 ? shade(skin, 0.12) : x === x0 + 1 && y < sockTop - 1 ? shade(skin, -0.24) : x === x0 + w - 1 ? shade(skin, -0.16) : skin;   // thigh and calf muscle: a lit edge, a dark split down the middle
     P(x, y, col);
   }
   for (let y = shoeTop; y < h; y++) for (let x = x0 - 1; x < x0 + w + 2; x++) {
@@ -886,11 +886,17 @@ function legSprite(w, h, T, skin, L = {}) {
   return { c: outline(c), ox: x0 + w / 2 + 1, oy: 1 };
 }
 function armSprite(w, h, T, skin, sleeve, L = {}) {
-  const [c, g] = mk(w + 2, h); const P = painter(g), vein = shade(skin, -0.32), hi = shade(skin, 0.15);
+  const [c, g] = mk(w + 2, h); const P = painter(g), hi = shade(skin, 0.18);
   for (let y = 0; y < h; y++) {
-    const hand = y >= h - 3, bi = L.buff && y >= 2 && y < Math.round(h * 0.6);   // a buff arm bulges at the bicep
-    for (let x = 0; x < (hand ? w + 1 : bi ? w + 1 : w); x++) P(x, y, y < 2 ? T.jersey : sleeve && y < Math.round(h * 0.35) ? sleeve : skin);
-    if (L.buff && !hand && y >= 3) { if ((y * 3) % 7 < 2) P(1 + y % 2, y, vein); if (y % 4 === 0) P(0, y, hi); }
+    const hand = y >= h - 3, bi = L.buff && y >= 2 && y < Math.round(h * 0.62), ww = hand || bi ? w + 1 : w;   // a buff arm balloons at the bicep
+    for (let x = 0; x < ww; x++) {
+      let col = y < 2 ? T.jersey : sleeve && y < Math.round(h * 0.35) ? sleeve : skin;
+      if (L.buff && col === skin && !hand) {
+        if (bi) col = x === 0 ? hi : x === ww - 1 || y === Math.round(h * 0.62) - 1 ? shade(skin, -0.3) : y === 3 || (y === 4 && x === 1) ? hi : skin;   // lit top, dark underside = a round muscle
+        else col = x === 0 ? hi : x === ww - 1 ? shade(skin, -0.22) : skin;   // forearm
+      }
+      P(x, y, col);
+    }
   }
   return { c: outline(c), ox: w / 2 + 1, oy: 1 };
 }
