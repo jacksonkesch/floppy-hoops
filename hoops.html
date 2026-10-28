@@ -736,9 +736,15 @@ function headFrontSprite(d, look, T) {
   if (look.glasses) for (let x = el + 2; x < er - 1; x++) P(x, ey, INK);
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
-function torsoFrontSprite(w, h, T, num) {
-  const [c, g] = mk(w, h); const P = painter(g);
+// a beer belly: how many pixels the gut pokes out at row y, swelling below the chest and hanging over the waistband
+function bellyAt(y, h, belly) {
+  const y0 = Math.round(h * 0.2), y1 = Math.round(h * 0.64) + 1;
+  return belly && y > y0 && y < y1 ? Math.round(belly * Math.sin(Math.PI * Math.pow((y - y0) / (y1 - y0), 0.7))) : 0;
+}
+function torsoFrontSprite(w, h, T, num, belly = 0) {
+  const [c, g] = mk(w + 2 * belly, h); const P0 = painter(g), P = (x, y, col) => P0(x + belly, y, col);
   const jEnd = Math.round(h * 0.64), mid = (w - 1) / 2;
+  for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) { const col = y >= jEnd - 1 || k === b ? T.dark : T.jersey; P(-k, y, col); P(w - 1 + k, y, col); }
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     let col;
     if (y < jEnd) col = y === jEnd - 1 || (y < 2 && Math.abs(x - mid) <= 1.6 - y) ? T.dark : T.jersey;
@@ -746,11 +752,13 @@ function torsoFrontSprite(w, h, T, num) {
     P(x, y, col);
   }
   const s = String(num), tw = s.length * 4 - 1;
-  if (jEnd >= 8) tiny(g, s, Math.round((w - tw) / 2), 3, T.num);
-  return { c: outline(c), ox: w / 2 + 1, oy: h / 2 + 1 };
+  if (jEnd >= 8) tiny(g, s, Math.round((w - tw) / 2) + belly, 3, T.num);
+  return { c: outline(c), ox: w / 2 + 1 + belly, oy: h / 2 + 1 };
 }
-function torsoSprite(w, h, T, num) {
-  const [c, g] = mk(w, h); const P = painter(g);
+function torsoSprite(w, h, T, num, belly = 0) {
+  const [c, g] = mk(w + belly, h); const P = painter(g);
+  // the gut sticks out the front (the side the face looks to)
+  for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) P(w - 1 + k, y, y >= Math.round(h * 0.64) - 1 ? T.dark : k === b && y > h * 0.5 ? T.dark : T.jersey);
   const jEnd = Math.round(h * 0.64), mid = (w - 1) / 2;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     let col;
@@ -1444,13 +1452,13 @@ class Player {
     const d = this.d, T = TEAM[this.team], L = this.look, px = v => Math.max(2, Math.round(v * PPM));
     const s = this.spr = {
       head: headSprite(px(d.headR * 2), L, T),
-      torso: torsoSprite(px(d.torsoW), px(d.torsoH), T, L.num),
+      torso: torsoSprite(px(d.torsoW), px(d.torsoH), T, L.num, L.belly || 0),
       leg: legSprite(px(d.legW), px(d.legLen), T, L.skin),
       arm: armSprite(px(d.armW), px(d.armLen), T, L.skin, L.sleeve),
     };
     s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy };
     s.headF = headFrontSprite(px(d.headR * 2), L, T);
-    s.torsoF = torsoFrontSprite(px(d.torsoW) + 4, px(d.torsoH), T, L.num);
+    s.torsoF = torsoFrontSprite(px(d.torsoW) + 4, px(d.torsoH), T, L.num, L.belly ? L.belly - 1 : 0);
   }
   center() { return this.body.getWorldPoint(this.tc); }
   get x() { return this.center().x; }
@@ -4765,7 +4773,7 @@ function makeLook(used) {
   if (!used.has('teacher') && Math.random() < 0.066) {
     used.add('teacher');
     if (!used.has(13)) { used.delete(num); used.add(13); num = 13; }
-    return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', num };
+    return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 5, num };
   }
   return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk']), num };
