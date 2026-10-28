@@ -738,13 +738,13 @@ function headFrontSprite(d, look, T) {
 }
 // a beer belly: how many pixels the gut pokes out at row y, swelling below the chest and hanging over the waistband
 function bellyAt(y, h, belly) {
-  const y0 = Math.round(h * 0.2), y1 = Math.round(h * 0.64) + 1;
-  return belly && y > y0 && y < y1 ? Math.round(belly * Math.sin(Math.PI * Math.pow((y - y0) / (y1 - y0), 0.7))) : 0;
+  const y0 = Math.round(h * 0.32), y1 = Math.round(h * 0.64) + 3;
+  return belly && y > y0 && y < y1 ? Math.round(belly * Math.sin(Math.PI * Math.pow((y - y0) / (y1 - y0), 1.6))) : 0;
 }
 function torsoFrontSprite(w, h, T, num, belly = 0) {
   const [c, g] = mk(w + 2 * belly, h); const P0 = painter(g), P = (x, y, col) => P0(x + belly, y, col);
   const jEnd = Math.round(h * 0.64), mid = (w - 1) / 2;
-  for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) { const col = y >= jEnd - 1 || k === b ? T.dark : T.jersey; P(-k, y, col); P(w - 1 + k, y, col); }
+  for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) { const col = y > jEnd || k === b ? T.dark : T.jersey; P(-k, y, col); P(w - 1 + k, y, col); }
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     let col;
     if (y < jEnd) col = y === jEnd - 1 || (y < 2 && Math.abs(x - mid) <= 1.6 - y) ? T.dark : T.jersey;
@@ -758,7 +758,7 @@ function torsoFrontSprite(w, h, T, num, belly = 0) {
 function torsoSprite(w, h, T, num, belly = 0) {
   const [c, g] = mk(w + belly, h); const P = painter(g);
   // the gut sticks out the front (the side the face looks to)
-  for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) P(w - 1 + k, y, y >= Math.round(h * 0.64) - 1 ? T.dark : k === b && y > h * 0.5 ? T.dark : T.jersey);
+  for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) P(w - 1 + k, y, y > Math.round(h * 0.64) || (k === b && y > h * 0.55) ? T.dark : T.jersey);
   const jEnd = Math.round(h * 0.64), mid = (w - 1) / 2;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     let col;
