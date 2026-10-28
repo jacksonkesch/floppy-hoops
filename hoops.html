@@ -739,7 +739,7 @@ function headFrontSprite(d, look, T) {
 // a beer belly: how many pixels the gut pokes out at row y
 function bellyAt(y, h, belly) {
   // half an ellipse, widest just above the waistband: a long gentle slope down from the chest, a short round tuck under
-  const yc = Math.round(h * 0.64) - 1, up = yc - Math.round(h * 0.18), down = 4, u = (y - yc) / (y < yc ? up : down);
+  const yc = Math.round(h * 0.64), up = yc - Math.round(h * 0.22), down = 4, u = (y - yc) / (y < yc ? up : down);
   return belly && Math.abs(u) < 1 ? Math.round(belly * Math.sqrt(1 - u * u)) : 0;
 }
 function torsoFrontSprite(w, h, T, num, belly = 0) {
@@ -4775,7 +4775,7 @@ function makeLook(used) {
   if (!used.has('teacher') && Math.random() < 0.066) {
     used.add('teacher');
     if (!used.has(13)) { used.delete(num); used.add(13); num = 13; }
-    return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 5, num };
+    return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, num };
   }
   return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk']), num };
