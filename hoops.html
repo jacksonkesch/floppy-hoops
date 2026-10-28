@@ -33,6 +33,8 @@
   .new { margin-left: 6px; color: #43f07a; font-size: 10px; }
   #menu button[aria-pressed="true"] .new { color: #0e5a25; }
   .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
+  #meme-names { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 0 0 10px; }
+  #meme-names input { font: inherit; font-size: 12px; color: #fff6e0; background: #141019; border: 2px solid #2b3350; padding: 6px 8px; min-width: 0; }
   #menu #done { background: #43f07a; color: #141019; font-size: 20px; padding: 10px 28px; }
   .hint { font-size: 11px; color: #7d88a8; }
   /* settings: a header with tabs, one scrolling page at a time, DONE pinned at the bottom */
@@ -173,6 +175,8 @@
       <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
       <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button type="button" id="opt-memes-on" data-v="on">ON</button><button type="button" id="opt-memes-off" data-v="off">OFF</button></div></div>
+      <div class="row"><span class="lbl">MEME NAMES</span><span class="hint">TYPE TO RENAME. SHOWS IN PREVIEWS.</span></div>
+      <div id="meme-names"></div>
       <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
       </div>
       <div class="card"><h3>CPU</h3>
@@ -666,15 +670,16 @@ function darken(src, a) { const [c, g] = mk(src.width, src.height); g.drawImage(
 function painter(g) { return (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); }; }
 
 // the big hair of the meme characters: [x, y, radius] circles in head radii (+x is the way the face looks), painted behind the head
-const HAIR_PAD = { afro: 2, mohawk: 2, swoop: 3, curly: 2, frosted: 4 };
+const HAIR_PAD = { afro: 2, mohawk: 2, swoop: 2, curly: 3, frosted: 4 };
 function hairBlobs(style, front) {
   const b = [];
-  if (style === 'swoop') b.push([-0.05, -0.8, 0.92]);   // the domed bowl on top
-  if (style === 'curly') {   // loose ringlets: an outer ring round the head and a few more across the top
-    for (let a = 40; a <= 320; a += 40) { const t = a * Math.PI / 180; b.push([Math.sin(t) * 0.88, -Math.cos(t) * 0.82 - 0.08, 0.3]); }
-    for (const x of [-0.4, 0.1, 0.55]) b.push([x, -0.82, 0.3]);
+  if (style === 'swoop') b.push([-0.05, -0.68, 0.82]);   // the domed bowl on top
+  if (style === 'curly') {   // loose coils drawn over the head: an outer scallop round the crown, a row inside, all kept clear of the face
+    if (front) for (const sx of [-1, 1]) { for (const [x, y] of [[0.95, -0.05], [0.82, -0.45], [0.5, -0.8], [0.3, -0.58]]) b.push([sx * x, y, 0.27]); }
+    else for (const [x, y] of [[-0.95, 0.1], [-0.9, -0.3], [-0.65, -0.68], [-0.28, -0.88], [0.15, -0.9], [0.55, -0.78], [0.82, -0.5], [-0.45, -0.38], [-0.12, -0.55], [0.3, -0.58]]) b.push([x, y, 0.27]);
+    b.push([0, -0.95, 0.27]);
   }
-  return front ? b : b.map(([x, y, r]) => [x - 0.15, y, r]);
+  return b;
 }
 function paintHair(P, look, cx, cy, r, W, H, front) {
   if (look.style !== 'swoop' && look.style !== 'curly') return;
@@ -685,10 +690,11 @@ function paintHair(P, look, cx, cy, r, W, H, front) {
       const dx = x + 0.5 - px, dy = y + 0.5 - py, d = Math.hypot(dx, dy);
       if (d > R) continue;
       let col = hair;
-      if (look.style === 'curly') {   // each ringlet is its own little curl: a dark ring on its lower side, a dark swirl pixel, a light glint
-        if (d > R - 1.1 && dx + dy > 0) col = lo;
-        else if (Math.abs(dx - 0.8) < 0.6 && Math.abs(dy + 0.2) < 0.6) col = lo;
-        else if (dx < -R * 0.25 && dy < -R * 0.25 && d > R * 0.45) col = hi;
+      if (look.style === 'curly') {   // each ringlet is its own coil: dark rim on the lower right, bright rim upper left, a dark eye in the middle
+        if (d < R * 0.38) col = lo;
+        else if (d > R - 1.05 && dx + dy > 0) col = lo;
+        else if (d > R - 1.05 && dx + dy < -R * 0.5) col = hi;
+        else if (dx > 0 && dy < 0 && d < R * 0.75 && d > R * 0.4) col = shade(hair, 0.12);
       }
       P(x, y, col);
     }
@@ -724,7 +730,7 @@ function paintFringe(P, look, cx, cy, r, d, front) {
 }
 // one pixel of a head's hair: curls get a pattern of dark curl lines and glints, frosted hair its bleached streaks
 function hairAt(look, x, y, nx, ny) {
-  if (look.style === 'curly') { const k = (x * 3 + y * 5) % 8; return k === 0 ? shade(look.hair, -0.38) : k === 4 ? shade(look.hair, 0.3) : look.hair; }
+  if (look.style === 'curly') return shade(look.hair, -0.35);   // the shadow between the coils
   if (look.tip && ny < -0.6 && (x + y) % 3 === 0) return look.tip;
   return look.hair;
 }
@@ -736,7 +742,7 @@ function headSprite(d, look, T) {
   const skin = look.skin, skinD = shade(skin, -0.18), hair = look.hair;
   const inHead = (x, y) => { const nx = Math.abs((x + 0.5 - cx) / r), ny = Math.abs((y + 0.5 - cy) / r); return nx ** 3 + ny ** 3 <= 1; };
   if (look.style === 'afro') for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((x + 0.5 - cx + 1) ** 2 + (y + 0.5 - cy + 1.2) ** 2 <= (r + 2) ** 2) P(x, y, hair);
-  paintHair(P, look, cx, cy, r, W, H, false);
+  if (look.style !== 'curly') paintHair(P, look, cx, cy, r, W, H, false);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (!inHead(x, y)) continue;
     const nx = (x + 0.5 - cx) / r, ny = (y + 0.5 - cy) / r;
@@ -749,7 +755,7 @@ function headSprite(d, look, T) {
       case 'mohawk': h = ny < -0.65 && nx > -0.5 && nx < 0.35; break;
       case 'teacher': h = ny < -0.5 + 0.12 * nx || (nx < -0.35 && ny < 0.05); break;
       case 'bigforehead': h = ny < -0.95 || (nx < -0.5 && ny < -0.3); break;
-      case 'swoop': h = ny < -0.4 || (nx < -0.2 && ny < -0.1); break;
+      case 'swoop': h = ny < -0.5 || (nx < -0.2 && ny < -0.1); break;
       case 'curly': h = ny < -0.5 || (nx < -0.5 && ny < 0.1); break;
       case 'frosted': h = ny < -0.5 || (nx < -0.35 && ny < 0.05); break;
     }
@@ -771,6 +777,7 @@ function headSprite(d, look, T) {
     for (let x = Math.round(cx - r * 0.3); x < ex - 2; x++) P(x, ey, INK);
   }
   P.inHead = inHead; paintFringe(P, look, cx, cy, r, d, false);
+  if (look.style === 'curly') paintHair(P, look, cx, cy, r, W, H, false);
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 function headFrontSprite(d, look, T) {
@@ -780,7 +787,7 @@ function headFrontSprite(d, look, T) {
   const cx = W / 2, cy = H / 2, r = d / 2, skin = look.skin, hair = look.hair;
   const inHead = (x, y) => { const nx = Math.abs((x + 0.5 - cx) / r), ny = Math.abs((y + 0.5 - cy) / r); return nx ** 3 + ny ** 3 <= 1; };
   if (look.style === 'afro') for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy + 1.2) ** 2 <= (r + 2) ** 2) P(x, y, hair);
-  paintHair(P, look, cx, cy, r, W, H, true);
+  if (look.style !== 'curly') paintHair(P, look, cx, cy, r, W, H, true);
   P(Math.round(cx - r - 1), Math.round(cy), shade(skin, -0.18)); P(Math.round(cx + r), Math.round(cy), shade(skin, -0.18));
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (!inHead(x, y)) continue;
@@ -794,7 +801,7 @@ function headFrontSprite(d, look, T) {
       case 'mohawk': h = ny < -0.65 && Math.abs(nx) < 0.25; break;
       case 'teacher': h = ny < -0.48 + 0.1 * nx || (Math.abs(nx) > 0.75 && ny < -0.1); break;
       case 'bigforehead': h = ny < -0.95 || (Math.abs(nx) > 0.85 && ny < -0.3); break;
-      case 'swoop': h = ny < -0.4; break;
+      case 'swoop': h = ny < -0.5; break;
       case 'curly': h = ny < -0.5 || (Math.abs(nx) > 0.85 && ny < 0.1); break;
       case 'frosted': h = ny < -0.5 || (Math.abs(nx) > 0.75 && ny < -0.1); break;
     }
@@ -812,6 +819,7 @@ function headFrontSprite(d, look, T) {
   }
   if (look.glasses) for (let x = el + 2; x < er - 1; x++) P(x, ey, INK);
   P.inHead = inHead; paintFringe(P, look, cx, cy, r, d, true);
+  if (look.style === 'curly') paintHair(P, look, cx, cy, r, W, H, true);   // (the coils sit on top of the head)
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 // a beer belly: how many pixels the gut pokes out at row y
@@ -829,9 +837,17 @@ function bodyExtras(g, w, h, jEnd, off, L, front) {
     const bx = front ? Math.round(mid) - 1 : Math.round(w - 4);
     for (let y = jEnd - 0; y <= jEnd + 1; y++) for (let x = bx; x <= bx + 2; x++) P(x, y, y === jEnd && x === bx + 1 ? '#fff0a0' : '#e0b030');   // the buckle
   }
-  if (L.outfit === 'lv') for (let y = 1; y < jEnd - 1; y++) for (let x = 1; x < w - 1; x++) {
-    const m = (x + (((y / 3) | 0) % 2) * 2) % 4;   // the monogram: little gold marks in a checker
-    if (y % 3 === 1 && m === 0) P(x, y, '#d9b25a'); else if (y % 3 === 1 && m === 2) P(x, y, '#7a5230');
+  if (L.outfit === 'lv') {   // the monogram all over: rows of LV letters, then rows of four-point flowers, gold on the brown canvas
+    const gold = '#e3bd62', pale = '#f8e7a8', inb = (X, Y) => X >= 1 && X < w - 1 && Y >= 1 && Y < jEnd - 1;
+    for (let row = 0, y = 1; y < jEnd - 1; row++, y += 6) {
+      if (row % 2 === 0) {
+        for (let x0 = (row % 4 ? -3 : 1); x0 < w; x0 += 8) for (let k = 0; k < 2; k++) {
+          const bits = F3['LV'[k]]; for (let i = 0; i < 15; i++) { const X = x0 + k * 4 + i % 3, Y = y + ((i / 3) | 0); if (bits[i] === '1' && inb(X, Y)) P(X, Y, gold); }
+        }
+      } else {
+        for (let x0 = 1; x0 < w; x0 += 4) for (const [dx, dy, c] of [[1, 0, gold], [0, 1, gold], [1, 1, pale], [2, 1, gold], [1, 2, gold]]) if (inb(x0 + dx, y + 1 + dy)) P(x0 + dx, y + 1 + dy, c);
+      }
+    }
   }
   if (L.bulge) {
     if (front) { for (let y = h - 6; y < h - 1; y++) for (let x = Math.round(mid) - 1; x <= Math.round(mid) + 1; x++) if (!(y === h - 6 && x !== Math.round(mid))) P(x, y, x === Math.round(mid) - 1 ? '#22222a' : '#33333f'); }
@@ -4882,16 +4898,20 @@ function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringi
 // nothing here touches the physics. Craig always wears #13.
 const MEME_LOOKS = [
   { name: 'Craig', skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
-  { name: 'Big Forehead Frank', skin: '#fde8d8', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
-  { name: 'Louis Jordan', skin: '#e8b88f', hair: '#4a2c17', style: 'short', outfit: 'lv', shoes: 'jordan' },
-  { name: 'Swoop Brad', skin: '#f3cfa9', hair: '#f1d57a', style: 'swoop' },
-  { name: 'Swoop Ollie', skin: '#f3cfa9', hair: '#ff7a1a', style: 'swoop' },
-  { name: 'Curly Kev', skin: '#e8b88f', hair: '#3a2312', style: 'curly' },
-  { name: 'Vein Vinny', skin: '#f6d9bf', hair: '#4a2c17', style: 'buzz', buff: true },
-  { name: 'Frosty Tips Tommy', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f8f0c4' },
-  { name: 'Big Mike', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
+  { name: 'Loren', skin: '#fde8d8', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
+  { name: 'Colton', skin: '#e8b88f', hair: '#4a2c17', style: 'short', outfit: 'lv', shoes: 'jordan' },
+  { name: 'Liam', skin: '#f3cfa9', hair: '#f1d57a', style: 'swoop' },
+  { name: 'Brock', skin: '#f3cfa9', hair: '#ff7a1a', style: 'swoop' },
+  { name: 'James', skin: '#e8b88f', hair: '#3a2312', style: 'curly' },
+  { name: 'Jonas', skin: '#f6d9bf', hair: '#4a2c17', style: 'buzz', buff: true },
+  { name: 'Jackson', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f8f0c4' },
+  { name: 'Cam', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
 ];
+const MEME_NAMES_KEY = 'floppyMemeNames';
 const MEME_LIST = MEME_LOOKS.map((m, i) => ({ id: 'meme' + i, name: m.name.toUpperCase(), when: 'MEME CHARACTER' }));
+// names you type in SETTINGS are kept on this device and used everywhere the memes are named
+function applyMemeNames(arr) { MEME_LOOKS.forEach((m, i) => { const n = typeof arr[i] === 'string' ? arr[i].trim().slice(0, 14) : ''; if (n) m.name = n; MEME_LIST[i].name = m.name.toUpperCase(); }); }
+try { applyMemeNames(JSON.parse(localStorage.getItem(MEME_NAMES_KEY)) || []); } catch (e) { /* storage unavailable */ }
 function makeLook(used) {
   let num; do { num = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(num));
   used.add(num);
@@ -7111,7 +7131,20 @@ function syncMenu() {
   for (const pg of menuEl.querySelectorAll('[data-page]')) pg.hidden = pg.dataset.page !== menuTab;
 }
 let menuTab = 'match';
+function buildMemeNames() {
+  const box = document.getElementById('meme-names'); if (box.childElementCount) return;
+  MEME_LOOKS.forEach((m, i) => {
+    const inp = document.createElement('input'); inp.type = 'text'; inp.maxLength = 14; inp.value = m.name; inp.setAttribute('aria-label', 'Meme character ' + (i + 1) + ' name');
+    inp.addEventListener('input', () => {
+      applyMemeNames(MEME_LOOKS.map((_, k) => k === i ? inp.value : box.children[k].value));
+      try { localStorage.setItem(MEME_NAMES_KEY, JSON.stringify(MEME_LOOKS.map(x => x.name))); } catch (e) { /* storage unavailable */ }
+    });
+    inp.addEventListener('keydown', e => e.stopPropagation());
+    box.appendChild(inp);
+  });
+}
 function openMenu(tab) {
+  buildMemeNames();
   if (tab) menuTab = tab;
   for (const img of menuEl.querySelectorAll('img[data-court]:not([src])')) img.src = ownDice(courtImage)(img.dataset.court).toDataURL();
   draft = JSON.parse(JSON.stringify(G.settings));
