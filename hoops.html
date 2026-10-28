@@ -39,7 +39,8 @@
   #menu .panel { display: flex; flex-direction: column; width: min(880px, 100%); padding: 0; overflow: hidden; }
   .m-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 16px 20px 12px; border-bottom: 2px solid #2b3350; }
   .m-head h2 { margin: 0 !important; }
-  .m-tabs { display: flex; gap: 6px; }
+  .m-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  @media (max-width: 520px) { #menu .m-tabs button { font-size: 11px; padding: 7px 8px; } }
   #menu .m-tabs button { font-size: 14px; padding: 8px 14px; }
   #menu .m-tabs button[aria-selected="true"] { background: #ff8a2a; color: #141019; }
   .m-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 20px 6px; }
@@ -54,7 +55,36 @@
   .pill.rnd { color: #141019; background: #ff8a2a; border-color: #ff8a2a; }
   .pill.alw { color: #141019; background: #ffd23f; border-color: #ffd23f; }
   .pill.on { color: #141019; background: #43f07a; border-color: #43f07a; }
-  #mode-groups { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .m-bar .note { flex: 1 1 320px; margin: 0; line-height: 1.5; }
+  .note b { color: #fff6e0; font-weight: 700; }
+  #map-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  #menu .map { display: grid; gap: 0; padding: 0; text-align: left; background: #141019; box-shadow: 0 3px 0 #141019; }
+  #menu .map img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; image-rendering: pixelated; filter: grayscale(0.85) brightness(0.5); }
+  #menu .map[aria-pressed="true"] { background: #141019; box-shadow: 0 0 0 3px #43f07a, 0 3px 0 #141019; }
+  #menu .map[aria-pressed="true"] img { filter: none; }
+  #menu .map .cap { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 7px 8px; background: #20263a; }
+  #menu .map .nm { display: grid; gap: 2px; font-size: 12px; color: #fff6e0; }
+  #menu .map[aria-pressed="false"] .nm { color: #6c748f; }
+  #menu .map .sub { font-size: 9px; color: #7d88a8; }
+  #menu .map.fixed { cursor: default; box-shadow: 0 0 0 3px #2b3350; }
+  #menu .map.fixed img { filter: none; }
+  #mode-groups { display: grid; gap: 18px; }
+  .msec { display: grid; gap: 8px; }
+  .msec-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding-bottom: 6px; border-bottom: 2px solid #2b3350; }
+  .msec-h h3 { margin: 0; font-size: 20px; font-weight: 700; color: #ff8a2a; letter-spacing: 0.06em; text-shadow: 0 2px 0 #7a2d0c; }
+  .msec-h .what { font-size: 11px; color: #b9c3dd; }
+  .msec-h .cnt { margin-left: auto; font-size: 11px; color: #7d88a8; }
+  .msec-l { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .mcard { display: grid; gap: 7px; padding: 9px 10px; background: #20263a; border: 2px solid #141019; }
+  .mcard.on { box-shadow: inset 4px 0 0 #43f07a; }
+  .mcard.alw { box-shadow: inset 4px 0 0 #ffd23f; }
+  .mcard .nm { font-size: 12px; color: #fff6e0; }
+  .mcard:not(.on):not(.alw) .nm { color: #7d88a8; }
+  .mcard .seg { gap: 4px; }
+  #menu .mcard .seg button { flex: 1; font-size: 10px; padding: 5px 4px; box-shadow: 0 2px 0 #141019; }
+  #menu .mcard .seg button[aria-pressed="true"][data-st="on"] { background: #43f07a; }
+  #menu .mcard .seg button[aria-pressed="true"][data-st="always"] { background: #ffd23f; }
+  #menu .mcard .seg button[aria-pressed="true"][data-st="off"] { background: #4a5170; color: #fff6e0; }
   .mgrp { background: #20263a; border: 2px solid #141019; box-shadow: inset 0 0 0 2px #2b3350; padding: 10px 10px 8px; display: grid; gap: 4px; align-content: start; }
   .mgrp h3 { display: flex; justify-content: space-between; margin: 0 2px 4px; font-size: 12px; font-weight: 700; color: #ff8a2a; letter-spacing: 0.12em; }
   .mgrp h3 span { color: #7d88a8; font-weight: 400; }
@@ -134,7 +164,7 @@
   <div class="panel">
     <div class="m-head">
       <h2 id="menu-title">SETTINGS</h2>
-      <div class="m-tabs" role="tablist" aria-label="Settings pages"><button type="button" id="mtab-match" data-tab="match">MATCH</button><button type="button" id="mtab-modes" data-tab="modes">MODES</button><button type="button" id="mtab-events" data-tab="events">EVENTS</button></div>
+      <div class="m-tabs" role="tablist" aria-label="Settings pages"><button type="button" id="mtab-match" data-tab="match">MATCH</button><button type="button" id="mtab-maps" data-tab="maps">MAPS</button><button type="button" id="mtab-modes" data-tab="modes">MODES</button><button type="button" id="mtab-events" data-tab="events">EVENTS</button></div>
     </div>
     <div class="m-body">
     <section class="m-page" data-page="match">
@@ -151,12 +181,12 @@
         <p class="note" id="imp-note">IMPOSSIBLE plays out every fought-over moment a second ahead in silent copies of the game, and does whatever wins. ALLEY-OOP ONLY is for CPU VS CPU.</p>
       </div>
     </section>
+    <section class="m-page" data-page="maps" hidden>
+      <div class="m-bar"><p class="note">Click a map to switch it on or off. After every point the game moves to one of the maps you leave on (round 1 is always the gym).</p><div class="seg"><button type="button" id="map-all-on">ALL ON</button><button type="button" id="map-all-off">ALL OFF</button></div></div>
+      <div id="map-list"></div>
+    </section>
     <section class="m-page" data-page="modes" hidden>
-      <div class="m-bar">
-        <div class="legend"><span class="pill">OFF</span><span class="pill rnd">RANDOM</span><span class="pill alw">ALWAYS</span><span class="hint">CLICK A MODE TO STEP THROUGH THESE</span></div>
-        <div class="seg"><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div>
-      </div>
-      <p class="note">After every point, one or more of the RANDOM modes kicks in. ALWAYS modes are in every round. Round 1 is always a plain gym. The CPU tournament uses these too.</p>
+      <div class="m-bar"><p class="note"><b>ON</b> = it can show up after a point. <b>ALWAYS</b> = it is in every round. Only one mode from each group plays at a time.</p><div class="seg"><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div></div>
       <div id="mode-groups"></div>
     </section>
     <section class="m-page" data-page="events" hidden>
@@ -271,8 +301,8 @@ const MODES = [
   { id: 'lowgrav', cat: 'PHYSICS', name: 'LOW GRAVITY' },
   { id: 'wind', cat: 'PHYSICS', name: 'WINDY', isNew: true },
   { id: 'superjump', cat: 'PHYSICS', name: 'SUPER JUMPS', isNew: true },
-  { id: 'speedup', cat: 'PHYSICS', name: 'SPEED-UP BALL', isNew: true },
-  { id: 'crazyspd', cat: 'PHYSICS', name: 'CRAZY SPEED BALL', isNew: true },
+  { id: 'slowball', cat: 'PHYSICS', name: 'SLOW BALL (0.5X)', isNew: true },
+  { id: 'fastball', cat: 'PHYSICS', name: 'FAST BALL (1.5X)', isNew: true },
   { id: 'movehoop', cat: 'OBSTACLES', name: 'MOVING HOOPS', isNew: true },
   { id: 'tramp', cat: 'OBSTACLES', name: 'TRAMPOLINES', isNew: true },
   { id: 'wall', cat: 'OBSTACLES', name: 'CENTER WALL', isNew: true },
@@ -324,17 +354,14 @@ const PHYS = {
   lowgrav:   { name: 'LOW GRAVITY', grav: 0.4, jump: 1.6,  wind: 0 },
   wind:      { name: 'WINDY',       grav: 1,   jump: 1,    wind: 1 },
   superjump: { name: 'SUPER JUMPS', grav: 1,   jump: 1.75, wind: 0 },
-  // the ball runs on its own clock: same arcs and bounces, just played faster (or slower). SPEED-UP keeps
-  // winding it up until somebody scores; CRAZY rolls a new speed every few seconds
-  speedup:   { name: 'SPEED-UP BALL',    grav: 1, jump: 1, wind: 0, spd: 'ramp' },
-  crazyspd:  { name: 'CRAZY SPEED BALL', grav: 1, jump: 1, wind: 0, spd: 'random' },
+  // the loose ball runs on its own clock: the same arcs and bounces, played at half or one and a half speed
+  slowball:  { name: 'SLOW BALL (0.5X)', grav: 1, jump: 1, wind: 0, spd: 0.5 },
+  fastball:  { name: 'FAST BALL (1.5X)', grav: 1, jump: 1, wind: 0, spd: 1.5 },
 };
-const SPD_RAMP = 1.15, SPD_MAX = 6;                       // SPEED-UP: x1.15 every second of the round (x4 at 11 s), up to 6x
 // BOUNCY WALLS: the side walls are rubber and kick the ball back 35% faster than it came in (up to a cap,
 // so a ball rolling between them can't wind itself up forever)
 const WALL_K = 1.35, WALL_VMAX = 17;
 const wallKick = vx => Math.min(WALL_K, WALL_VMAX / Math.max(1, Math.abs(vx)));
-const SPD_ROLLS = [0.25, 0.4, 0.6, 1.7, 2.5, 3.5, 5];     // CRAZY: the speeds it can roll, from 4x slower to 5x faster
 const OBST = {
   none:     { name: '' },
   movehoop: { name: 'MOVING HOOPS' },
@@ -386,6 +413,10 @@ function menuRows(G) {
   return rows;
 }
 const MENU_X = 14, MENU_W = 104, MENU_Y0 = 50, MENU_DY = 11, MENU_H = 10;
+// the three tiles under the menu (hidden while a dropdown is open): each opens its own page of the settings panel
+const TITLE_TILES = [{ id: 'maps', label: 'MAPS' }, { id: 'modes', label: 'MODES' }, { id: 'events', label: 'EVENTS' }];
+const TILE_X0 = 9, TILE_Y = 130, TILE_W = 36, TILE_H = 27, TILE_GAP = 2;
+const titleTiles = G => (G.menuDrop ? [] : TITLE_TILES);
 // 4 PLAYERS: one key each, spread across the keyboard so four pairs of hands fit: red on the left, blue on the right
 // (in the same left-to-right order as the players stand on the court: [team, slot])
 const FOUR_KEYS = { KeyQ: [0, 0], KeyC: [0, 1], KeyM: [1, 1], ArrowUp: [1, 0] };
@@ -4643,17 +4674,18 @@ function makeCPU(game, team, level, opts) {
 
 // ---------------------------------------------------------------- settings
 const SETTINGS_KEY = 'floppy-hoops-settings-v3';
-const OFF_BY_DEFAULT = ['twoball', 'wall', 'speedup', 'crazyspd'];
+const OFF_BY_DEFAULT = ['twoball', 'wall'];
 function migrateModes(m, ver) {
   if (ver < 2) m = m.filter(id => !OFF_BY_DEFAULT.includes(id));
   if (ver < 3) for (const id of ['tokyo', 'rome']) if (!m.includes(id)) m.push(id);
   if (ver < 5) for (const id of ['speedup', 'crazyspd']) if (!m.includes(id)) m.push(id);
   if (ver < 7) { m = m.filter(id => id !== 'speedup' && id !== 'crazyspd'); if (!m.includes('castle')) m.push('castle'); }   // the speed balls went back to off
   if (ver < 8 && !m.includes('bouncehouse')) m.push('bouncehouse');
-  return m;
+  if (ver < 9) for (const id of ['slowball', 'fastball']) if (!m.includes(id)) m.push(id);   // (they replaced SPEED-UP and CRAZY SPEED)
+  return m.filter(id => MODES.some(x => x.id === id));
 }
 function loadSettings() {
-  const def = { ver: 8, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
+  const def = { ver: 9, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
@@ -4661,7 +4693,7 @@ function loadSettings() {
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       target: [3, 5, 7, 11].includes(s.target) ? s.target : s.target === 10 ? 11 : 5, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
-      ver: 8,
+      ver: 9,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
       always: Array.isArray(s.always) ? s.always.filter(id => MODES.some(m => m.id === id)) : [],
       // (a dunk added after the settings were saved starts switched on)
@@ -4784,7 +4816,7 @@ class Game {
     for (let t = 0; t < 2; t++) for (let s = 0; s < n; s++) this.players.push(new Player(this, t, s, this.roster[t * 3 + s], t === 0 ? xs[s] : -xs[s], this.state === 'showcase' ? 0 : rand(0.7, 0.95)));
     this.balls = this.cfg.obst.two ? [new Ball(this, -1.3), new Ball(this, 1.3)] : [new Ball(this, 0)];
     this.ball = this.balls[0]; this.allBalls = this.balls.slice();   // (balls = the ones still in play; a scored one leaves that list)
-    this.spdK = 1; this.spdTo = 1; this.spdT = rand(1.5, 2.5);
+    this.spdK = this.cfg.spd || 1;
     this.wallHit = [0, 0, 0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
     const evRoll = court.event && this.state !== 'showcase' && (this.forceEvent || Math.random() < EVENT_P);
@@ -4881,10 +4913,12 @@ class Game {
     this.titleRollAt = 0;
     this.startTransition(pick([TEAM[0].jersey, TEAM[1].jersey, ORANGE]), () => { this.newRoster(); this.setupRound(this.randomRound(ALL_MODES), pick([2, 2, 3])); }, true);
   }
-  menuMove(d) { const n = menuRows(this).length; this.menuSel = (this.menuSel + d + n) % n; this.sfx.grab(); }
+  menuMove(d) { const n = menuRows(this).length + titleTiles(this).length; this.menuSel = (this.menuSel + d + n) % n; this.sfx.grab(); }
   menuPick() {
-    const row = menuRows(this)[this.menuSel], id = row.id;
+    const rows = menuRows(this);
     this.sfx.init();
+    if (this.menuSel >= rows.length) { const tl = titleTiles(this)[this.menuSel - rows.length]; if (tl) { this.sfx.grab(); openMenu(tl.id); } return; }
+    const row = rows[this.menuSel], id = row.id;
     if (row.sub) {   // open (or close) the dropdown; opening lands on its first option
       const open = this.menuDrop !== id;
       this.menuDrop = open ? id : null;
@@ -4894,7 +4928,7 @@ class Game {
     if (id === 'cpu' || id === '2p' || id === '4p' || id === '6p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
     else if (id === 'online') openOnline();
     else if (id === 'tour') this.startTournament();
-    else if (id === 'modes') openMenu();
+    else if (id === 'modes') openMenu('match');
     else if (id === 'reels') this.startShowcase('dunk');
     else if (id === 'switch') { if (window.FloppyNet) FloppyNet.home(); else location.href = 'index.html'; }
   }
@@ -5438,17 +5472,6 @@ class Game {
     }
     if (Math.abs(p.x) > 9.5) { b.gone = true; b.body.setGravityScale(0); b.body.setLinearVelocity({ x: 0, y: 0 }); b.body.setTransform({ x: b.outSide * 12, y: -6 }, 0); }
   }
-  // SPEED-UP BALL / CRAZY SPEED BALL: how fast the loose ball's clock runs right now
-  updateSpeed(dt) {
-    if (this.cfg.spd === 'ramp') this.spdK = Math.min(SPD_MAX, Math.pow(SPD_RAMP, Math.max(0, this.roundT - 1)));
-    else {
-      if ((this.spdT -= dt) <= 0) {
-        const l = SPD_ROLLS.filter(k => k !== this.spdTo), was = this.spdTo; this.spdTo = pick(l); this.spdT = rand(2.5, 4.5);
-        if (this.state === 'play') this.popup(this.spdTo > was ? 'FASTER!' : 'SLOWER!', 0, 5.2, this.spdTo > was ? ORANGE : '#86b2ff', 8, 0.9);
-      }
-      this.spdK += (this.spdTo - this.spdK) * Math.min(1, dt * 6);
-    }
-  }
   // a ball's clock: k times the speed with k*k the gravity flies the same arcs and bounces, just k times faster.
   // In someone's hands it's back to 1, so every throw leaves at normal speed and gets wound up from there
   applySpeed(b) {
@@ -5878,7 +5901,6 @@ class Game {
     } else if (this.onFire(b.holder.team) && !this.calm && Math.random() < 0.5) this.flame(b.body.getPosition());
     if (this.cfg.spd) {
       this.applySpeed(b);
-      if (b.kNow > 1.7 && !this.calm && !this.isShadow) { const q = b.body.getPosition(); this.addPart(q.x, q.y, 0, 0, 0, 0.18, b.kNow > 3 ? ORANGE : '#ffffff', 2); }
     }
     b.prevY = b.body.getPosition().y;
   }
@@ -5918,7 +5940,6 @@ class Game {
     this.airballQ.length = 0;
     for (const [p, arm, b] of this.grabQ) if (!b.holder && this.canGrab(p, b)) this.grab(p, arm, b);
     this.grabQ.length = 0;
-    if (this.cfg.spd && this.state !== 'transition') this.updateSpeed(dt);
     for (const b of this.balls) this.ballStep(b, dt);
     for (const b of this.allBalls) if (b.out && !b.gone) this.outStep(b);
 
@@ -6454,16 +6475,7 @@ function drawHUD(G) {
   } else if (G.state !== 'title' && G.state !== 'bracket') {
     drawScoreboard(G);
     if (G.cfg.wind) txt(G.windCur > 0 ? 'WIND >>' : '<< WIND', AX(160), AY(40), 8, '#dff3ff', { ow: 0.7 });
-    if (G.cfg.spd && !(G.state === 'play' && G.roundT < 2.8)) {   // (after the round banner fades)
-      // the speed gauge: a bar out from the middle (normal speed), right and orange for fast, left and blue for slow
-      const k = G.spdK, fast = k >= 1, col = k > 3 ? ORANGE : fast ? '#ffd23f' : '#86b2ff', f = clamp(Math.log(k) / Math.log(6), -1, 1);
-      txt((k > 2.5 ? 'TURBO BALL x' : k < 0.7 ? 'SLOW-MO BALL x' : 'BALL SPEED x') + k.toFixed(1), AX(160), AY(42), 8, col, { ow: 0.7 });
-      const y = AY(48), h = Math.max(2, AY(50) - y), half = AX(190) - AX(160), x0 = AX(130);
-      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(x0, y, half * 2, h);
-      ctx.fillStyle = col; ctx.fillRect(f >= 0 ? AX(160) : AX(160) + f * half, y, Math.abs(f) * half, h);
-      ctx.fillStyle = CREAM; ctx.fillRect(AX(160) - 1, y - 1, 2, h + 2);
-    }
-    if (G.winBy2 && Math.max(...G.score) >= G.target && G.state !== 'over' && G.roundT > 2.8) txt('WIN BY 2', AX(160), AY(G.cfg.spd ? 58 : G.cfg.wind ? 50 : 40), 8, '#ffd23f', { ow: 0.7 });
+    if (G.winBy2 && Math.max(...G.score) >= G.target && G.state !== 'over' && G.roundT > 2.8) txt('WIN BY 2', AX(160), AY(G.cfg.wind ? 50 : 40), 8, '#ffd23f', { ow: 0.7 });
     if (G.state === 'play' && G.roundT < 2.8) {
       ctx.globalAlpha = clamp((2.8 - G.roundT) / 0.5, 0, 1);
       const T = G.tourney;
@@ -6540,6 +6552,26 @@ function drawTitle(G) {
       for (let k = 0; k < 3; k++) { artRect(x0 + 3 + nudge, y + 2 + k, 1 + k, 1, INK); artRect(x0 + 3 + nudge, y + 6 - k, 1 + k, 1, INK); }
     }
     txt(it.label, AX(x0 + w / 2 + (it.sub ? -2 : 2)), AY(y + MENU_H / 2 + 0.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
+  });
+  const nRows = menuRows(G).length;
+  titleTiles(G).forEach((tl, k) => {
+    const x = TILE_X0 + k * (TILE_W + TILE_GAP), y = TILE_Y, sel = G.menuSel === nRows + k;
+    artRect(x - 1, y - 1, TILE_W + 2, TILE_H + 2, INK); artRect(x, y, TILE_W, TILE_H, sel ? ORANGE : '#262b3d');
+    if (sel) artRect(x, y + TILE_H - 2, TILE_W, 2, '#c4621a');
+    const cx = x + TILE_W / 2, iy = y + 3;
+    if (tl.id === 'maps') {   // a tiny court: sky, crowd, floor, two hoops
+      artRect(cx - 10, iy, 20, 12, INK); artRect(cx - 9, iy + 1, 18, 6, '#7fb8e0'); artRect(cx - 9, iy + 7, 18, 4, '#dcb57d');
+      artRect(cx - 8, iy + 2, 1, 5, '#6a717d'); artRect(cx - 7, iy + 3, 3, 1, '#ff5a1f'); artRect(cx + 7, iy + 2, 1, 5, '#6a717d'); artRect(cx + 4, iy + 3, 3, 1, '#ff5a1f');
+    } else if (tl.id === 'modes') {   // a die
+      artRect(cx - 6, iy, 12, 12, INK); artRect(cx - 5, iy + 1, 10, 10, CREAM);
+      for (const [dx, dy] of [[-3, 2], [2, 2], [-0.5, 5], [-3, 8], [2, 8]]) artRect(cx + dx, iy + dy, 2, 2, INK);
+    } else {   // a lightning bolt
+      const c = sel ? INK : '#ffd23f';
+      for (let k2 = 0; k2 < 6; k2++) artRect(cx + 1 - k2, iy + k2, 3, 1, c);
+      artRect(cx - 4, iy + 6, 7, 1, c);
+      for (let k2 = 0; k2 < 6; k2++) artRect(cx + 2 - k2, iy + 7 + k2 - 1, 2, 1, c);
+    }
+    txt(tl.label, AX(cx), AY(y + TILE_H - 6.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
   txt('ARROWS OR W/S + ENTER', AX(65), AY(166), 8, '#7d88a8', { ow: 0.6 });
   const lines = packLines(G.bannerItems.length ? G.bannerItems : ['CLASSIC GYM'], 30).slice(0, 3);
@@ -6686,20 +6718,36 @@ const menuEl = document.getElementById('menu');
 let draft = null;
 (function buildMenu() {
   const wrapEl = document.getElementById('mode-groups');
-  // one card per category; each mode is a row with its state (OFF / RANDOM / ALWAYS) on the right, and courts say what's special
-  for (const cat of MODE_CATS) {
-    const grp = document.createElement('div'); grp.className = 'mgrp';
-    const h = document.createElement('h3'); h.textContent = cat; const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.dataset.cat = cat; h.appendChild(cnt); grp.appendChild(h);
+  // MAPS: a picture of every court (the gym is always in: it's round 1 and the court when no map is picked)
+  const mapEl = document.getElementById('map-list');
+  for (const key of ['gym', ...MODES.filter(m => m.cat === 'COURTS').map(m => m.id)]) {
+    const c = COURTS[key], m = MODES.find(x => x.id === key), b = document.createElement('button'); b.type = 'button'; b.className = 'map';
+    if (m) { b.dataset.map = key; b.id = 'map-' + key; } else { b.classList.add('fixed'); b.setAttribute('aria-disabled', 'true'); }
+    const img = document.createElement('img'); img.alt = ''; img.dataset.court = key; img.width = 320; img.height = 180;
+    const cap = document.createElement('span'); cap.className = 'cap';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = key === 'gym' ? 'GYM' : c.name;
+    const tag = key === 'gym' ? 'ROUND 1, ALWAYS IN' : c.event ? 'EVENT: ' + EVENT_LIST.find(e => e.id === c.event).name : c.boost ? 'BOOST PADS' : c.springy ? 'TRAMPOLINE FLOOR' : key === 'ice' ? 'SLIPPERY' : key === 'beach' ? 'SOFT SAND BOUNCES' : '';
+    if (tag) { const t = document.createElement('span'); t.className = 'sub'; t.textContent = tag; nm.appendChild(t); }
+    const pl = document.createElement('span'); pl.className = 'pill' + (m ? '' : ' on'); if (!m) pl.textContent = 'ON';
+    cap.append(nm, pl); b.append(img, cap); mapEl.appendChild(b);
+  }
+  // MODES: one section per group with a big header, each mode a card with OFF / ON / ALWAYS spelled out
+  const WHAT = { BALLS: 'WHAT YOU PLAY WITH', PLAYERS: 'BODY SHAPES', HOOPS: 'RIM SIZE AND HEIGHT', PHYSICS: 'GRAVITY, WIND, JUMPS, BALL SPEED', OBSTACLES: 'STUFF ON THE COURT' };
+  for (const cat of MODE_CATS.filter(c => c !== 'COURTS')) {
+    const sec = document.createElement('section'); sec.className = 'msec';
+    sec.innerHTML = `<div class="msec-h"><h3>${cat}</h3><span class="what">${WHAT[cat] || ''}</span><span class="cnt" data-cat="${cat}"></span></div>`;
+    const list = document.createElement('div'); list.className = 'msec-l';
     for (const m of MODES.filter(m => m.cat === cat)) {
-      const b = document.createElement('button'); b.type = 'button'; b.id = 'mode-' + m.id; b.dataset.mode = m.id; b.className = 'mrow';
+      const card = document.createElement('div'); card.className = 'mcard'; card.dataset.card = m.id;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = m.name;
       if (m.isNew) { const n = document.createElement('span'); n.className = 'new'; n.textContent = 'NEW'; nm.appendChild(n); }
-      const c = COURTS[m.id], tag = c && (c.event ? 'EVENT: ' + EVENT_LIST.find(e => e.id === c.event).name : c.boost ? 'BOOST PADS' : c.springy ? 'TRAMPOLINE FLOOR' : m.id === 'ice' ? 'SLIPPERY' : '');
-      if (tag) { const t = document.createElement('span'); t.className = 'sub'; t.textContent = tag; nm.appendChild(t); }
-      const pl = document.createElement('span'); pl.className = 'pill';
-      b.append(nm, pl); grp.appendChild(b);
+      const seg = document.createElement('div'); seg.className = 'seg';
+      for (const [st, lb] of [['off', 'OFF'], ['on', 'ON'], ['always', 'ALWAYS']]) {
+        const b = document.createElement('button'); b.type = 'button'; b.id = `mode-${m.id}-${st}`; b.dataset.mode = m.id; b.dataset.st = st; b.textContent = lb; seg.appendChild(b);
+      }
+      card.append(nm, seg); list.appendChild(card);
     }
-    wrapEl.appendChild(grp);
+    sec.appendChild(list); wrapEl.appendChild(sec);
   }
   const evEl = document.getElementById('event-list');
   for (const e of EVENT_LIST) {
@@ -6712,19 +6760,20 @@ let draft = null;
 })();
 function syncMenu() {
   for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
-  for (const b of menuEl.querySelectorAll('[data-mode]')) {
-    const lk = draft.always.includes(b.dataset.mode), on = lk || draft.modes.includes(b.dataset.mode), pl = b.querySelector('.pill');
-    b.setAttribute('aria-pressed', String(on)); if (lk) b.dataset.lock = '1'; else delete b.dataset.lock;
-    pl.textContent = lk ? 'ALWAYS' : on ? 'RANDOM' : 'OFF'; pl.className = 'pill' + (lk ? ' alw' : on ? ' rnd' : '');
-  }
-  for (const c of menuEl.querySelectorAll('.cnt')) { const ids = MODES.filter(m => m.cat === c.dataset.cat).map(m => m.id); c.textContent = `${ids.filter(id => draft.modes.includes(id) || draft.always.includes(id)).length}/${ids.length} ON`; }
+  const st = id => (draft.always.includes(id) ? 'always' : draft.modes.includes(id) ? 'on' : 'off');
+  for (const b of menuEl.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(st(b.dataset.mode) === b.dataset.st));
+  for (const c of menuEl.querySelectorAll('[data-card]')) { const v = st(c.dataset.card); c.classList.toggle('on', v === 'on'); c.classList.toggle('alw', v === 'always'); }
+  for (const b of menuEl.querySelectorAll('[data-map]')) { const on = st(b.dataset.map) !== 'off', pl = b.querySelector('.pill'); b.setAttribute('aria-pressed', String(on)); pl.textContent = on ? 'ON' : 'OFF'; pl.className = 'pill' + (on ? ' on' : ''); }
+  for (const c of menuEl.querySelectorAll('.cnt')) { const ids = MODES.filter(m => m.cat === c.dataset.cat).map(m => m.id); c.textContent = `${ids.filter(id => st(id) !== 'off').length} OF ${ids.length} ON`; }
   const off = draft.eventsOff || [];
   for (const b of menuEl.querySelectorAll('[data-event]')) { const on = !off.includes(b.dataset.event), pl = b.querySelector('.pill'); b.setAttribute('aria-pressed', String(on)); pl.textContent = on ? 'ON' : 'OFF'; pl.className = 'pill' + (on ? ' on' : ''); }
   for (const t of menuEl.querySelectorAll('[data-tab]')) t.setAttribute('aria-selected', String(t.dataset.tab === menuTab));
   for (const pg of menuEl.querySelectorAll('[data-page]')) pg.hidden = pg.dataset.page !== menuTab;
 }
 let menuTab = 'match';
-function openMenu() {
+function openMenu(tab) {
+  if (tab) menuTab = tab;
+  for (const img of menuEl.querySelectorAll('img[data-court]:not([src])')) img.src = ownDice(courtImage)(img.dataset.court).toDataURL();
   draft = JSON.parse(JSON.stringify(G.settings));
   syncMenu(); menuEl.hidden = false; G.menuOpen = true;
   document.getElementById('done').focus({ preventScroll: true });
@@ -6738,14 +6787,20 @@ menuEl.addEventListener('click', e => {
   else if (b.dataset.event) { const o = draft.eventsOff || [], id = b.dataset.event; draft.eventsOff = o.includes(id) ? o.filter(x => x !== id) : [...o, id]; }
   else if (b.id === 'ev-all-on') draft.eventsOff = [];
   else if (b.id === 'ev-all-off') draft.eventsOff = EVENT_LIST.map(e => e.id);
-  else if (b.id === 'all-on') draft.modes = MODES.map(m => m.id);
-  else if (b.id === 'all-off') { draft.modes = []; draft.always = []; }
+  else if (b.id === 'all-on' || b.id === 'all-off' || b.id === 'map-all-on' || b.id === 'map-all-off') {
+    // (the MAPS buttons only touch courts, the MODES buttons everything else)
+    const courts = b.id.startsWith('map'), ids = MODES.filter(m => (m.cat === 'COURTS') === courts).map(m => m.id), keep = id => !ids.includes(id);
+    draft.always = draft.always.filter(keep); draft.modes = b.id.endsWith('on') ? [...new Set([...draft.modes, ...ids])] : draft.modes.filter(keep);
+  }
+  else if (b.dataset.map) {
+    const id = b.dataset.map, on = draft.modes.includes(id) || draft.always.includes(id);
+    draft.always = draft.always.filter(x => x !== id); draft.modes = on ? draft.modes.filter(x => x !== id) : [...draft.modes, id];
+  }
   else if (b.dataset.mode) {
-    // off -> random -> ALWAYS (every round) -> off
-    const id = b.dataset.mode;
-    if (draft.always.includes(id)) { draft.always = draft.always.filter(x => x !== id); draft.modes = draft.modes.filter(x => x !== id); }
-    else if (draft.modes.includes(id)) draft.always = [...draft.always, id];
-    else draft.modes = [...draft.modes, id];
+    const id = b.dataset.mode, v = b.dataset.st;
+    draft.modes = draft.modes.filter(x => x !== id); draft.always = draft.always.filter(x => x !== id);
+    if (v !== 'off') draft.modes.push(id);
+    if (v === 'always') draft.always.push(id);
   }
   else if (b.dataset.v) { const key = b.parentElement.dataset.key; draft[key] = key === 'target' || key === 'teamSize' ? Number(b.dataset.v) : b.dataset.v; }
   syncMenu();
@@ -7006,6 +7061,7 @@ window.addEventListener('keydown', e => {
     if (code === 'KeyW' || code === 'ArrowUp') G.menuMove(-1);
     else if (code === 'KeyS' || code === 'ArrowDown') G.menuMove(1);
     else if (code === 'Enter' || code === 'Space') G.menuPick();
+    else if ((code === 'ArrowLeft' || code === 'ArrowRight' || code === 'KeyA') && G.menuSel >= menuRows(G).length) G.menuMove(code === 'ArrowRight' ? 1 : -1);
     else if (code === 'KeyD') G.startShowcase('dunk');
     return;
   }
@@ -7034,7 +7090,9 @@ window.addEventListener('keyup', e => { if (G.online) G.humanKey(e.code, false);
 window.addEventListener('blur', () => { G.releaseAll(); if (!G.online && (G.state === 'play' || G.state === 'scored')) G.paused = true; });
 function artPoint(e) { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) * DPR - OX) / S, y: ((e.clientY - r.top) * DPR - OY) / S }; }
 function menuHit(p) {
-  for (let i = 0; i < menuRows(G).length; i++) { const y = MENU_Y0 + i * MENU_DY; if (p.x >= MENU_X && p.x <= MENU_X + MENU_W && p.y >= y && p.y <= y + MENU_H) return i; }
+  const n = menuRows(G).length;
+  for (let i = 0; i < n; i++) { const y = MENU_Y0 + i * MENU_DY; if (p.x >= MENU_X && p.x <= MENU_X + MENU_W && p.y >= y && p.y <= y + MENU_H) return i; }
+  for (let k = 0; k < titleTiles(G).length; k++) { const x = TILE_X0 + k * (TILE_W + TILE_GAP); if (p.x >= x && p.x <= x + TILE_W && p.y >= TILE_Y && p.y <= TILE_Y + TILE_H) return n + k; }
   return -1;
 }
 cv.addEventListener('pointermove', e => {
