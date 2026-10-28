@@ -4735,7 +4735,7 @@ function makeLook(used) {
   used.add(num);
   // now and then one of the players is THE TEACHER: brown swept hair, glasses, a beard, a maroon tee under the jersey,
   // and #13 when nobody has it yet (one per game at most)
-  if (!used.has('teacher') && Math.random() < 0.04) {
+  if (!used.has('teacher') && Math.random() < 0.066) {
     used.add('teacher');
     if (!used.has(13)) { used.delete(num); used.add(13); num = 13; }
     return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', num };
