@@ -682,8 +682,9 @@ function headSprite(d, look, T) {
       case 'afro': h = ny < -0.35 || (nx < -0.25 && ny < 0.3); break;
       case 'headband': h = ny < -0.5 || (nx < -0.4 && ny < 0); break;
       case 'mohawk': h = ny < -0.65 && nx > -0.5 && nx < 0.35; break;
+      case 'teacher': h = ny < -0.5 + 0.12 * nx || (nx < -0.35 && ny < 0.05); break;
     }
-    P(x, y, h ? hair : skin);
+    P(x, y, h ? hair : look.beard && ny > 0.2 && nx > -0.55 ? look.beard : skin);
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
   if (look.style === 'mohawk') for (let x = Math.round(cx - r * 0.45); x < Math.round(cx + r * 0.3); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
@@ -693,6 +694,11 @@ function headSprite(d, look, T) {
   P(ex - 1, ey - 2, INK); P(ex, ey - 2, INK);
   const mY = Math.round(cy + r * 0.5);
   P(Math.round(cx + r * 0.35), mY, shade(skin, -0.45)); P(Math.round(cx + r * 0.35) + 1, mY, shade(skin, -0.45));
+  if (look.glasses) {   // a black rectangular frame round the eye and an arm back to the ear
+    for (let x = ex - 2; x <= ex + 1; x++) { if (inHead(x, ey - 1)) P(x, ey - 1, INK); if (inHead(x, ey + 2)) P(x, ey + 2, INK); }
+    for (let y = ey - 1; y <= ey + 2; y++) { if (inHead(ex - 2, y)) P(ex - 2, y, INK); if (inHead(ex + 2, y)) P(ex + 2, y, INK); }
+    for (let x = Math.round(cx - r * 0.3); x < ex - 2; x++) P(x, ey, INK);
+  }
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 function headFrontSprite(d, look, T) {
@@ -713,8 +719,9 @@ function headFrontSprite(d, look, T) {
       case 'afro': h = ny < -0.35 || (Math.abs(nx) > 0.7 && ny < 0.2); break;
       case 'headband': h = ny < -0.5; break;
       case 'mohawk': h = ny < -0.65 && Math.abs(nx) < 0.25; break;
+      case 'teacher': h = ny < -0.48 + 0.1 * nx || (Math.abs(nx) > 0.75 && ny < -0.1); break;
     }
-    P(x, y, h ? hair : skin);
+    P(x, y, h ? hair : look.beard && ny > 0.2 ? look.beard : skin);
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
   if (look.style === 'mohawk') for (let x = Math.round(cx - 1); x < Math.round(cx + 1); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
@@ -722,6 +729,11 @@ function headFrontSprite(d, look, T) {
   for (const ex of [el, er]) { P(ex, ey, INK); if (d >= 14) P(ex, ey + 1, INK); P(ex, ey - 2, INK); }
   const mY = Math.round(cy + r * 0.5), mouth = shade(skin, -0.45);
   P(Math.round(cx) - 1, mY, mouth); P(Math.round(cx), mY, mouth);
+  if (look.glasses) for (const ex of [el, er]) {
+    for (let x = ex - 1; x <= ex + 1; x++) { P(x, ey - 1, INK); P(x, ey + 2, INK); }
+    P(ex - 1, ey, INK); P(ex - 1, ey + 1, INK); P(ex + 1, ey, INK); P(ex + 1, ey + 1, INK);
+  }
+  if (look.glasses) for (let x = el + 2; x < er - 1; x++) P(x, ey, INK);
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 function torsoFrontSprite(w, h, T, num) {
@@ -760,11 +772,11 @@ function legSprite(w, h, T, skin) {
   }
   return { c: outline(c), ox: x0 + w / 2 + 1, oy: 1 };
 }
-function armSprite(w, h, T, skin) {
+function armSprite(w, h, T, skin, sleeve) {
   const [c, g] = mk(w + 1, h); const P = painter(g);
   for (let y = 0; y < h; y++) {
     const hand = y >= h - 3;
-    for (let x = 0; x < (hand ? w + 1 : w); x++) P(x, y, y < 2 ? T.jersey : skin);
+    for (let x = 0; x < (hand ? w + 1 : w); x++) P(x, y, y < 2 ? T.jersey : sleeve && y < Math.round(h * 0.35) ? sleeve : skin);
   }
   return { c: outline(c), ox: w / 2 + 1, oy: 1 };
 }
@@ -1407,7 +1419,7 @@ class Player {
       head: headSprite(px(d.headR * 2), L, T),
       torso: torsoSprite(px(d.torsoW), px(d.torsoH), T, L.num),
       leg: legSprite(px(d.legW), px(d.legLen), T, L.skin),
-      arm: armSprite(px(d.armW), px(d.armLen), T, L.skin),
+      arm: armSprite(px(d.armW), px(d.armLen), T, L.skin, L.sleeve),
     };
     s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy };
     s.headF = headFrontSprite(px(d.headR * 2), L, T);
@@ -4721,6 +4733,13 @@ function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringi
 function makeLook(used) {
   let num; do { num = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(num));
   used.add(num);
+  // now and then one of the players is THE TEACHER: brown swept hair, glasses, a beard, a maroon tee under the jersey,
+  // and #13 when nobody has it yet (one per game at most)
+  if (!used.has('teacher') && Math.random() < 0.04) {
+    used.add('teacher');
+    if (!used.has(13)) { used.delete(num); used.add(13); num = 13; }
+    return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', num };
+  }
   return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk']), num };
 }
