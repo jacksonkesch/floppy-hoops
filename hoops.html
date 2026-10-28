@@ -4742,15 +4742,16 @@ function migrateModes(m, ver) {
   return m.filter(id => MODES.some(x => x.id === id));
 }
 function loadSettings() {
-  const def = { ver: 9, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 5, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
+  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
       mode: ['cpu', 'cvc', '4p', '6p'].includes(s.mode) ? s.mode : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
-      target: [3, 5, 7, 11].includes(s.target) ? s.target : s.target === 10 ? 11 : 5, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
+      // games go to 11 by default since v10; a 5 saved before then was just the old default, so it moves up too
+      target: s.target === 5 && (s.ver || 0) < 10 ? 11 : [3, 5, 7, 11].includes(s.target) ? s.target : 11, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
-      ver: 9,
+      ver: 10,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
       always: Array.isArray(s.always) ? s.always.filter(id => MODES.some(m => m.id === id)) : [],
       // (a dunk added after the settings were saved starts switched on)
