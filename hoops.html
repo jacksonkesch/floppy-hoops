@@ -1168,6 +1168,10 @@ class Hoop {
     this.shards = [];
     for (let i = 0; i < 46; i++) this.shards.push({ x: bx + rr(-0.08, 0.08), y: this.y + rr(-0.2, 1.7), vx: -this.side * rr(0.4, 5.5) + rr(-1, 1), vy: rr(-1, 4.5),
       a: rr(0, 6.3), va: rr(-14, 14), len: rr(1, 3.6) | 0, col: ['#dff3ff', '#bfe3f5', '#ffffff', '#9fd0ea'][i % 4] });
+    if (this.falling) for (const q of this.shards) {   // (the board is lying on the floor: burst up out of it)
+      const o = rot({ x: q.x - this.pivot.x, y: q.y - this.pivot.y }, this.side * this.fall);
+      q.x = this.pivot.x + o.x; q.y = Math.max(0.12, this.pivot.y + o.y); q.vx = rr(-3.5, 3.5); q.vy = rr(1.5, 5);
+    }
   }
   fallArt() { return this.side > 0 ? 314 : 6; }
   // where the camera looks while the hoop comes down: partway up the pole, wherever the pole has got to
@@ -5355,23 +5359,29 @@ class Game {
     if (this.state !== 'showcase') this.popup(style.name, h.cx - h.side * 2.4, h.y + 1.7, TEAM[p.team].light, 16, 1.7);
     for (let i = 0; i < 20 * imp; i++) this.addPart(h.frontX, h.y, rand(-5, 5), rand(0, 7), 20, rand(0.3, 0.7), pick(['#ffd23f', '#ffffff', ORANGE]), 1);
     this.sfx.dunk(); if (imp > 1) this.sfx.boom(); this.excite = 1;
-    let poster = false;
+    let poster = 0;
     for (const o of this.players) {
       if (o.team === p.team) continue;
       const op = o.center();
       if (Math.abs(op.x - h.frontX) < 1.8 && !o.grounded) {
         for (const b of o.parts) { const v = b.getLinearVelocity(); b.setLinearVelocity({ x: v.x - h.side * 5, y: v.y - 2 }); }
         this.popup('POSTERIZED!', op.x, op.y + 1.6, '#ffd23f', 8, 1.5);
-        o.flail(1); poster = true;
+        o.flail(1); poster++;
       }
     }
     if (poster) this.posterSound();
     const v = p.body.getLinearVelocity(), fx = this.forceFx;
-    const power = style.power * clamp(0.6 + Math.hypot(v.x, v.y) / 12, 0.6, 1.5) + (poster ? 0.5 : 0), hard = power >= 1.5;
-    if (fx === 'collapse' || (!fx && hard && poster && this.dunkOn('collapse') && Math.random() < 0.2)) {
+    // Only a hard dunk can wreck the hoop: a powerful style, coming in fast, posterizing people (each one adds).
+    // Soft ones (through the hoop, tip, cradle, moonwalk, rim kiss, cartwheel) never do. One roll picks at most one:
+    // HOOP COLLAPSE 1 in 5 (1 in 2 when two or more get posterized), else GLASS BREAKS 1 in 5 (1 in 2 for the
+    // Glass Breaker). A collapsing hoop's glass shatters when it hits the floor anyway.
+    const power = style.power * clamp(0.6 + Math.hypot(v.x, v.y) / 12, 0.6, 1.5) + 0.5 * poster, hard = power >= 1.5 && style.power >= 1;
+    const pC = hard && this.dunkOn('collapse') ? (poster >= 2 ? 0.5 : 0.2) : 0, pG = hard && this.dunkOn('glass') ? (style.id === 'shatter' ? 0.5 : 0.2) : 0;
+    const roll = fx ? 1 : Math.random();
+    if (fx === 'collapse' || roll < pC) {
       h.collapseAt = this.time + 0.3;
       if (p.hang) p.hang.dur = Math.max(p.hang.dur, 1.7);
-    } else if (fx === 'glass' || (!fx && hard && this.dunkOn('glass') && Math.random() < (style.id === 'shatter' ? 1 / 3 : 1 / 12))) {
+    } else if (fx === 'glass' || roll < pC + pG * (1 - pC)) {
       h.shatter(this.time); this.sfx.glass(); this.addShake(20); this.excite = 1;
       // the cinematic bit: everything drops to slow motion, a white pop, and the camera punches in on the board
       this.slowmo(0.22, 0.9);
@@ -5394,6 +5404,7 @@ class Game {
     if (!REDUCED) { this.flash = 0.5; if (this.cam.punch && this.cam.punch.hoop === h) this.cam.punch.t = 1.2; }
     this.popup('HOOP DOWN!', h.side * 3.2, 4.4, '#ff8173', 16, 2);
     const o = rot({ x: h.cx - h.pivot.x, y: h.base - h.pivot.y }, h.side * 1.2), rim = { x: h.pivot.x + o.x, y: 0 };
+    if (!h.shattered) { h.shatter(this.time); this.sfx.glass(); }   // (the backboard smashes on the floor)
     for (let i = 0; i < 24; i++) this.addPart(rim.x + rand(-0.4, 0.4), 0.15, rand(-5, 5), rand(1, 6), 18, rand(0.4, 0.9), pick(['#ffd23f', '#ffffff', ORANGE]), 1);   // sparks where the rim hits
     for (let i = 0; i < 80; i++) this.addPart(h.pivot.x - h.side * rand(0.5, 5), 0.1, rand(-3, 3), rand(0.5, 3), 4, rand(0.5, 1.2), this.cfg.court.dust, pick([1, 2, 2]));
     for (const o of this.players) {
@@ -6128,8 +6139,10 @@ function drawHoopFront(G, h, hv) {
   if (hv.fall) {
     const px = OX + h.fallArt() * S + SHX, py = OY + 140 * S + SHY;
     ctx.save(); ctx.translate(px, py); ctx.rotate(-h.side * hv.fall); ctx.translate(-px, -py);
-    drawHoopFront(G, h, Object.assign({}, hv, { fall: 0 }));
-    ctx.restore(); return;
+    drawHoopFront(G, h, Object.assign({}, hv, { fall: 0, noShards: true }));
+    ctx.restore();
+    if (hv.shattered && h.shards) drawShards(G, h, hv === h ? G.time - h.shatterAt : hv.st);
+    return;
   }
   const t = G.time, sh = hv.shake > 0 ? Math.round(Math.sin(t * 70) * hv.shake * 1.4) : 0, rx = Math.round(RIM_HALF * 20);
   const cols = h.cols, pts = hv.pts, P = q => [ax(q.x ?? q[0]), ay(q.y ?? q[1]) + sh];
@@ -6146,7 +6159,7 @@ function drawHoopFront(G, h, hv) {
     const x = Math.round(cx + c * rx), y = Math.round(cy + Math.sin(a) * 2) + bend;
     artRect(x, y, 1, 1, '#ff5a1f', true); artRect(x, y + 1, 1, 1, '#a8330d', true);
   }
-  if (hv.shattered && h.shards) drawShards(G, h, hv === h ? G.time - h.shatterAt : hv.st);
+  if (hv.shattered && h.shards && !hv.noShards) drawShards(G, h, hv.st === undefined ? G.time - h.shatterAt : hv.st);
 }
 // each shard flies, spins, hits the floor, skips once and lies there glinting for the rest of the round
 function drawShards(G, h, age) {
