@@ -74,11 +74,12 @@
   .msec-h h3 { margin: 0; font-size: 20px; font-weight: 700; color: #ff8a2a; letter-spacing: 0.06em; text-shadow: 0 2px 0 #7a2d0c; }
   .msec-h .what { font-size: 11px; color: #b9c3dd; }
   .msec-h .cnt { margin-left: auto; font-size: 11px; color: #7d88a8; }
-  .msec-l { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .msec-l { display: grid; gap: 8px; align-items: start; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .mcard { display: grid; gap: 7px; padding: 9px 10px; background: #20263a; border: 2px solid #141019; }
   .mcard.on { box-shadow: inset 4px 0 0 #43f07a; }
   .mcard.alw { box-shadow: inset 4px 0 0 #ffd23f; }
-  .mcard .nm { font-size: 12px; color: #fff6e0; }
+  .mcard .nm { display: grid; gap: 2px; font-size: 12px; color: #fff6e0; }
+  .mcard .sub { font-size: 9px; color: #7d88a8; letter-spacing: 0.04em; }
   .mcard:not(.on):not(.alw) .nm { color: #7d88a8; }
   .mcard .seg { gap: 4px; }
   #menu .mcard .seg button { flex: 1; font-size: 10px; padding: 5px 4px; box-shadow: 0 2px 0 #141019; }
@@ -186,7 +187,7 @@
       <div id="map-list"></div>
     </section>
     <section class="m-page" data-page="modes" hidden>
-      <div class="m-bar"><p class="note"><b>ON</b> = it can show up after a point. <b>ALWAYS</b> = it is in every round. Only one mode from each group plays at a time.</p><div class="seg"><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div></div>
+      <div class="m-bar"><p class="note"><b>ON</b> = it can show up after a point. <b>ALWAYS</b> = it is in every round. Modes can stack (long arms AND long legs), except opposites like long and short arms.</p><div class="seg"><button type="button" id="all-on">ALL ON</button><button type="button" id="all-off">ALL OFF</button></div></div>
       <div id="mode-groups"></div>
     </section>
     <section class="m-page" data-page="events" hidden>
@@ -309,6 +310,14 @@ const MODES = [
   { id: 'twoball', cat: 'OBSTACLES', name: 'TWO BALLS', isNew: true },
 ];
 const MODE_CATS = ['COURTS', 'BALLS', 'PLAYERS', 'HOOPS', 'PHYSICS', 'OBSTACLES'];
+// Within PLAYERS, HOOPS, PHYSICS and OBSTACLES, modes stack: a round can have long arms AND long legs. Only modes
+// sharing a slot clash (the opposites, like long and short arms), and a round gets at most one from each slot.
+// A court and a ball are one per round.
+const MODE_SLOT = { longarm: 'arms', shortarm: 'arms', bighead: 'heads', smallhead: 'heads', longleg: 'legs', shortleg: 'legs', heavyp: 'weight',
+  wide: 'rim', narrow: 'rim', tall: 'height', short: 'height',
+  lowgrav: 'jump', superjump: 'jump', wind: 'wind', slowball: 'speed', fastball: 'speed',
+  movehoop: 'movehoop', tramp: 'tramp', wall: 'wall', twoball: 'twoball' };
+const asList = v => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const COURTS = {
   gym:   { key: 'gym',   name: 'GYM',       fric: 0.9,   gravity: 20, jumpH: 1.55, bounce: 1,    dust: '#e9cf9f' },
   beach: { key: 'beach', name: 'BEACH',     fric: 1.2,   gravity: 20, jumpH: 1.5,  bounce: 0.6,  dust: '#f3dfae' },
@@ -4791,14 +4800,21 @@ class Game {
 
   setupRound(rc, size) {
     if (size) this.teamSize = size;
-    const court = COURTS[rc.court] || COURTS.gym, ball = BALLS[rc.ball || 'classic'], body = BODIES[rc.body || 'normal'];
-    const hoop = HOOPS[rc.hoop || 'normal'], phys = PHYS[rc.court === 'moon' && rc.phys === 'lowgrav' ? 'none' : (rc.phys || 'none')];
-    const obst = OBST[rc.obst || 'none'];
+    // the stacked modes multiply together (a round's lists hold at most one mode per slot)
+    const court = COURTS[rc.court] || COURTS.gym, ball = BALLS[rc.ball || 'classic'];
+    const bs = asList(rc.body).map(id => BODIES[id]).filter(Boolean), hs = asList(rc.hoop).map(id => HOOPS[id]).filter(Boolean);
+    const ps = asList(rc.phys).filter(id => !(rc.court === 'moon' && id === 'lowgrav')).map(id => PHYS[id]).filter(Boolean), os = asList(rc.obst);
+    const prod = (l, k) => l.reduce((a, x) => a * x[k], 1), names = l => l.map(x => x.name).filter(Boolean);
+    const body = { name: names(bs).join(' + '), names: names(bs), head: prod(bs, 'head'), arm: prod(bs, 'arm'), leg: prod(bs, 'leg'), jump: prod(bs, 'jump'), mass: prod(bs, 'mass') };
+    const rim = hs.find(x => x.half !== HOOPS.normal.half), tall = hs.find(x => x.y !== HOOPS.normal.y);
+    const hoop = { name: names(hs).join(' + '), names: names(hs), half: rim ? rim.half : HOOPS.normal.half, y: tall ? tall.y : HOOPS.normal.y };
+    const spdP = ps.find(x => x.spd), phys = { name: names(ps).join(' + '), names: ps.map(x => (x.wind ? 'GUSTY WIND' : x.name)), grav: prod(ps, 'grav'), jump: prod(ps, 'jump'), wind: ps.some(x => x.wind) ? 1 : 0, spd: spdP ? spdP.spd : null };
+    const obst = { names: os.map(id => OBST[id] && OBST[id].name).filter(Boolean) };
     RIM_Y = hoop.y; RIM_HALF = hoop.half;
     const gravity = court.gravity * phys.grav, jumpH = court.jumpH * phys.jump * body.jump;
     this.rc = rc; this.roundId = (this.roundId || 0) + 1;
     this.cfg = { court, ball, body, hoop, phys, gravity, spd: phys.spd || null, jumpV: Math.sqrt(2 * gravity * jumpH), wind: phys.wind ? rand(3, 4.5) : 0,
-      obst: { move: rc.obst === 'movehoop', tramp: rc.obst === 'tramp', wall: rc.obst === 'wall', two: rc.obst === 'twoball', name: obst.name }, bouncy: !!court.bouncy };
+      obst: { move: os.includes('movehoop'), tramp: os.includes('tramp'), wall: os.includes('wall'), two: os.includes('twoball'), name: obst.names.join(' + ') }, bouncy: !!court.bouncy };
     const w = this.world = new pl.World({ gravity: { x: 0, y: -gravity } });
     w.on('begin-contact', c => this.onContact(c, 1));
     w.on('end-contact', c => this.onContact(c, -1));
@@ -4827,7 +4843,7 @@ class Game {
     this.roundT = 0; this.cam.watch = null; this.cam.punch = null; this.cam.z = 1;
     if (!this.isShadow) this.bg = ownDice(courtImage)(court.key);
     this.windDir = pick([-1, 1]); this.windCur = this.windDir; this.windT = rand(2.5, 4.5);
-    this.bannerItems = [court.key === 'gym' ? '' : court.name, court.boost ? 'BOOST PADS' : '', ball.name, body.name, hoop.name, phys.wind ? 'GUSTY WIND' : phys.name, obst.name].filter(Boolean);
+    this.bannerItems = [court.key === 'gym' ? '' : court.name, court.boost ? 'BOOST PADS' : '', ball.name, ...body.names, ...hoop.names, ...phys.names, ...obst.names].filter(Boolean);
     this.bannerLines = packLines(this.bannerItems, 36);
     if (!this.isShadow) this.makeCrowd();
   }
@@ -4838,10 +4854,22 @@ class Game {
       if (L.length) return pick(L);   // a mode set to ALWAYS is in every round
       const l = MODES.filter(m => m.cat === cat && on.has(m.id)).map(m => m.id); return l.length && Math.random() < p ? pick(l) : null;
     };
-    const same = (a, b) => ['court', 'ball', 'body', 'hoop', 'phys', 'obst'].every(k => a[k] === b[k]);
+    // a stacking group: each slot with an ALWAYS mode gets one of those; then, with chance p, one random mode,
+    // and each other free slot joins in now and then (1 in 4)
+    const stack = (cat, p) => {
+      const ms = MODES.filter(m => m.cat === cat), slots = [...new Set(ms.map(m => MODE_SLOT[m.id]))], got = {};
+      for (const sl of slots) { const L = ms.filter(m => MODE_SLOT[m.id] === sl && lock.has(m.id)).map(m => m.id); if (L.length) got[sl] = pick(L); }
+      const free = ms.filter(m => on.has(m.id) && !got[MODE_SLOT[m.id]]).map(m => m.id);
+      if (free.length && Math.random() < p) {
+        const first = pick(free); got[MODE_SLOT[first]] = first;
+        for (const sl of slots) { if (got[sl]) continue; const l = free.filter(id => MODE_SLOT[id] === sl); if (l.length && Math.random() < 0.25) got[sl] = pick(l); }
+      }
+      const out = Object.values(got); return out.length ? out : null;
+    };
+    const same = (a, b) => ['court', 'ball', 'body', 'hoop', 'phys', 'obst'].every(k => JSON.stringify(a[k]) === JSON.stringify(b[k]));
     let rc = CLASSIC_ROUND;
     for (let n = 0; n < 60; n++) {
-      rc = { court: roll('COURTS', 0.6) || 'gym', ball: roll('BALLS', 0.45), body: roll('PLAYERS', 0.45), hoop: roll('HOOPS', 0.3), phys: roll('PHYSICS', 0.3), obst: roll('OBSTACLES', 0.35) };
+      rc = { court: roll('COURTS', 0.6) || 'gym', ball: roll('BALLS', 0.45), body: stack('PLAYERS', 0.45), hoop: stack('HOOPS', 0.3), phys: stack('PHYSICS', 0.3), obst: stack('OBSTACLES', 0.35) };
       const changed = rc.court !== 'gym' || rc.ball || rc.body || rc.hoop || rc.phys || rc.obst;
       if (!on.size || lock.size || (changed && !same(rc, this.lastRc))) break;
     }
@@ -6732,7 +6760,7 @@ let draft = null;
     cap.append(nm, pl); b.append(img, cap); mapEl.appendChild(b);
   }
   // MODES: one section per group with a big header, each mode a card with OFF / ON / ALWAYS spelled out
-  const WHAT = { BALLS: 'WHAT YOU PLAY WITH', PLAYERS: 'BODY SHAPES', HOOPS: 'RIM SIZE AND HEIGHT', PHYSICS: 'GRAVITY, WIND, JUMPS, BALL SPEED', OBSTACLES: 'STUFF ON THE COURT' };
+  const WHAT = { BALLS: 'ONE BALL PER ROUND', PLAYERS: 'BODY SHAPES', HOOPS: 'RIM SIZE AND HEIGHT', PHYSICS: 'GRAVITY, WIND, JUMPS, BALL SPEED', OBSTACLES: 'STUFF ON THE COURT' };
   for (const cat of MODE_CATS.filter(c => c !== 'COURTS')) {
     const sec = document.createElement('section'); sec.className = 'msec';
     sec.innerHTML = `<div class="msec-h"><h3>${cat}</h3><span class="what">${WHAT[cat] || ''}</span><span class="cnt" data-cat="${cat}"></span></div>`;
@@ -6741,6 +6769,8 @@ let draft = null;
       const card = document.createElement('div'); card.className = 'mcard'; card.dataset.card = m.id;
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = m.name;
       if (m.isNew) { const n = document.createElement('span'); n.className = 'new'; n.textContent = 'NEW'; nm.appendChild(n); }
+      const rivals = cat === 'BALLS' ? [] : MODES.filter(o => o !== m && MODE_SLOT[o.id] && MODE_SLOT[o.id] === MODE_SLOT[m.id]);
+      if (rivals.length) { const n = document.createElement('span'); n.className = 'sub'; n.textContent = 'NOT WITH ' + rivals.map(o => o.name).join(', '); nm.appendChild(n); }
       const seg = document.createElement('div'); seg.className = 'seg';
       for (const [st, lb] of [['off', 'OFF'], ['on', 'ON'], ['always', 'ALWAYS']]) {
         const b = document.createElement('button'); b.type = 'button'; b.id = `mode-${m.id}-${st}`; b.dataset.mode = m.id; b.dataset.st = st; b.textContent = lb; seg.appendChild(b);
