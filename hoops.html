@@ -873,11 +873,14 @@ function lvTile() {
 function lvHiRes(spr, T) {
   const K = 10, w = spr.c.width, h = spr.c.height, [c, g] = mk(w * K, h * K);
   g.imageSmoothingEnabled = false; g.drawImage(spr.c, 0, 0, w * K, h * K);
-  const src = spr.c.getContext('2d').getImageData(0, 0, w, h).data, [m, mg] = mk(w * K, h * K), [jr, jg, jb] = hexRgb(T.jersey);
+  const src = spr.c.getContext('2d').getImageData(0, 0, w, h).data, [m, mg] = mk(w * K, h * K), [jr, jg, jb] = hexRgb(T.jersey), [dr, dg, db] = hexRgb(T.dark), [lr, lg, lb] = hexRgb(T.light), [dm, dmg] = mk(w * K, h * K);
   mg.fillStyle = '#000';
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (src[i + 3] > 200 && src[i] === jr && src[i + 1] === jg && src[i + 2] === jb) mg.fillRect(x * K, y * K, K, K); }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; if (src[i + 3] < 200) continue; const r0 = src[i], g0 = src[i + 1], b0 = src[i + 2];
+    if (r0 === dr && g0 === dg && b0 === db) { mg.fillRect(x * K, y * K, K, K); dmg.fillRect(x * K, y * K, K, K); }   // shorts: the monogram too, a little darker
+    else if ((r0 === jr && g0 === jg && b0 === jb) || (r0 === lr && g0 === lg && b0 === lb)) mg.fillRect(x * K, y * K, K, K); }
+  dmg.globalCompositeOperation = 'source-in'; dmg.fillStyle = 'rgba(10,6,2,0.38)'; dmg.fillRect(0, 0, w * K, h * K);
   mg.globalCompositeOperation = 'source-in'; const pat = g.createPattern(lvTile(), 'repeat'); pat.setTransform(new DOMMatrix().scale(1 / 3)); mg.fillStyle = pat; mg.fillRect(0, 0, w * K, h * K);
-  g.drawImage(m, 0, 0);
+  g.drawImage(m, 0, 0); g.drawImage(dm, 0, 0);
   return { c, ox: spr.ox * K, oy: spr.oy * K, k: K };
 }
 function torsoFrontSprite(w, h, T, num, belly = 0, L = {}) {
@@ -923,7 +926,12 @@ function legSprite(w, h, T, skin, L = {}) {
   }
   for (let y = shoeTop; y < h; y++) for (let x = x0 - 1; x < x0 + w + 2; x++) {
     if (y === shoeTop && (x < x0 || x > x0 + w - 1)) continue;
-    P(x, y, L.shoes === 'jordan' ? (y === h - 1 ? '#111111' : y === h - 3 ? '#d11a2a' : '#f4f4f4') : y === h - 1 ? '#3b3b46' : '#22222a');
+    P(x, y, L.shoes === 'jordan' ? (y === h - 1 ? '#e6dcc4' : '#7a5535') : y === h - 1 ? '#3b3b46' : '#22222a');
+  }
+  if (L.shoes === 'jordan') {   // Travis Scott: brown suede, a reversed swoosh (thick at the heel, tapering to a point toward the toe)
+    const sw = '#24160b', cx = x0 + 1;
+    P(cx, h - 3, sw); P(cx + 1, h - 2, sw); P(cx + 2, h - 2, sw); P(cx + 3, h - 3, sw); P(cx + 4, h - 3, sw); P(cx + 5, h - 4 < shoeTop ? shoeTop : h - 4, sw);
+    P(x0, h - 2, '#9b7448');
   }
   return { c: outline(c), ox: x0 + w / 2 + 1, oy: 1 };
 }
@@ -1610,7 +1618,8 @@ class Player {
       leg: legSprite(px(d.legW), px(d.legLen), T, L.skin, L),
       arm: armSprite(px(d.armW), px(d.armLen), T, L.skin, L.sleeve, L),
     };
-    s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy };
+    if (L.outfit === 'lv') s.leg = lvHiRes(s.leg, T);
+    s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy, k: s.leg.k };
     s.headF = headFrontSprite(px(d.headR * 2), L, T);
     s.torsoF = torsoFrontSprite(px(d.torsoW) + 4, px(d.torsoH), T, L.num, L.belly ? L.belly - 1 : 0, L);
     if (L.outfit === 'lv') { s.torso = lvHiRes(s.torso, T); s.torsoF = lvHiRes(s.torsoF, T); }
