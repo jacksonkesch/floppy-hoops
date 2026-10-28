@@ -6376,15 +6376,20 @@ function drawLow(G, fr) {
     if (fall) { g.save(); g.translate(h.fallArt(), 140); g.rotate(-s * fall); g.translate(-h.fallArt(), -140); }
     const boardTop = Math.round(ay(hv.y + 1.7)), boardBot = Math.round(ay(hv.y - 0.2));
     const px = s > 0 ? 312 : 4, poleTop = boardTop - 7;
-    R(px - 2, 118, 8, 22, L.base);
-    R(px - 1, poleTop, 1, 118 - poleTop, INK); R(px + 4, poleTop, 1, 118 - poleTop, INK);
-    R(px, poleTop, 4, 118 - poleTop, L.pole);
+    // (Q(q): column q of the pole counted from its court side; X(u): u pixels out from the pole toward the court)
+    const Q = q => (s > 0 ? px + q : px + 3 - q), X = u => (s > 0 ? px - 1 - u : px + 4 + u), pl = shade(L.pole, 0.28), pd = shade(L.pole, -0.32);
+    R(px - 3, 117, 10, 23, INK); R(px - 2, 118, 8, 22, L.base); R(px - 2, 118, 8, 1, shade(L.base, 0.3)); R(px - 2, 130, 8, 3, shade(L.base, -0.3));
+    R(s > 0 ? px - 2 : px + 5, 119, 1, 18, shade(L.base, 0.14));
+    R(px - 1, poleTop, 1, 118 - poleTop, INK); R(px + 4, poleTop, 1, 118 - poleTop, INK); R(px - 1, poleTop - 1, 6, 1, INK);
+    R(px, poleTop, 4, 118 - poleTop, L.pole); R(Q(0), poleTop, 1, 118 - poleTop, pl); R(Q(3), poleTop, 1, 118 - poleTop, pd);
     if (L.trim) { R(px + 1, poleTop, 1, 118 - poleTop, L.trim); R(px - 1, 116, 6, 2, L.trim); }
     if (L.antenna) { R(px + 1, poleTop - 6, 1, 6, L.pole); R(px, poleTop - 8, 3, 2, Math.sin(t * 4 + s) > 0 ? '#ff4040' : '#5a1010'); }
     if (L.flag) { R(px + 1, poleTop - 9, 1, 9, '#3a2a1e'); R(px + 2, poleTop - 9, 6, 4, s > 0 ? TEAM[1].jersey : TEAM[0].jersey); }
     const bx = Math.floor(ax(s > 0 ? BOARD_X : -BOARD_X - 0.12));
-    const armX0 = s > 0 ? bx + 3 : px + 4, armX1 = s > 0 ? px : bx;
-    R(armX0, poleTop + 1 + sh, armX1 - armX0, 3, L.pole);
+    const armX0 = s > 0 ? bx + 3 : px + 4, armX1 = s > 0 ? px : bx, armY = poleTop + 1 + sh;
+    R(armX0, armY - 1, armX1 - armX0, 5, INK); R(armX0, armY, armX1 - armX0, 3, L.pole); R(armX0, armY, armX1 - armX0, 1, pl);
+    // a diagonal brace from partway down the pole up to the board end of the arm
+    for (let k = 0, n = armX1 - armX0; k < n; k++) { const x = s > 0 ? armX1 - 1 - k : armX0 + k, y = armY + 3 + Math.round((n - 1 - k) * 1.1); R(x, y, 1, 2, k % 2 ? pd : L.pole); }
     if (hv.shattered) {
       R(bx - 1, boardTop - 1 + sh, 5, 2, INK); R(bx - 1, boardBot - 1 + sh, 5, 2, INK); R(bx - 1, boardTop + sh, 1, boardBot - boardTop, INK); R(bx + 3, boardTop + sh, 1, boardBot - boardTop, INK);
       for (const [dy, len] of [[1, 4], [3, 2], [9, 1], [-3, 3], [-6, 1]]) R(bx, (dy > 0 ? boardTop + dy : boardBot + dy) + sh, 3, len, '#dff3ff');
@@ -6392,8 +6397,15 @@ function drawLow(G, fr) {
       R(bx - 1, boardTop - 1 + sh, 5, boardBot - boardTop + 2, INK); R(bx, boardTop + sh, 3, boardBot - boardTop, L.board);
       R(bx, Math.round(ay(hv.y + 0.8)) + sh, 3, Math.round(ay(hv.y + 0.15) - ay(hv.y + 0.8)), L.box);
       if (L.edge) { R(bx, boardTop + sh, 3, 1, L.edge); R(bx, boardBot - 1 + sh, 3, 1, L.edge); }
+      // the mounting plate on the back of the board, and the glass catching the light on its court-side face
+      R(s > 0 ? bx + 2 : bx, armY - 1, 1, 8, shade(L.pole, -0.15));
+      if (Math.sin(t * 0.9 + s * 2) > 0.6) R(s > 0 ? bx : bx + 2, boardTop + 3 + sh, 1, 4, '#ffffff');
     }
-    R(s > 0 ? bx - 2 : bx + 3, Math.round(ay(hv.y)) - 1 + sh, 2, 2, '#9aa3b3');
+    // the rim bracket: a little plate on the board and a strut out to the rim
+    const rimY = Math.round(ay(hv.y)) + sh, bk = s > 0 ? bx - 2 : bx + 3;
+    R(s > 0 ? bx - 1 : bx + 3, rimY - 4, 1, 5, '#6d7585'); R(bk, rimY - 1, 2, 2, '#9aa3b3'); R(bk + (s > 0 ? 0 : 1), rimY - 2, 1, 1, '#c8ced8');
+    const deco = HOOP_DECO[key];
+    if (deco) deco({ R, t, s, sh, px, poleTop, Q, X, bx, boardTop: boardTop + sh, boardBot: boardBot + sh, armX0, armX1, armY, rimY, broken: hv.shattered, L, pl, pd });
     const cx = ax(h.cx), cy = Math.round(ay(hv.y)) + sh;
     for (let k = 0; k <= 40; k++) { const a = Math.PI + k / 40 * Math.PI; R(Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * 2), 1, 1, '#b8420f'); }
     if (fall) g.restore();
@@ -6411,6 +6423,110 @@ const HOOP_LOOK = {
   rome:   { pole: '#e6d6b0', base: '#b8966a', board: '#efe4c8', box: 'rgba(155,31,42,0.5)', trim: '#c4ad80', edge: '#e8c35a' },
   castle: { pole: '#6b4a2e', base: '#55515e', board: '#b58a52', box: 'rgba(120,40,40,0.5)', trim: '#523720', edge: '#e8c35a', flag: true },
   bouncehouse: { pole: '#ffd23a', base: '#e8343f', board: '#ffffff', box: 'rgba(47,123,240,0.5)', trim: '#e8343f', edge: '#ffd23a' },
+};
+// ...and adds its own touches. o.Q(q) is column q of the 4-wide pole from its court side, o.X(u) is u pixels out
+// from the pole toward the court; board pieces add the shake (boardTop/boardBot/armY/rimY already have it)
+const HOOP_DECO = {
+  gym(o) {   // padded pole, a shot clock on top of the board, and padding under it
+    const { R, px, bx, boardTop, boardBot, t } = o;
+    R(px - 2, 93, 8, 24, INK); R(px - 1, 94, 6, 22, '#3a62b5'); R(o.s > 0 ? px - 1 : px + 4, 94, 1, 22, '#5d86d6'); R(px - 1, 104, 6, 1, '#27448a'); R(px + 1, 97, 2, 4, '#ffffff');
+    R(bx - 1, boardBot, 5, 2, '#d93a3f');
+    R(bx - 2, boardTop - 7, 7, 6, INK); R(bx - 1, boardTop - 6, 5, 4, '#2a1010');
+    const n = 24 - (Math.floor(t) % 24), lit = '#ff4a2f';
+    R(bx - 1, boardTop - 6, 2, 1, lit); if (n >= 10) R(bx - 1, boardTop - 5, 1, 2, lit);
+    R(bx + 2, boardTop - 6, 1, 4, lit); if (n % 2) R(bx + 1, boardTop - 4, 1, 1, lit);
+  },
+  beach(o) {   // a driftwood post: grain knots, a rope wrap, a life ring hung on it, a sand pile at the foot
+    const { R, px, poleTop, X, t } = o;
+    for (let y = poleTop + 4; y < 116; y += 9) R(o.Q(1 + (y % 2)), y, 1, 2, '#6e4a26');
+    for (let y = 99; y < 109; y += 2) R(px, y, 4, 1, '#e3c78a');
+    const cx = X(3), cy = 92, ring = [[-1, -2], [0, -2], [1, -2], [-2, -1], [2, -1], [-2, 0], [2, 0], [-2, 1], [2, 1], [-1, 2], [0, 2], [1, 2]];
+    ring.forEach(([dx, dy], k) => R(cx + dx, cy + dy, 1, 1, Math.floor(k / 3) % 2 ? '#ffffff' : '#e8343f'));
+    R(cx, cy - 4, 1, 2, '#e3c78a');
+    R(px - 5, 129, 14, 4, '#f3dfae'); R(px - 3, 127, 10, 2, '#f3dfae'); R(px - 3, 127, 10, 1, '#fff2cc');
+    R(X(5), 131, 1, 1, '#ff8a5a'); R(X(4), 130, 3, 1, '#ff8a5a'); R(X(5), 129, 1, 1, '#ff8a5a');
+    if (Math.sin(t * 2) > 0.95) R(X(5), 129, 1, 1, '#ffffff');
+  },
+  snow(o) {   // snow caps on the board, arm and footing, icicles under them, frost on the pole
+    const { R, px, poleTop, bx, boardTop, boardBot, armX0, armX1, armY, t, broken } = o;
+    R(armX0, armY - 2, armX1 - armX0, 1, '#ffffff'); R(px - 1, poleTop - 2, 6, 1, '#ffffff');
+    if (!broken) { R(bx - 1, boardTop - 3, 5, 2, '#ffffff'); R(bx, boardTop - 4, 3, 1, '#ffffff'); }
+    const drip = (x, y, len) => { R(x, y, 1, len, '#bfe6ff'); R(x, y + len, 1, 1, Math.sin(t * 3 + x) > 0.8 ? '#ffffff' : '#9fd2f5'); };
+    for (let x = Math.min(armX0, armX1), k = 0; x < Math.max(armX0, armX1); x += 2, k++) drip(x, armY + 3, 1 + (k % 3));
+    if (!broken) { drip(bx, boardBot, 3); drip(bx + 2, boardBot, 2); }
+    for (let y = poleTop + 6; y < 116; y += 7) R(o.Q(y % 3), y, 1, 1, '#eef6ff');
+    R(px - 5, 128, 14, 5, '#ffffff'); R(px - 3, 126, 10, 2, '#ffffff'); R(px - 5, 132, 14, 1, '#d6e8fb');
+  },
+  park(o) {   // weathered green paint with rust spots, a bolted footing, a "no dunking" plate, a tag on the base
+    const { R, px, poleTop, Q } = o;
+    for (const [q, y] of [[1, poleTop + 9], [2, poleTop + 22], [0, poleTop + 35], [3, poleTop + 51], [1, poleTop + 63]]) { R(Q(q), y, 1, 2, '#8a4a2a'); R(Q(q), y + 2, 1, 1, '#c47a3a'); }
+    R(px - 1, 88, 6, 5, INK); R(px, 89, 4, 3, '#f1f1ea'); R(px, 89, 4, 1, '#d93a3f'); R(px + 1, 91, 2, 1, '#2f3a3a');
+    R(px - 4, 130, 12, 3, '#8b9099'); R(px - 4, 130, 12, 1, '#aeb3bb'); R(px - 3, 131, 1, 1, INK); R(px + 6, 131, 1, 1, INK);
+    R(px - 1, 125, 2, 1, '#ff4fa3'); R(px + 1, 124, 1, 3, '#ff4fa3'); R(px + 2, 127, 2, 1, '#ffd23f'); R(px + 3, 123, 1, 2, '#39e6ff');
+  },
+  ice(o) {   // brushed steel with an LED strip down the front and frost creeping up from the footing
+    const { R, px, poleTop, Q, X, bx, boardTop, boardBot, t, broken } = o;
+    const glow = 0.55 + 0.35 * Math.sin(t * 2.4);
+    R(Q(0), poleTop + 2, 1, 114 - poleTop, `rgba(120,220,255,${glow.toFixed(2)})`);
+    R(X(1), poleTop + 2, 1, 114 - poleTop, `rgba(120,220,255,${(glow * 0.25).toFixed(2)})`);
+    for (let k = 0; k < 5; k++) R(px - 1 + ((k * 3) % 6), 110 + ((k * 5) % 7), 1, 1, '#ffffff');
+    R(px - 4, 129, 12, 4, '#dff3ff'); R(px - 2, 127, 3, 2, '#dff3ff'); R(px + 4, 126, 2, 3, '#dff3ff');
+    if (!broken) { const sy = boardTop + 2 + Math.floor(((t * 12) % (boardBot - boardTop + 16))); if (sy < boardBot - 1) R(bx + 1, sy, 1, 2, '#ffffff'); }
+  },
+  moon(o) {   // riveted alloy, a solar panel off the back, hazard stripes, splayed landing feet
+    const { R, px, poleTop, Q, s, t } = o;
+    for (let y = poleTop + 5; y < 116; y += 8) R(Q(2), y, 1, 1, o.pd);
+    const sx = s > 0 ? px + 5 : px - 4;
+    R(sx - (s > 0 ? 0 : 1), poleTop + 7, 4, 1, INK); R(sx, poleTop + 8, 3, 9, '#24407a'); R(sx + (s > 0 ? 1 : 1), poleTop + 8, 1, 9, '#4d7fd6'); R(sx, poleTop + 12, 3, 1, '#9fb8e8');
+    for (let x = px - 1; x < px + 5; x++) R(x, 114, 1, 2, (x & 1) ? '#ffd23f' : INK);
+    R(px - 5, 131, 3, 2, '#9aa0ad'); R(px - 3, 129, 2, 2, '#9aa0ad'); R(px + 6, 131, 3, 2, '#9aa0ad'); R(px + 5, 129, 2, 2, '#9aa0ad');
+    if (Math.sin(t * 6 + s) > 0.2) R(o.X(1), 120, 1, 1, '#39ff6a');
+  },
+  tokyo(o) {   // neon tubes up the pole, a glow under the board, a blinking LED strip on the footing
+    const { R, px, poleTop, Q, X, bx, boardBot, t, broken } = o;
+    const fl = Math.sin(t * 23) > -0.93 ? 1 : 0.25;
+    R(X(1), poleTop + 3, 1, 112 - poleTop, `rgba(255,79,163,${(0.35 * fl).toFixed(2)})`);
+    R(Q(0), poleTop + 3, 1, 112 - poleTop, fl > 0.5 ? '#ff7cc0' : '#7a2a55');
+    for (let y = poleTop + 8; y < 112; y += 14) R(px, y, 4, 1, '#39e6ff');
+    if (!broken) { R(bx - 1, boardBot, 5, 1, '#39e6ff'); R(bx - 2, boardBot + 1, 7, 2, 'rgba(57,230,255,0.28)'); }
+    for (let k = 0; k < 4; k++) R(px - 1 + k * 2, 128, 1, 1, Math.floor(t * 5 + k) % 4 === 0 ? '#ffd23f' : '#ff4fa3');
+    R(px - 2, 131, 8, 1, '#39e6ff');
+  },
+  rome(o) {   // a fluted marble column with a carved capital, a stepped plinth and a laurel on the board
+    const { R, px, poleTop, bx, boardTop, broken } = o;
+    R(px + 1, poleTop + 4, 1, 108 - poleTop, '#c4ad80'); R(px + 3, poleTop + 4, 1, 108 - poleTop, '#c4ad80');
+    for (let y = poleTop + 10; y < 112; y += 16) R(px + 2, y, 1, 3, '#d8c79a');
+    R(px - 3, poleTop - 1, 10, 4, INK); R(px - 2, poleTop, 8, 2, '#efe4c8'); R(px - 2, poleTop + 2, 1, 1, '#c4ad80'); R(px + 5, poleTop + 2, 1, 1, '#c4ad80');
+    R(px - 3, 112, 10, 3, INK); R(px - 2, 113, 8, 1, '#efe4c8');
+    R(px - 4, 127, 12, 6, INK); R(px - 3, 128, 10, 4, '#e6d6b0'); R(px - 3, 128, 10, 1, '#fff6de');
+    if (!broken) { R(bx - 1, boardTop - 2, 1, 1, '#4f8a3a'); R(bx, boardTop - 3, 1, 2, '#6aa84f'); R(bx + 2, boardTop - 3, 1, 2, '#6aa84f'); R(bx + 3, boardTop - 2, 1, 1, '#4f8a3a'); R(bx + 1, boardTop - 2, 1, 1, '#e8c35a'); }
+  },
+  castle(o) {   // iron-banded timber, a torch in a bracket, a stone footing and planked board with studs
+    const { R, px, poleTop, X, bx, boardTop, boardBot, t, broken } = o;
+    for (let y = poleTop + 6; y < 116; y += 12) { R(px, y, 4, 2, '#3c3a42'); R(o.Q(1), y, 1, 1, '#8a8794'); }
+    const tx = X(2), ty = 96;
+    R(X(1), ty + 3, 2, 1, '#3c3a42'); R(tx, ty, 1, 5, '#5a3a1e');
+    const f = Math.floor(t * 12) % 3;
+    R(tx, ty - 2, 1, 2, '#ffd23f'); R(tx - (f === 1 ? 1 : 0), ty - 3 - (f === 2 ? 1 : 0), 1, 1, '#ff8a2a'); R(tx + (f === 0 ? 1 : 0), ty - 1, 1, 1, '#ff5a2a');
+    R(tx - 2, ty - 5, 5, 6, 'rgba(255,170,60,0.12)');
+    for (let y = 119; y < 134; y += 5) R(px - 2 + ((y / 5) % 2 ? 4 : 0), y, 1, 5, '#3f3c47'), R(px - 2, y, 8, 1, '#3f3c47');
+    if (!broken) {
+      for (let y = boardTop + 6; y < boardBot - 2; y += 7) R(bx, y, 3, 1, '#8a6436');
+      R(bx + 1, boardTop + 1, 1, 1, '#3c3a42'); R(bx + 1, boardBot - 2, 1, 1, '#3c3a42');
+    }
+  },
+  bouncehouse(o) {   // a blow-up pole: puffy red and yellow segments with seams, a squashy footing, a star
+    const { R, px, poleTop, X, bx, boardTop, boardBot, t, broken } = o;
+    for (let y = poleTop + 2, k = 0; y < 116; y += 7, k++) {
+      R(px, y, 4, 7, k % 2 ? '#e8343f' : '#ffd23a'); R(px - 1, y + 3, 6, 1, k % 2 ? '#e8343f' : '#ffd23a');
+      R(o.Q(0), y + 1, 1, 4, '#ffffff80'); R(px, y + 6, 4, 1, k % 2 ? '#a81f2a' : '#c9a11f');
+    }
+    R(px - 5, 126, 14, 8, '#2f7bf0'); R(px - 4, 125, 12, 1, '#2f7bf0'); R(px - 4, 126, 12, 1, '#7fb0ff'); R(px - 5, 130, 14, 1, '#1f5ac2');
+    if (!broken) { R(bx - 1, boardTop - 1, 1, boardBot - boardTop + 2, '#2f7bf0'); R(bx + 3, boardTop - 1, 1, boardBot - boardTop + 2, '#2f7bf0'); }
+    const by = Math.round(Math.sin(t * 3) * 1);
+    const sx = X(3), sy = 104 + by;
+    R(sx, sy - 2, 1, 5, '#ffd23a'); R(sx - 2, sy, 5, 1, '#ffd23a'); R(sx - 1, sy - 1, 3, 3, '#ffd23a'); R(sx, sy, 1, 1, '#fff6b0');
+  },
 };
 function drawHoopFront(G, h, hv) {
   hv = hv || h;
