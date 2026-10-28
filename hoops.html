@@ -172,6 +172,7 @@
       <div class="card"><h3>GAME</h3>
       <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
       <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
+      <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button type="button" id="opt-memes-on" data-v="on">ON</button><button type="button" id="opt-memes-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
       </div>
       <div class="card"><h3>CPU</h3>
@@ -664,14 +665,39 @@ function outline(src) {
 function darken(src, a) { const [c, g] = mk(src.width, src.height); g.drawImage(src, 0, 0); g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(12,8,24,${a})`; g.fillRect(0, 0, c.width, c.height); return c; }
 function painter(g) { return (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); }; }
 
+// the big hair of the meme characters: [x, y, radius] circles in head radii (+x is the way the face looks), painted behind the head
+const HAIR_PAD = { afro: 2, mohawk: 2, fluffy: 4, icecream: 5, curly: 3, frosted: 2 };
+function hairBlobs(style, front) {
+  const b = [];
+  if (style === 'fluffy') b.push([-0.1, -0.85, 0.95], [-0.75, -0.35, 0.65], [0.6, -0.8, 0.65], [-0.45, -1.15, 0.6], [0.2, -1.2, 0.6], [0.85, -0.3, 0.45], [-0.95, 0.15, 0.5]);
+  if (style === 'icecream') b.push([0, -0.8, 0.8], [0, -1.12, 0.55], [0, -1.42, 0.3]);
+  if (style === 'curly') for (let a = 20; a <= 340; a += 28) { const t = a * Math.PI / 180; b.push([Math.sin(t) * 1.02, -Math.cos(t) * 0.95 - 0.1, 0.34]); }
+  return front || style === 'icecream' ? b : b.map(([x, y, r]) => [x - 0.15, y, r]);
+}
+function paintHair(P, look, cx, cy, r, W, H, front) {
+  if (!HAIR_PAD[look.style] || look.style === 'afro' || look.style === 'mohawk') return;
+  const hair = look.hair, blobs = hairBlobs(look.style, front);
+  for (const [bx, by, br] of blobs) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+    if ((x + 0.5 - cx - bx * r) ** 2 + (y + 0.5 - cy - by * r) ** 2 <= (br * r) ** 2) P(x, y, hair);
+  const hi = shade(hair, 0.28), lo = shade(hair, -0.3);
+  if (look.style === 'icecream') for (const [k, by] of [[0, -0.8], [1, -1.12]]) {   // the swirl: a light band round each tier
+    const y = Math.round(cy + (by + 0.1) * r), w = Math.round(r * (k ? 0.45 : 0.75));
+    for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++) { P(x, y, hi); P(x, y + 2, lo); }
+  }
+  if (look.style === 'curly' || look.style === 'fluffy') blobs.forEach(([bx, by, br], i) => {   // a dark curl line / a light fluff dot in every blob
+    const x = Math.round(cx + bx * r), y = Math.round(cy + by * r);
+    if (look.style === 'curly') { P(x, y, lo); P(x + 1, y, lo); P(x + 1, y + 1, lo); } else P(x, y, hi);
+  });
+}
 function headSprite(d, look, T) {
-  const pad = look.style === 'afro' ? 2 : look.style === 'mohawk' ? 2 : 0;
+  const pad = HAIR_PAD[look.style] || 0;
   const W = d + pad * 2, H = d + pad * 2;
   const [c, g] = mk(W, H); const P = painter(g);
   const cx = W / 2, cy = H / 2, r = d / 2;
   const skin = look.skin, skinD = shade(skin, -0.18), hair = look.hair;
   const inHead = (x, y) => { const nx = Math.abs((x + 0.5 - cx) / r), ny = Math.abs((y + 0.5 - cy) / r); return nx ** 3 + ny ** 3 <= 1; };
   if (look.style === 'afro') for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((x + 0.5 - cx + 1) ** 2 + (y + 0.5 - cy + 1.2) ** 2 <= (r + 2) ** 2) P(x, y, hair);
+  paintHair(P, look, cx, cy, r, W, H, false);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (!inHead(x, y)) continue;
     const nx = (x + 0.5 - cx) / r, ny = (y + 0.5 - cy) / r;
@@ -683,8 +709,13 @@ function headSprite(d, look, T) {
       case 'headband': h = ny < -0.5 || (nx < -0.4 && ny < 0); break;
       case 'mohawk': h = ny < -0.65 && nx > -0.5 && nx < 0.35; break;
       case 'teacher': h = ny < -0.5 + 0.12 * nx || (nx < -0.35 && ny < 0.05); break;
+      case 'bigforehead': h = ny < -0.8 || (nx < -0.4 && ny < -0.1); break;
+      case 'fluffy': case 'icecream': h = ny < -0.4 || (nx < -0.35 && ny < 0.1); break;
+      case 'curly': h = ny < -0.42 || (nx < -0.3 && ny < 0.2); break;
+      case 'frosted': h = ny < -0.5 || (nx < -0.35 && ny < 0.05); break;
     }
-    P(x, y, h ? hair : look.beard && ny > 0.2 && nx > -0.55 ? look.beard : skin);
+    P(x, y, h ? (look.tip && ny < -0.72 && x % 2 === 0 ? look.tip : hair) : look.beard && ny > 0.2 && nx > -0.55 ? look.beard : skin);
+    if (look.style === 'bigforehead' && !h && ny < -0.45 && ny > -0.6 && nx > 0.05 && nx < 0.35) P(x, y, shade(skin, 0.22));   // the shine on it
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
   if (look.style === 'mohawk') for (let x = Math.round(cx - r * 0.45); x < Math.round(cx + r * 0.3); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
@@ -699,15 +730,17 @@ function headSprite(d, look, T) {
     for (let y = ey - 1; y <= ey + 2; y++) { if (inHead(ex - 2, y)) P(ex - 2, y, INK); if (inHead(ex + 2, y)) P(ex + 2, y, INK); }
     for (let x = Math.round(cx - r * 0.3); x < ex - 2; x++) P(x, ey, INK);
   }
+  if (look.tip) for (let x = 1; x < W - 1; x += 3) { let y = 0; while (y < H && !inHead(x, y)) y++; if (y < H) { P(x, y - 1, look.tip); P(x, y - 2, look.tip); } }
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 function headFrontSprite(d, look, T) {
-  const pad = look.style === 'afro' || look.style === 'mohawk' ? 2 : 0;
+  const pad = HAIR_PAD[look.style] || 0;
   const W = d + pad * 2 + 2, H = d + pad * 2;
   const [c, g] = mk(W, H); const P = painter(g);
   const cx = W / 2, cy = H / 2, r = d / 2, skin = look.skin, hair = look.hair;
   const inHead = (x, y) => { const nx = Math.abs((x + 0.5 - cx) / r), ny = Math.abs((y + 0.5 - cy) / r); return nx ** 3 + ny ** 3 <= 1; };
   if (look.style === 'afro') for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy + 1.2) ** 2 <= (r + 2) ** 2) P(x, y, hair);
+  paintHair(P, look, cx, cy, r, W, H, true);
   P(Math.round(cx - r - 1), Math.round(cy), shade(skin, -0.18)); P(Math.round(cx + r), Math.round(cy), shade(skin, -0.18));
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (!inHead(x, y)) continue;
@@ -720,8 +753,12 @@ function headFrontSprite(d, look, T) {
       case 'headband': h = ny < -0.5; break;
       case 'mohawk': h = ny < -0.65 && Math.abs(nx) < 0.25; break;
       case 'teacher': h = ny < -0.48 + 0.1 * nx || (Math.abs(nx) > 0.75 && ny < -0.1); break;
+      case 'bigforehead': h = ny < -0.8 || (Math.abs(nx) > 0.8 && ny < -0.1); break;
+      case 'fluffy': case 'icecream': h = ny < -0.4 || (Math.abs(nx) > 0.75 && ny < 0.1); break;
+      case 'curly': h = ny < -0.42 || (Math.abs(nx) > 0.75 && ny < 0.2); break;
+      case 'frosted': h = ny < -0.5 || (Math.abs(nx) > 0.75 && ny < -0.1); break;
     }
-    P(x, y, h ? hair : look.beard && ny > 0.2 ? look.beard : skin);
+    P(x, y, h ? (look.tip && ny < -0.72 && x % 2 === 0 ? look.tip : hair) : look.beard && ny > 0.2 ? look.beard : skin);
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
   if (look.style === 'mohawk') for (let x = Math.round(cx - 1); x < Math.round(cx + 1); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
@@ -734,6 +771,7 @@ function headFrontSprite(d, look, T) {
     P(ex - 1, ey, INK); P(ex - 1, ey + 1, INK); P(ex + 1, ey, INK); P(ex + 1, ey + 1, INK);
   }
   if (look.glasses) for (let x = el + 2; x < er - 1; x++) P(x, ey, INK);
+  if (look.tip) for (let x = 1; x < W - 1; x += 3) { let y = 0; while (y < H && !inHead(x, y)) y++; if (y < H) { P(x, y - 1, look.tip); P(x, y - 2, look.tip); } }
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 // a beer belly: how many pixels the gut pokes out at row y
@@ -742,7 +780,25 @@ function bellyAt(y, h, belly) {
   const yc = Math.round(h * 0.64) + 2, up = yc - Math.round(h * 0.28), down = 4, u = (y - yc) / (y < yc ? up : down);
   return belly && Math.abs(u) < 1 ? Math.round(belly * Math.sqrt(1 - u * u)) : 0;
 }
-function torsoFrontSprite(w, h, T, num, belly = 0) {
+// the meme characters' clothes drawn over the torso: jeans + belt buckle, the Louis Vuitton monogram, the bulge
+function bodyExtras(g, w, h, jEnd, off, L, front) {
+  const P = (x, y, col) => { g.fillStyle = col; g.fillRect(x + off, y, 1, 1); }, mid = (w - 1) / 2;
+  if (L.outfit === 'jeans') {
+    for (let y = jEnd; y < h; y++) for (let x = 0; x < w; x++) P(x, y, x === 1 || x === w - 2 ? '#5b82c4' : '#34569a');
+    for (let x = 0; x < w; x++) P(x, jEnd, '#4a2f18');   // belt
+    const bx = front ? Math.round(mid) - 1 : Math.round(w - 4);
+    for (let y = jEnd - 0; y <= jEnd + 1; y++) for (let x = bx; x <= bx + 2; x++) P(x, y, y === jEnd && x === bx + 1 ? '#fff0a0' : '#e0b030');   // the buckle
+  }
+  if (L.outfit === 'lv') for (let y = 1; y < jEnd - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const m = (x + (((y / 3) | 0) % 2) * 2) % 4;   // the monogram: little gold marks in a checker
+    if (y % 3 === 1 && m === 0) P(x, y, '#d9b25a'); else if (y % 3 === 1 && m === 2) P(x, y, '#7a5230');
+  }
+  if (L.bulge) {
+    if (front) { for (let y = h - 6; y < h - 1; y++) for (let x = Math.round(mid) - 1; x <= Math.round(mid) + 1; x++) if (!(y === h - 6 && x !== Math.round(mid))) P(x, y, x === Math.round(mid) - 1 ? '#22222a' : '#33333f'); }
+    else for (let k = 1; k <= 3; k++) for (let y = h - 6 + (k - 1); y < h - 2 - (k - 1) + (k === 1 ? 1 : 0); y++) { g.fillStyle = k === 3 ? '#22222a' : '#33333f'; g.fillRect(w - 1 + k, y, 1, 1); }
+  }
+}
+function torsoFrontSprite(w, h, T, num, belly = 0, L = {}) {
   const [c, g] = mk(w + 2 * belly, h); const P0 = painter(g), P = (x, y, col) => P0(x + belly, y, col);
   const jEnd = Math.round(h * 0.64), mid = (w - 1) / 2;
   for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) { const col = k === b || bellyAt(y + 1, h, belly) < k ? T.dark : T.jersey; P(-k, y, col); P(w - 1 + k, y, col); }
@@ -753,11 +809,12 @@ function torsoFrontSprite(w, h, T, num, belly = 0) {
     P(x, y, col);
   }
   const s = String(num), tw = s.length * 4 - 1;
+  bodyExtras(g, w, h, jEnd, belly, L, true);
   if (jEnd >= 8) tiny(g, s, Math.round((w - tw) / 2) + belly, 3, T.num);
   return { c: outline(c), ox: w / 2 + 1 + belly, oy: h / 2 + 1 };
 }
-function torsoSprite(w, h, T, num, belly = 0) {
-  const [c, g] = mk(w + belly, h); const P = painter(g);
+function torsoSprite(w, h, T, num, belly = 0, L = {}) {
+  const [c, g] = mk(w + belly + (L.bulge ? 3 : 0), h); const P = painter(g);
   // the gut sticks out the front (the side the face looks to)
   for (let y = 0; y < h; y++) for (let k = 1, b = bellyAt(y, h, belly); k <= b; k++) P(w - 1 + k, y, bellyAt(y + 1, h, belly) < k || (k === b && y > h * 0.55) ? T.dark : T.jersey);
   const jEnd = Math.round(h * 0.64), mid = (w - 1) / 2;
@@ -768,24 +825,32 @@ function torsoSprite(w, h, T, num, belly = 0) {
     P(x, y, col);
   }
   const s = String(num), tw = s.length * 4 - 1;
+  bodyExtras(g, w, h, jEnd, 0, L, false);
   if (jEnd >= 8) tiny(g, s, Math.round((w - tw) / 2), 2, T.num);
   return { c: outline(c), ox: w / 2 + 1, oy: h / 2 + 1 };
 }
-function legSprite(w, h, T, skin) {
+function legSprite(w, h, T, skin, L = {}) {
   const W = w + 3; const [c, g] = mk(W, h); const P = painter(g);
   const x0 = 1, shortsEnd = Math.max(2, Math.round(h * 0.2)), sockTop = h - 7, shoeTop = h - 4;
-  for (let y = 0; y < shoeTop; y++) for (let x = x0; x < x0 + w; x++) P(x, y, y < shortsEnd ? T.dark : y < sockTop ? skin : '#f4f4f4');
+  const jeans = L.outfit === 'jeans';
+  for (let y = 0; y < shoeTop; y++) for (let x = x0; x < x0 + w; x++) {
+    let col = y < shortsEnd ? T.dark : y < sockTop ? skin : '#f4f4f4';
+    if (jeans) col = x === x0 ? '#34569a' : '#2c4a86';   // jeans all the way down
+    else if (L.buff && col === skin && (x + y * 2) % 5 === 0 && y > shortsEnd + 1) col = shade(skin, -0.28);   // veins
+    P(x, y, col);
+  }
   for (let y = shoeTop; y < h; y++) for (let x = x0 - 1; x < x0 + w + 2; x++) {
     if (y === shoeTop && (x < x0 || x > x0 + w - 1)) continue;
-    P(x, y, y === h - 1 ? '#3b3b46' : '#22222a');
+    P(x, y, L.shoes === 'jordan' ? (y === h - 1 ? '#111111' : y === h - 3 ? '#d11a2a' : '#f4f4f4') : y === h - 1 ? '#3b3b46' : '#22222a');
   }
   return { c: outline(c), ox: x0 + w / 2 + 1, oy: 1 };
 }
-function armSprite(w, h, T, skin, sleeve) {
-  const [c, g] = mk(w + 1, h); const P = painter(g);
+function armSprite(w, h, T, skin, sleeve, L = {}) {
+  const [c, g] = mk(w + 2, h); const P = painter(g), vein = shade(skin, -0.32), hi = shade(skin, 0.15);
   for (let y = 0; y < h; y++) {
-    const hand = y >= h - 3;
-    for (let x = 0; x < (hand ? w + 1 : w); x++) P(x, y, y < 2 ? T.jersey : sleeve && y < Math.round(h * 0.35) ? sleeve : skin);
+    const hand = y >= h - 3, bi = L.buff && y >= 2 && y < Math.round(h * 0.6);   // a buff arm bulges at the bicep
+    for (let x = 0; x < (hand ? w + 1 : bi ? w + 1 : w); x++) P(x, y, y < 2 ? T.jersey : sleeve && y < Math.round(h * 0.35) ? sleeve : skin);
+    if (L.buff && !hand && y >= 3) { if ((y * 3) % 7 < 2) P(1 + y % 2, y, vein); if (y % 4 === 0) P(0, y, hi); }
   }
   return { c: outline(c), ox: w / 2 + 1, oy: 1 };
 }
@@ -1450,16 +1515,16 @@ class Player {
     this.M = M; this.h = my / M - 0.02; this.I = I;
   }
   makeSprites() {
-    const d = this.d, T = TEAM[this.team], L = this.look, px = v => Math.max(2, Math.round(v * PPM));
+    const d = this.d, L = this.look, T = L.outfit === 'lv' ? { ...TEAM[this.team], jersey: '#5b3a1e', dark: '#3f2610', light: '#7a5230', num: '#e8c15a' } : TEAM[this.team], px = v => Math.max(2, Math.round(v * PPM));
     const s = this.spr = {
       head: headSprite(px(d.headR * 2), L, T),
-      torso: torsoSprite(px(d.torsoW), px(d.torsoH), T, L.num, L.belly || 0),
-      leg: legSprite(px(d.legW), px(d.legLen), T, L.skin),
-      arm: armSprite(px(d.armW), px(d.armLen), T, L.skin, L.sleeve),
+      torso: torsoSprite(px(d.torsoW), px(d.torsoH), T, L.num, L.belly || 0, L),
+      leg: legSprite(px(d.legW), px(d.legLen), T, L.skin, L),
+      arm: armSprite(px(d.armW), px(d.armLen), T, L.skin, L.sleeve, L),
     };
     s.legB = { c: darken(s.leg.c, 0.28), ox: s.leg.ox, oy: s.leg.oy };
     s.headF = headFrontSprite(px(d.headR * 2), L, T);
-    s.torsoF = torsoFrontSprite(px(d.torsoW) + 4, px(d.torsoH), T, L.num, L.belly ? L.belly - 1 : 0);
+    s.torsoF = torsoFrontSprite(px(d.torsoW) + 4, px(d.torsoH), T, L.num, L.belly ? L.belly - 1 : 0, L);
   }
   center() { return this.body.getWorldPoint(this.tc); }
   get x() { return this.center().x; }
@@ -4742,14 +4807,14 @@ function migrateModes(m, ver) {
   return m.filter(id => MODES.some(x => x.id === id));
 }
 function loadSettings() {
-  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
+  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', memes: 'on', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
       mode: ['cpu', 'cvc', '4p', '6p'].includes(s.mode) ? s.mode : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       // games go to 11 by default since v10; a 5 saved before then was just the old default, so it moves up too
-      target: s.target === 5 && (s.ver || 0) < 10 ? 11 : [3, 5, 7, 11].includes(s.target) ? s.target : 11, winBy2: s.winBy2 === 'off' ? 'off' : 'on',
+      target: s.target === 5 && (s.ver || 0) < 10 ? 11 : [3, 5, 7, 11].includes(s.target) ? s.target : 11, winBy2: s.winBy2 === 'off' ? 'off' : 'on', memes: s.memes === 'off' ? 'off' : 'on',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
       ver: 10,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
@@ -4767,15 +4832,27 @@ function loadSettings() {
 function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
 
 // ---------------------------------------------------------------- game
-function makeLook(used) {
+// the MEME CHARACTERS (a setting): now and then one of the six players is one of these, one per game at most. Looks only,
+// nothing here touches the physics. THE TEACHER wears #13 when nobody has it yet.
+const MEME_LOOKS = [
+  { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
+  { skin: '#e2ad84', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
+  { skin: '#9a6441', hair: '#111111', style: 'short', outfit: 'lv', shoes: 'jordan' },
+  { skin: '#f3cfa9', hair: '#f1d57a', style: 'fluffy' },
+  { skin: '#e2ad84', hair: '#ff7a1a', style: 'icecream' },
+  { skin: '#c98b5e', hair: '#3a2312', style: 'curly' },
+  { skin: '#c98b5e', hair: '#111111', style: 'buzz', buff: true },
+  { skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f2e7a8' },
+  { skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
+];
+function makeLook(used, memes) {
   let num; do { num = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(num));
   used.add(num);
-  // now and then one of the players is THE TEACHER: brown swept hair, glasses, a beard, a maroon tee under the jersey,
-  // and #13 when nobody has it yet (one per game at most)
-  if (!used.has('teacher') && Math.random() < 0.066) {
-    used.add('teacher');
-    if (!used.has(13)) { used.delete(num); used.add(13); num = 13; }
-    return { skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, num };
+  if (memes && !used.has('meme') && Math.random() < 0.07) {
+    used.add('meme');
+    const m = pick(MEME_LOOKS);
+    if (m.teacher && !used.has(13)) { used.delete(num); used.add(13); num = 13; }
+    return { ...m, num };
   }
   return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk']), num };
@@ -4809,7 +4886,7 @@ class Game {
     this.setupRound(CLASSIC_ROUND, 2);
     this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')];
   }
-  newRoster() { const used = new Set(); this.roster = [0, 1, 2, 3, 4, 5].map(() => makeLook(used)); }
+  newRoster() { const used = new Set(), memes = !!this.settings && this.settings.memes !== 'off'; this.roster = [0, 1, 2, 3, 4, 5].map(() => makeLook(used, memes)); }
   hoopFor(team) { return this.hoops[team === 0 ? 1 : 0]; }
   meterOf(p) { return this.meters.find(m => m.player === p) || null; }
   clearMeter(p) { this.meters = this.meters.filter(m => m.player !== p); }
