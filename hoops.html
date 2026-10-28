@@ -173,7 +173,6 @@
       <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
       <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button type="button" id="opt-memes-on" data-v="on">ON</button><button type="button" id="opt-memes-off" data-v="off">OFF</button></div></div>
-      <div class="row"><span class="lbl">SEE THEM IN GAME</span><button type="button" id="meme-preview">PREVIEW</button></div>
       <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
       </div>
       <div class="card"><h3>CPU</h3>
@@ -204,7 +203,7 @@
 <div id="reelpanel" hidden>
   <div class="rp">
     <h2 id="reel-title">DUNK REEL</h2>
-    <div class="rp-tabs" role="tablist" aria-label="Reel kind"><button type="button" id="reel-tab-dunk" aria-pressed="true">DUNKS</button><button type="button" id="reel-tab-sound" aria-pressed="false">SOUNDS</button><button type="button" id="reel-tab-event" aria-pressed="false">EVENTS</button></div>
+    <div class="rp-tabs" role="tablist" aria-label="Reel kind"><button type="button" id="reel-tab-dunk" aria-pressed="true">DUNKS</button><button type="button" id="reel-tab-sound" aria-pressed="false">SOUNDS</button><button type="button" id="reel-tab-event" aria-pressed="false">EVENTS</button><button type="button" id="reel-tab-meme" aria-pressed="false">MEMES</button></div>
     <p class="note" id="reel-note">Click a dunk to watch it on loop. Switch a dunk off to keep it out of your games.</p>
     <div class="rp-actions"><button type="button" id="reel-all-play">PLAY ALL</button><button type="button" id="reel-all-on">ALL ON</button><button type="button" id="reel-all-off">ALL OFF</button><button type="button" id="reel-mute" hidden>SOUND: ON</button></div>
     <ol id="reel-list"></ol>
@@ -667,28 +666,67 @@ function darken(src, a) { const [c, g] = mk(src.width, src.height); g.drawImage(
 function painter(g) { return (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); }; }
 
 // the big hair of the meme characters: [x, y, radius] circles in head radii (+x is the way the face looks), painted behind the head
-const HAIR_PAD = { afro: 2, mohawk: 2, fluffy: 4, icecream: 5, curly: 3, frosted: 2 };
+const HAIR_PAD = { afro: 2, mohawk: 2, swoop: 3, curly: 3, frosted: 4 };
 function hairBlobs(style, front) {
   const b = [];
-  if (style === 'fluffy') b.push([-0.1, -0.85, 0.95], [-0.75, -0.35, 0.65], [0.6, -0.8, 0.65], [-0.45, -1.15, 0.6], [0.2, -1.2, 0.6], [0.85, -0.3, 0.45], [-0.95, 0.15, 0.5]);
-  if (style === 'icecream') b.push([0, -0.8, 0.8], [0, -1.12, 0.55], [0, -1.42, 0.3]);
-  if (style === 'curly') for (let a = 20; a <= 340; a += 28) { const t = a * Math.PI / 180; b.push([Math.sin(t) * 1.02, -Math.cos(t) * 0.95 - 0.1, 0.34]); }
-  return front || style === 'icecream' ? b : b.map(([x, y, r]) => [x - 0.15, y, r]);
+  if (style === 'swoop') b.push([-0.05, -0.8, 0.92]);   // the domed bowl on top
+  if (style === 'curly') {   // loose ringlets: an outer ring round the head and a few more across the top
+    for (let a = 20; a <= 340; a += 30) { const t = a * Math.PI / 180; b.push([Math.sin(t) * 1.0, -Math.cos(t) * 0.95 - 0.1, 0.38]); }
+    for (const x of [-0.5, 0, 0.5]) b.push([x, -0.95, 0.36]);
+  }
+  return front ? b : b.map(([x, y, r]) => [x - 0.15, y, r]);
 }
 function paintHair(P, look, cx, cy, r, W, H, front) {
-  if (!HAIR_PAD[look.style] || look.style === 'afro' || look.style === 'mohawk') return;
-  const hair = look.hair, blobs = hairBlobs(look.style, front);
-  for (const [bx, by, br] of blobs) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
-    if ((x + 0.5 - cx - bx * r) ** 2 + (y + 0.5 - cy - by * r) ** 2 <= (br * r) ** 2) P(x, y, hair);
-  const hi = shade(hair, 0.28), lo = shade(hair, -0.3);
-  if (look.style === 'icecream') for (const [k, by] of [[0, -0.8], [1, -1.12]]) {   // the swirl: a light band round each tier
-    const y = Math.round(cy + (by + 0.1) * r), w = Math.round(r * (k ? 0.45 : 0.75));
-    for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++) { P(x, y, hi); P(x, y + 2, lo); }
+  if (look.style !== 'swoop' && look.style !== 'curly') return;
+  const hair = look.hair, blobs = hairBlobs(look.style, front), hi = shade(hair, 0.3), lo = shade(hair, -0.38);
+  for (const [bx, by, br] of blobs) {
+    const px = cx + bx * r, py = cy + by * r, R = br * r;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const dx = x + 0.5 - px, dy = y + 0.5 - py, d = Math.hypot(dx, dy);
+      if (d > R) continue;
+      let col = hair;
+      if (look.style === 'curly') {   // each ringlet is its own little curl: a dark ring on its lower side, a dark swirl pixel, a light glint
+        if (d > R - 1.1 && dx + dy > 0) col = lo;
+        else if (Math.abs(dx - 0.8) < 0.6 && Math.abs(dy + 0.2) < 0.6) col = lo;
+        else if (dx < -R * 0.25 && dy < -R * 0.25 && d > R * 0.45) col = hi;
+      }
+      P(x, y, col);
+    }
   }
-  if (look.style === 'curly' || look.style === 'fluffy') blobs.forEach(([bx, by, br], i) => {   // a dark curl line / a light fluff dot in every blob
-    const x = Math.round(cx + bx * r), y = Math.round(cy + by * r);
-    if (look.style === 'curly') { P(x, y, lo); P(x + 1, y, lo); P(x + 1, y + 1, lo); } else P(x, y, hi);
-  });
+}
+// the hair after the face is drawn: the swoop's long fringe sweeping over the eye (side) or across the brow (front)
+function paintFringe(P, look, cx, cy, r, d, front) {
+  const hair = look.hair, hi = shade(hair, 0.3), lo = shade(hair, -0.3);
+  if (look.style === 'swoop') {
+    if (!front) {
+      const len = Math.round(r * 1.25);
+      for (let k = 0; k <= len; k++) {
+        const x = Math.round(cx + r * 0.05 + k), y = Math.round(cy - r * 0.6 + k * 0.42), th = k > len - 2 ? 1 : k > len - 4 ? 2 : 3;
+        for (let j = 0; j < th; j++) P(x, y + j, j === 0 ? hi : j === th - 1 && th > 1 ? lo : hair);
+      }
+      for (let k = 0; k < 3; k++) P(Math.round(cx + r * 0.05) + k * 2, Math.round(cy - r * 0.6 + k * 0.8), hair);
+    } else {
+      for (let x = Math.round(cx - r * 0.9); x <= Math.round(cx + r * 0.95); x++) {
+        const t = (x - (cx - r * 0.9)) / (r * 1.85), y = Math.round(cy - r * 0.55 + t * r * 0.5), th = t > 0.8 ? 2 : 3;
+        for (let j = 0; j < th; j++) P(x, y + j, j === 0 ? hi : j === th - 1 ? lo : hair);
+      }
+    }
+  }
+  if (look.tip) {   // frosted tips: a crown of spikes, dark at the root and bleached at the points
+    let n = 0;
+    for (let x = Math.round(cx - r * 0.9); x <= Math.round(cx + r * 0.9) - 1; x += 2, n++) {
+      let y = 0; while (y < cy + r && !(P.inHead && P.inHead(x, y))) y++;
+      const hh = 3 + (n % 2), lean = (n % 3) - 1;
+      for (let j = 1; j <= hh; j++) { const col = j > hh - 2 ? look.tip : hair, xx = x + (j > 2 ? lean : 0); P(xx, y - j, col); if (j < hh) P(xx + 1, y - j, col); }
+    }
+    for (let k = 0; k < 6; k++) P(Math.round(cx - r * 0.55 + k * r * 0.22), Math.round(cy - r * 0.62 + (k % 2)), look.tip);   // bleached streaks through the top
+  }
+}
+// one pixel of a head's hair: curls get a pattern of dark curl lines and glints, frosted hair its bleached streaks
+function hairAt(look, x, y, nx, ny) {
+  if (look.style === 'curly') { const k = (x * 3 + y * 5) % 8; return k === 0 ? shade(look.hair, -0.38) : k === 4 ? shade(look.hair, 0.3) : look.hair; }
+  if (look.tip && ny < -0.6 && (x + y) % 3 === 0) return look.tip;
+  return look.hair;
 }
 function headSprite(d, look, T) {
   const pad = HAIR_PAD[look.style] || 0;
@@ -711,11 +749,12 @@ function headSprite(d, look, T) {
       case 'mohawk': h = ny < -0.65 && nx > -0.5 && nx < 0.35; break;
       case 'teacher': h = ny < -0.5 + 0.12 * nx || (nx < -0.35 && ny < 0.05); break;
       case 'bigforehead': h = ny < -0.8 || (nx < -0.4 && ny < -0.1); break;
-      case 'fluffy': case 'icecream': h = ny < -0.4 || (nx < -0.35 && ny < 0.1); break;
-      case 'curly': h = ny < -0.42 || (nx < -0.3 && ny < 0.2); break;
+      case 'swoop': h = ny < -0.32 || (nx < -0.2 && ny < 0.0); break;
+      case 'curly': h = ny < -0.35 || (nx < -0.3 && ny < 0.2); break;
       case 'frosted': h = ny < -0.5 || (nx < -0.35 && ny < 0.05); break;
     }
-    P(x, y, h ? (look.tip && ny < -0.72 && x % 2 === 0 ? look.tip : hair) : look.beard && ny > 0.2 && nx > -0.55 ? look.beard : skin);
+    P(x, y, h ? hairAt(look, x, y, nx, ny) : look.beard && ny > 0.2 && nx > -0.55 ? look.beard : skin);
+    if (look.style === 'swoop' && !h && nx < -0.2 && ny < 0.3 && ny >= 0) P(x, y, shade(skin, -0.2));   // the faded side
     if (look.style === 'bigforehead' && !h && ny < -0.45 && ny > -0.6 && nx > 0.05 && nx < 0.35) P(x, y, shade(skin, 0.22));   // the shine on it
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
@@ -731,7 +770,7 @@ function headSprite(d, look, T) {
     for (let y = ey - 1; y <= ey + 2; y++) { if (inHead(ex - 2, y)) P(ex - 2, y, INK); if (inHead(ex + 2, y)) P(ex + 2, y, INK); }
     for (let x = Math.round(cx - r * 0.3); x < ex - 2; x++) P(x, ey, INK);
   }
-  if (look.tip) for (let x = 1; x < W - 1; x += 3) { let y = 0; while (y < H && !inHead(x, y)) y++; if (y < H) { P(x, y - 1, look.tip); P(x, y - 2, look.tip); } }
+  P.inHead = inHead; paintFringe(P, look, cx, cy, r, d, false);
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 function headFrontSprite(d, look, T) {
@@ -755,11 +794,11 @@ function headFrontSprite(d, look, T) {
       case 'mohawk': h = ny < -0.65 && Math.abs(nx) < 0.25; break;
       case 'teacher': h = ny < -0.48 + 0.1 * nx || (Math.abs(nx) > 0.75 && ny < -0.1); break;
       case 'bigforehead': h = ny < -0.8 || (Math.abs(nx) > 0.8 && ny < -0.1); break;
-      case 'fluffy': case 'icecream': h = ny < -0.4 || (Math.abs(nx) > 0.75 && ny < 0.1); break;
-      case 'curly': h = ny < -0.42 || (Math.abs(nx) > 0.75 && ny < 0.2); break;
+      case 'swoop': h = ny < -0.32; break;
+      case 'curly': h = ny < -0.35 || (Math.abs(nx) > 0.75 && ny < 0.2); break;
       case 'frosted': h = ny < -0.5 || (Math.abs(nx) > 0.75 && ny < -0.1); break;
     }
-    P(x, y, h ? (look.tip && ny < -0.72 && x % 2 === 0 ? look.tip : hair) : look.beard && ny > 0.2 ? look.beard : skin);
+    P(x, y, h ? hairAt(look, x, y, nx, ny) : look.beard && ny > 0.2 ? look.beard : skin);
   }
   if (look.style === 'headband') { const y = Math.round(cy - r * 0.45); for (let x = 0; x < W; x++) if (inHead(x, y)) P(x, y, T.jersey); }
   if (look.style === 'mohawk') for (let x = Math.round(cx - 1); x < Math.round(cx + 1); x++) for (let y = 0; y < pad + 1; y++) P(x, y, hair);
@@ -772,7 +811,7 @@ function headFrontSprite(d, look, T) {
     P(ex - 1, ey, INK); P(ex - 1, ey + 1, INK); P(ex + 1, ey, INK); P(ex + 1, ey + 1, INK);
   }
   if (look.glasses) for (let x = el + 2; x < er - 1; x++) P(x, ey, INK);
-  if (look.tip) for (let x = 1; x < W - 1; x += 3) { let y = 0; while (y < H && !inHead(x, y)) y++; if (y < H) { P(x, y - 1, look.tip); P(x, y - 2, look.tip); } }
+  P.inHead = inHead; paintFringe(P, look, cx, cy, r, d, true);
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
 // a beer belly: how many pixels the gut pokes out at row y
@@ -4837,15 +4876,16 @@ function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringi
 // nothing here touches the physics. Craig always wears #13.
 const MEME_LOOKS = [
   { name: 'Craig', skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
-  { name: 'Big Forehead Frank', skin: '#e2ad84', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
-  { name: 'Louis Jordan', skin: '#9a6441', hair: '#111111', style: 'short', outfit: 'lv', shoes: 'jordan' },
-  { name: 'Fluffy Fred', skin: '#f3cfa9', hair: '#f1d57a', style: 'fluffy' },
-  { name: 'Cone Head Carl', skin: '#e2ad84', hair: '#ff7a1a', style: 'icecream' },
-  { name: 'Curly Kev', skin: '#c98b5e', hair: '#3a2312', style: 'curly' },
-  { name: 'Vein Vinny', skin: '#c98b5e', hair: '#111111', style: 'buzz', buff: true },
-  { name: 'Frosty Tips Tommy', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f2e7a8' },
+  { name: 'Big Forehead Frank', skin: '#fde8d8', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
+  { name: 'Louis Jordan', skin: '#e8b88f', hair: '#4a2c17', style: 'short', outfit: 'lv', shoes: 'jordan' },
+  { name: 'Swoop Brad', skin: '#f3cfa9', hair: '#f1d57a', style: 'swoop' },
+  { name: 'Swoop Ollie', skin: '#f3cfa9', hair: '#ff7a1a', style: 'swoop' },
+  { name: 'Curly Kev', skin: '#e8b88f', hair: '#3a2312', style: 'curly' },
+  { name: 'Vein Vinny', skin: '#f6d9bf', hair: '#4a2c17', style: 'buzz', buff: true },
+  { name: 'Frosty Tips Tommy', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f8f0c4' },
   { name: 'Big Mike', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
 ];
+const MEME_LIST = MEME_LOOKS.map((m, i) => ({ id: 'meme' + i, name: m.name.toUpperCase(), when: 'MEME CHARACTER' }));
 function makeLook(used) {
   let num; do { num = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(num));
   used.add(num);
@@ -5136,7 +5176,8 @@ class Game {
     buildReel(kind);
     this.nextShow();
   }
-  showList() { return this.show.kind === 'sound' ? SOUND_LIST : this.show.kind === 'event' ? EVENT_LIST : REEL; }
+  showList() { return this.show.kind === 'sound' ? SOUND_LIST : this.show.kind === 'event' ? EVENT_LIST : this.show.kind === 'meme' ? MEME_LIST : REEL; }
+  showDunkId() { return this.show.kind === 'meme' ? 'hammer' : REEL[this.show.i].id; }
   showPick(i) {
     const n = this.showList().length;
     this.show.mode = 'one'; this.show.i = (i + n) % n; this.sfx.stopClip();
@@ -5156,7 +5197,11 @@ class Game {
     this.replay = null; this.state = 'showcase';
     if (this.show.kind === 'sound') { this.setupSoundShow(); return; }
     if (this.show.kind === 'event') { this.setupEventShow(); return; }
-    const Sh = this.show, id = REEL[Sh.i].id;
+    const Sh = this.show, id = this.showDunkId();
+    if (Sh.kind === 'meme') {   // the featured meme dunks; five others fill the court
+      const others = MEME_LOOKS.filter((_, k) => k !== Sh.i).sort(() => Math.random() - 0.5), nums = [3, 8, 21, 44, 5, 10];
+      this.roster = [others[0], MEME_LOOKS[Sh.i], others[1], others[2], others[3], others[4]].map((m, k) => ({ ...m, num: m.teacher ? 13 : nums[k] }));
+    }
     Sh.t = 0; Sh.step = 0; this.forceDunk = null; this.forceFx = null; Sh.jumped = false; Sh.air = false;
     this.held = [false, false];
     this.setupRound(CLASSIC_ROUND, 2);
@@ -5263,7 +5308,7 @@ class Game {
   updateShow(dt) {
     if (this.show.kind === 'sound') { this.updateSoundShow(dt); return; }
     if (this.show.kind === 'event') { this.updateEventShow(dt); return; }
-    const Sh = this.show, id = REEL[Sh.i].id, red = this.players.filter(p => p.team === 0), b = this.ball;
+    const Sh = this.show, id = this.showDunkId(), red = this.players.filter(p => p.team === 0), b = this.ball;
     Sh.t += dt;
     if (id === 'oop' || id === 'tip') {
       // a lob (or a missed shot off the rim) that homes onto the jumper's raised hand
@@ -6753,7 +6798,7 @@ function drawScoreboard(G) {
 }
 function drawHUD(G) {
   if (G.state === 'showcase' || (G.replay && G.replay.back === 'showcase')) {
-    const Sh = G.show, list = G.showList(), e = list[Sh.i], cx = 222, snd = Sh.kind === 'sound' || Sh.kind === 'event';
+    const Sh = G.show, list = G.showList(), e = list[Sh.i], cx = 222, snd = Sh.kind === 'sound' || Sh.kind === 'event' || Sh.kind === 'meme';
     txt(`${Sh.mode === 'all' ? 'PLAYING ALL' : 'ON LOOP'}  ${Sh.i + 1} / ${list.length}`, AX(cx), AY(11), 8, CREAM, { ow: 0.8 });
     txt(e.name, AX(cx), AY(25), e.name.length > 16 ? 8 : 16, ORANGE, { bold: true });
     if (snd) txt(e.when, AX(cx), AY(37), 8, '#b9c3dd', { ow: 0.7 });
@@ -7091,7 +7136,6 @@ menuEl.addEventListener('click', e => {
     if (v !== 'off') draft.modes.push(id);
     if (v === 'always') draft.always.push(id);
   }
-  else if (b.id === 'meme-preview') { draft.memes = 'on'; closeMenu(); G.toTitle(); return; }   // closes settings and drops you on a fresh CPU match with the memes
   else if (b.dataset.v) { const key = b.parentElement.dataset.key; draft[key] = key === 'target' || key === 'teamSize' ? Number(b.dataset.v) : b.dataset.v; }
   syncMenu();
 });
@@ -7101,6 +7145,7 @@ const reelEl = document.getElementById('reelpanel'), reelList = document.getElem
 const REEL_TEXT = {
   dunk: ['DUNK REEL', 'Click a dunk to watch it on loop. Switch a dunk off to keep it out of your games. Press TAB or click SOUNDS to switch reels.'],
   event: ['EVENTS', 'The rare things that can happen on some courts (about two in a game to 11 on that court). Click one to watch it on loop. Switch one off to keep it out of your games. Press TAB to switch reels.'],
+  meme: ['MEME CHARACTERS', 'Click a meme character to watch them dunk. Turn them on or off for games in SETTINGS. Press TAB to switch reels.'],
   sound: ['SOUNDS', 'Click a sound to hear it in action. Switch one off to keep it out of your games. Every green plays one of the green sounds you leave on. A green that wins the game plays GREEN FN instead. M mutes everything. Press TAB or click DUNKS to switch reels.'],
 };
 function buildReel(kind) {
@@ -7110,8 +7155,10 @@ function buildReel(kind) {
   document.getElementById('reel-tab-dunk').setAttribute('aria-pressed', String(kind === 'dunk'));
   document.getElementById('reel-tab-event').setAttribute('aria-pressed', String(kind === 'event'));
   document.getElementById('reel-tab-sound').setAttribute('aria-pressed', String(kind === 'sound'));
+  document.getElementById('reel-tab-meme').setAttribute('aria-pressed', String(kind === 'meme'));
+  for (const id of ['reel-all-on', 'reel-all-off']) document.getElementById(id).hidden = kind === 'meme';
   reelList.textContent = '';
-  (kind === 'sound' ? SOUND_LIST : kind === 'event' ? EVENT_LIST : REEL).forEach((e, i) => {
+  (kind === 'sound' ? SOUND_LIST : kind === 'event' ? EVENT_LIST : kind === 'meme' ? MEME_LIST : REEL).forEach((e, i) => {
     const li = document.createElement('li');
     const w = document.createElement('button'); w.type = 'button'; w.className = 'watch'; w.id = 'reel-watch-' + e.id; w.dataset.i = i; w.textContent = e.name;
     if (e.isNew) { const n = document.createElement('span'); n.className = 'new'; n.textContent = 'NEW'; w.appendChild(n); }
@@ -7120,14 +7167,14 @@ function buildReel(kind) {
     li.append(w, t); reelList.appendChild(li);
   });
 }
-function entryOn(id) { return G.show.kind === 'sound' ? !G.settings.soundsOff.includes(id) : G.show.kind === 'event' ? G.eventOn(id) : G.dunkOn(id); }
+function entryOn(id) { return G.show.kind === 'meme' ? true : G.show.kind === 'sound' ? !G.settings.soundsOff.includes(id) : G.show.kind === 'event' ? G.eventOn(id) : G.dunkOn(id); }
 function syncReel(scroll) {
   if (!G.show) return;
   const list = G.showList();
   reelList.querySelectorAll('li').forEach((li, i) => {
     const id = list[i].id, on = entryOn(id), w = li.querySelector('.watch'), t = li.querySelector('.tog');
     w.setAttribute('aria-current', String(i === G.show.i)); li.classList.toggle('off', !on);
-    t.setAttribute('aria-pressed', String(on)); t.textContent = on ? 'ON' : 'OFF';
+    t.hidden = G.show.kind === 'meme'; t.setAttribute('aria-pressed', String(on)); t.textContent = on ? 'ON' : 'OFF';
     if (scroll && i === G.show.i) w.scrollIntoView({ block: 'nearest' });
   });
   document.getElementById('reel-all-play').setAttribute('aria-pressed', String(G.show.mode === 'all'));
@@ -7155,6 +7202,7 @@ reelEl.addEventListener('click', e => {
   else if (b.id === 'reel-tab-dunk') G.switchShowKind('dunk');
   else if (b.id === 'reel-tab-sound') G.switchShowKind('sound');
   else if (b.id === 'reel-tab-event') G.switchShowKind('event');
+  else if (b.id === 'reel-tab-meme') G.switchShowKind('meme');
   else if (b.id === 'reel-all-play') G.showAll();
   else if (b.id === 'reel-all-on') setAllEntries(true);
   else if (b.id === 'reel-all-off') setAllEntries(false);
@@ -7357,7 +7405,7 @@ window.addEventListener('keydown', e => {
   }
   if (G.state === 'showcase') {
     if (code === 'Escape' || code === 'KeyQ') G.toTitle();
-    else if (code === 'Tab') { e.preventDefault(); G.switchShowKind({ dunk: 'sound', sound: 'event', event: 'dunk' }[G.show.kind]); }
+    else if (code === 'Tab') { e.preventDefault(); G.switchShowKind({ dunk: 'sound', sound: 'event', event: 'meme', meme: 'dunk' }[G.show.kind]); }
     else if (code === 'ArrowUp' || code === 'KeyW') G.showPick(G.show.i - 1);
     else if (code === 'ArrowDown' || code === 'KeyS') G.showPick(G.show.i + 1);
     else if (code === 'Enter' || code === 'Space') { toggleEntry(G.showList()[G.show.i].id); }
