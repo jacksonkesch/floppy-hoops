@@ -286,9 +286,9 @@ const OBST = {
   twoball:  { name: 'TWO BALLS' },
 };
 const WALL_H = 2.2;
-// BOOST PADS (Tokyo): a strip on each side of center; step on one and you're flung up and at the nearer hoop,
-// coming down about a metre in front of the rim (so they help a fast break and a defender getting back alike)
-const BOOST_X = 3, BOOST_W = 0.9;
+// BOOST PADS (Tokyo): a strip on each side of center. Step on one and you're flung toward the ball, landing about
+// where it is; carrying it yourself, you're flung at the hoop you attack, coming down a metre in front of the rim
+const BOOST_X = 3, BOOST_W = 1.4;
 // BOUNCY HOUSE: the lean sweeps side to side at a steady beat instead of rocking, so you can read where a
 // bounce will send you; a press a moment before landing still counts
 const SPRING_AIM = 0.4, SPRING_W = 3.6, SPRING_BUF = 0.2;
@@ -1448,12 +1448,13 @@ class Player {
     const g = this.game, fx = (this.footPoint(0).x + this.footPoint(1).x) / 2;
     for (const q of g.boosts) {
       if (Math.abs(fx - q.x) > BOOST_W / 2 || q.cd > 0) continue;
-      const h = g.hoops.find(o => o.side === q.side), vy = g.cfg.jumpV * 1.2, T = 2 * vy / g.cfg.gravity * 0.9;
-      const vx = q.side * clamp((Math.abs(h.cx - fx) - 1.1) / T, 1.5, 7);
+      const mine = this.holding, s = mine ? this.dir : g.boostDir(q), vy = g.cfg.jumpV * 1.2, T = 2 * vy / g.cfg.gravity * 0.9;
+      const to = mine ? g.hoopFor(this.team).cx - this.dir * 1.1 : g.boostBall().body.getPosition().x;
+      const vx = s * clamp(Math.abs(to - fx) / T, 1.5, 7);
       for (const b of this.parts) b.setLinearVelocity({ x: vx, y: vy });
       this.body.setAngularVelocity(-this.angle() * 3);
-      this.padCD = 0.8; this.jumpCD = 0.25; this.upT = 1; q.lit = 1; q.cd = 1.2; g.sfx.boost(); g.note('pad', this);
-      for (let i = 0; i < 10; i++) g.addPart(fx + rand(-0.4, 0.4), 0.05, -q.side * rand(0.5, 2), rand(0.5, 2.5), 6, rand(0.2, 0.45), pick(['#39e6ff', '#ff4fa3', '#ffffff']), 1);
+      this.padCD = 0.8; this.jumpCD = 0.25; this.upT = 1; q.lit = 1; q.cd = 2; g.sfx.boost(); g.note('pad', this);
+      for (let i = 0; i < 10; i++) g.addPart(fx + rand(-0.4, 0.4), 0.05, -s * rand(0.5, 2), rand(0.5, 2.5), 6, rand(0.2, 0.45), pick(['#39e6ff', '#ff4fa3', '#ffffff']), 1);
       return;
     }
   }
@@ -4710,7 +4711,7 @@ class Game {
     this.spdK = 1; this.spdTo = 1; this.spdT = rand(1.5, 2.5);
     this.wallHit = [0, 0, 0];
     this.pads = this.cfg.obst.tramp ? [{ x: -3.3, w: 1.4, squash: 0 }, { x: 3.3, w: 1.4, squash: 0 }] : null;
-    this.boosts = court.boost ? [{ x: -BOOST_X, side: -1, lit: 0, cd: 0 }, { x: BOOST_X, side: 1, lit: 0, cd: 0 }] : null;
+    this.boosts = court.boost ? [{ x: -BOOST_X, side: -1, lit: 0, cd: 0.8 }, { x: BOOST_X, side: 1, lit: 0, cd: 0.8 }] : null;
     this.meters = []; this.parts.length = 0; this.pops.length = 0; this.rec = []; this.recCount = 0; this.forceFx = null;
     this.roundT = 0; this.cam.watch = null; this.cam.punch = null; this.cam.z = 1;
     if (!this.isShadow) this.bg = ownDice(courtImage)(court.key);
@@ -5393,6 +5394,9 @@ class Game {
   }
   // HOOP COLLAPSE gets the glass-break treatment: slow motion all the way down with the camera riding the pole,
   // then a hit of extra-slow motion, a white pop and a big dust cloud when it slams into the floor
+  // which way a boost pad points: at the ball, or with a carrier, the way the carrier attacks
+  boostBall() { return this.balls.find(b => b.holder) || this.balls[0]; }
+  boostDir(q) { const b = this.boostBall(); return b.holder ? b.holder.dir : Math.sign(b.body.getPosition().x - q.x) || q.side; }
   onHoopTip(h) {
     this.slowmo(0.35, 2); this.addShake(5); this.excite = 1;
     if (!REDUCED) this.cam.punch = { hoop: h, z: 1.55, t: 3 };
@@ -6050,14 +6054,14 @@ function drawLow(G, fr) {
     R(x0 - 2, 146 + sq, w + 4, 3, INK); R(x0 - 1, 146 + sq, w + 2, 2, '#2f6bd8'); R(x0 - 1, 146 + sq, w + 2, 1, '#86b2ff');
     R(x0 + 1, 148 + sq, w - 2, 1, '#1a1c24');
   }
-  if (G.boosts) for (const q of G.boosts) {   // neon boost strips, chevrons racing toward the hoop they fling you at
-    const x0 = Math.round(ax(q.x - BOOST_W / 2)), w = Math.round(BOOST_W * PPM), on = q.lit > 0.3, pulse = 0.5 + 0.5 * Math.sin(t * 6);
+  if (G.boosts) for (const q of G.boosts) {   // neon boost strips, chevrons racing the way they fling you
+    const sd = G.boostDir(q), x0 = Math.round(ax(q.x - BOOST_W / 2)), w = Math.round(BOOST_W * PPM), on = q.lit > 0.3, pulse = 0.5 + 0.5 * Math.sin(t * 6);
     for (let k = 1; k <= 6; k++) R(x0, 147 - k, w, 1, `rgba(57,230,255,${((0.05 + 0.05 * pulse + 0.5 * q.lit) * (1 - k / 7)).toFixed(3)})`);
     R(x0 - 1, 146, w + 2, 5, INK); R(x0, 147, w, 3, on ? '#ffffff' : '#2a1050'); R(x0, 146, w, 1, on ? '#ffffff' : '#39e6ff');
     const ph = Math.floor(t * 12) % 5;
     for (let k = -5; k < w + 5; k += 5) {
-      const cx = q.side > 0 ? x0 + k + ph : x0 + w - 1 - k - ph, col = on ? '#39e6ff' : '#ff4fa3';
-      for (const [dx, dy] of [[0, 147], [q.side, 148], [0, 149]]) if (cx + dx >= x0 && cx + dx < x0 + w) P1(g, cx + dx, dy, col);
+      const cx = sd > 0 ? x0 + k + ph : x0 + w - 1 - k - ph, col = on ? '#39e6ff' : '#ff4fa3';
+      for (const [dx, dy] of [[0, 147], [sd, 148], [0, 149]]) if (cx + dx >= x0 && cx + dx < x0 + w) P1(g, cx + dx, dy, col);
     }
   }
   if (G.cfg.court.springy && !fr) for (const p of G.players) {   // an arrow on the floor under each player: which way, and how far, a bounce sends you
@@ -6067,16 +6071,9 @@ function drawLow(G, fr) {
     for (let k = 0; k <= Math.abs(len); k += 2) R(x0 + sg * k, 152, 1, 1, col);
     const tx = x0 + len; R(tx, 151, 1, 3, col); R(tx - sg, 150, 1, 5, col);
   }
-  if (G.cfg.bouncy) {   // bouncy-castle cushions down both sides and along the top, bulging and lit when hit
-    for (let i = 0; i < 2; i++) {
-      const k = G.wallHit[i], w = 4 + Math.round(k * 3), x0 = i ? ART_W - w : 0, top = 8;
-      R(x0 - (i ? 1 : 0), top - 1, w + 1, 151 - top, INK);
-      R(x0 + (i ? 1 : 0), top, w - 1, 150 - top, k > 0.3 ? '#ffd23f' : '#8a3fb8');
-      for (let y = top + 4; y < 150; y += 10) R(x0 + (i ? 1 : 0), y, w - 1, 3, k > 0.3 ? '#fff3b0' : '#c07ae8');
-    }
-    const k = G.wallHit[2], h = 2 + Math.round(k * 2);
-    R(0, 0, ART_W, h + 1, INK); R(0, 0, ART_W, h, k > 0.3 ? '#ffd23f' : '#8a3fb8');
-    for (let x = 6; x < ART_W; x += 14) R(x, 0, 5, h, k > 0.3 ? '#fff3b0' : '#c07ae8');
+  if (G.cfg.bouncy) {   // the padded walls and ceiling look like the rest of the house; they just glow where the ball hits
+    for (let i = 0; i < 2; i++) { const k = G.wallHit[i]; if (k > 0.05) R(i ? ART_W - 6 : 0, 8, 6, 142, `rgba(255,243,176,${(0.6 * k).toFixed(2)})`); }
+    if (G.wallHit[2] > 0.05) R(0, 0, ART_W, 5, `rgba(255,243,176,${(0.6 * G.wallHit[2]).toFixed(2)})`);
   }
   if (G.cfg.obst.wall) {
     const x0 = Math.round(ax(-0.15)), top = Math.round(ay(WALL_H));
