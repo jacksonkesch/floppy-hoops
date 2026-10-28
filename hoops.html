@@ -736,10 +736,11 @@ function headFrontSprite(d, look, T) {
   if (look.glasses) for (let x = el + 2; x < er - 1; x++) P(x, ey, INK);
   return { c: outline(c), ox: cx + 1, oy: cy + 1 };
 }
-// a beer belly: how many pixels the gut pokes out at row y, swelling below the chest and hanging over the waistband
+// a beer belly: how many pixels the gut pokes out at row y
 function bellyAt(y, h, belly) {
-  const y0 = Math.round(h * 0.32), y1 = Math.round(h * 0.64) + 3;
-  return belly && y > y0 && y < y1 ? Math.round(belly * Math.sin(Math.PI * Math.pow((y - y0) / (y1 - y0), 1.6))) : 0;
+  // half an ellipse, widest just above the waistband: a long gentle slope down from the chest, a short round tuck under
+  const yc = Math.round(h * 0.64) - 1, up = yc - Math.round(h * 0.18), down = 4, u = (y - yc) / (y < yc ? up : down);
+  return belly && Math.abs(u) < 1 ? Math.round(belly * Math.sqrt(1 - u * u)) : 0;
 }
 function torsoFrontSprite(w, h, T, num, belly = 0) {
   const [c, g] = mk(w + 2 * belly, h); const P0 = painter(g), P = (x, y, col) => P0(x + belly, y, col);
