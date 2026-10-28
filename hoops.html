@@ -33,10 +33,6 @@
   .new { margin-left: 6px; color: #43f07a; font-size: 10px; }
   #menu button[aria-pressed="true"] .new { color: #0e5a25; }
   .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
-  #meme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 4px 0 10px; }
-  #meme-grid[hidden] { display: none; }
-  #meme-grid .mc { background: #20263a; border: 2px solid #141019; padding: 6px 4px; text-align: center; font-size: 10px; color: #fff6e0; }
-  #meme-grid canvas { display: block; margin: 0 auto 4px; image-rendering: pixelated; }
   #menu #done { background: #43f07a; color: #141019; font-size: 20px; padding: 10px 28px; }
   .hint { font-size: 11px; color: #7d88a8; }
   /* settings: a header with tabs, one scrolling page at a time, DONE pinned at the bottom */
@@ -177,8 +173,7 @@
       <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
       <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button type="button" id="opt-memes-on" data-v="on">ON</button><button type="button" id="opt-memes-off" data-v="off">OFF</button></div></div>
-      <div class="row"><span class="lbl">MEET THE MEMES</span><button type="button" id="meme-preview">PREVIEW</button></div>
-      <div id="meme-grid" hidden></div>
+      <div class="row"><span class="lbl">SEE THEM IN GAME</span><button type="button" id="meme-preview">PREVIEW</button></div>
       <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
       </div>
       <div class="card"><h3>CPU</h3>
@@ -4838,8 +4833,8 @@ function loadSettings() {
 function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
 
 // ---------------------------------------------------------------- game
-// the MEME CHARACTERS (a setting): now and then one of the six players is one of these, one per game at most. Looks only,
-// nothing here touches the physics. THE TEACHER wears #13 when nobody has it yet.
+// the MEME CHARACTERS (a setting): when it's on, all six players are drawn from these (nine, so a different six each game). Looks only,
+// nothing here touches the physics. Craig always wears #13.
 const MEME_LOOKS = [
   { name: 'Craig', skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
   { name: 'Big Forehead Frank', skin: '#e2ad84', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
@@ -4851,24 +4846,9 @@ const MEME_LOOKS = [
   { name: 'Frosty Tips Tommy', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f2e7a8' },
   { name: 'Big Mike', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
 ];
-// draws a meme character standing front-on on a canvas, for the menu preview
-function memePreview(m) {
-  const T = m.outfit === 'lv' ? { ...TEAM[0], jersey: '#5b3a1e', dark: '#3f2610', light: '#7a5230', num: '#e8c15a' } : TEAM[0], L = { ...m, num: 7 };
-  const h = headFrontSprite(16, L, T), t = torsoFrontSprite(16, 18, T, 7, L.belly ? L.belly - 1 : 0, L), lg = legSprite(5, 14, T, L.skin, L);
-  const c = document.createElement('canvas'); c.width = 48; c.height = 56; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
-  g.drawImage(lg.c, 14, 36); g.drawImage(lg.c, 24, 36); g.drawImage(t.c, 12, 18); g.drawImage(h.c, 16 - 2, 2);
-  c.style.width = '96px'; c.style.height = '112px';
-  return c;
-}
-function makeLook(used, memes) {
+function makeLook(used) {
   let num; do { num = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(num));
   used.add(num);
-  if (memes && !used.has('meme') && Math.random() < 0.07) {
-    used.add('meme');
-    const m = pick(MEME_LOOKS);
-    if (m.teacher && !used.has(13)) { used.delete(num); used.add(13); num = 13; }
-    return { ...m, num };
-  }
   return { skin: pick(['#f3cfa9', '#e2ad84', '#c98b5e', '#9a6441', '#6b4228']), hair: pick(['#231812', '#4a2c17', '#8a5a2b', '#d9b560', '#111111']),
     style: pick(['short', 'short', 'buzz', 'afro', 'bald', 'headband', 'mohawk']), num };
 }
@@ -4901,7 +4881,11 @@ class Game {
     this.setupRound(CLASSIC_ROUND, 2);
     this.cpus = [makeCPU(this, 0, 'hard'), makeCPU(this, 1, 'hard')];
   }
-  newRoster() { const used = new Set(), memes = !!this.settings && this.settings.memes !== 'off'; this.roster = [0, 1, 2, 3, 4, 5].map(() => makeLook(used, memes)); }
+  newRoster() { const used = new Set(), memes = !!this.settings && this.settings.memes !== 'off'; if (!memes) { this.roster = [0, 1, 2, 3, 4, 5].map(() => makeLook(used)); return; }
+    const ms = MEME_LOOKS.slice().sort(() => Math.random() - 0.5).slice(0, 6);
+    used.add(13);
+    this.roster = ms.map(m => { if (m.teacher) return { ...m, num: 13 }; let n; do { n = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(n)); used.add(n); return { ...m, num: n }; });
+  }
   hoopFor(team) { return this.hoops[team === 0 ? 1 : 0]; }
   meterOf(p) { return this.meters.find(m => m.player === p) || null; }
   clearMeter(p) { this.meters = this.meters.filter(m => m.player !== p); }
@@ -7107,11 +7091,7 @@ menuEl.addEventListener('click', e => {
     if (v !== 'off') draft.modes.push(id);
     if (v === 'always') draft.always.push(id);
   }
-  else if (b.id === 'meme-preview') {
-    const gr = document.getElementById('meme-grid');
-    if (!gr.childElementCount) for (const m of MEME_LOOKS) { const d = document.createElement('div'); d.className = 'mc'; d.appendChild(memePreview(m)); d.appendChild(document.createTextNode(m.name.toUpperCase())); gr.appendChild(d); }
-    gr.hidden = !gr.hidden; b.setAttribute('aria-pressed', String(!gr.hidden));
-  }
+  else if (b.id === 'meme-preview') { draft.memes = 'on'; closeMenu(); G.toTitle(); return; }   // closes settings and drops you on a fresh CPU match with the memes
   else if (b.dataset.v) { const key = b.parentElement.dataset.key; draft[key] = key === 'target' || key === 'teamSize' ? Number(b.dataset.v) : b.dataset.v; }
   syncMenu();
 });
