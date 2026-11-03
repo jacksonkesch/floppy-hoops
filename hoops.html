@@ -630,6 +630,7 @@ const SK = {
   ring(x, y, r, w, col, a = 1, ry = r, ang = 0, a0 = 0, a1 = 7) { const k = PPM * S; ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, w * k); ctx.beginPath(); ctx.ellipse(SX(x), SY(y), Math.max(0.5, r * k), Math.max(0.5, ry * k), -ang, a0, a1); ctx.stroke(); ctx.globalAlpha = 1; },
   line(pts, w, col, a = 1) { if (pts.length < 2) return; ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, w * PPM * S); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(SX(q.x), SY(q.y)) : ctx.moveTo(SX(q.x), SY(q.y))); ctx.stroke(); ctx.globalAlpha = 1; },
   poly(pts, col, a = 1) { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(SX(q.x), SY(q.y)) : ctx.moveTo(SX(q.x), SY(q.y))); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; },
+  oval(x, y, rx, ry, col, a = 1) { const k = PPM * S; ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(SX(x), SY(y), Math.max(0.5, rx * k), Math.max(0.5, ry * k), 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1; },
   text(str, x, y, size, col, a = 1) { ctx.globalAlpha = a; txt(str, SX(x), SY(y), size, col); ctx.globalAlpha = 1; },
   star(x, y, r, col, a = 1) { SK.poly([{ x, y: y + r }, { x: x + r * 0.22, y: y + r * 0.22 }, { x: x + r, y }, { x: x + r * 0.22, y: y - r * 0.22 }, { x, y: y - r }, { x: x - r * 0.22, y: y - r * 0.22 }, { x: x - r, y }, { x: x - r * 0.22, y: y + r * 0.22 }], col, a); },
 };
@@ -649,6 +650,34 @@ function sigRibbon(K, pts, bands, bw, a = 1, taper = false) {
     K.line(out, bw * 1.15, col, a);
   });
 }
+// a little shamrock (three leaves and a stem), spun by ang
+function sigShamrock(K, x, y, r, ang, a) {
+  for (let i = 0; i < 3; i++) { const t = ang + i * 2.094 + 1.571, cx = x + Math.cos(t) * r * 0.55, cy = y + Math.sin(t) * r * 0.55; K.disc(cx, cy, r * 0.62, '#141019', a); }
+  K.line([{ x, y }, { x: x + Math.cos(ang - 1.571) * r * 1.4, y: y + Math.sin(ang - 1.571) * r * 1.4 }], r * 0.35, '#1d6b2c', a);
+  for (let i = 0; i < 3; i++) { const t = ang + i * 2.094 + 1.571, cx = x + Math.cos(t) * r * 0.55, cy = y + Math.sin(t) * r * 0.55; K.disc(cx, cy, r * 0.48, i ? '#3ecf5a' : '#5fe07a', a); }
+}
+// a gold coin seen at a flip angle f (1 = face on, 0 = edge on)
+function sigCoin(K, x, y, r, f, a) { const w = Math.max(0.15, Math.abs(f)); K.oval(x, y, r * w + 0.03, r + 0.03, '#141019', a); K.oval(x, y, r * w, r, '#ffc21c', a); K.oval(x - r * 0.2 * w, y + r * 0.2, r * 0.45 * w, r * 0.45, '#fff3b0', a * 0.9); }
+// the end of the rainbow: a black cauldron heaped with gold under the hoop, a rainbow arching into it from the rim
+function sigPot(K, x, z, t, a, hx, hy) {
+  if (hx !== undefined) {   // the rainbow lands in the pot
+    const g = Math.min(1, t / 0.45), pts = [];
+    for (let i = 0; i <= 24 * g; i++) { const u = i / 24, mx = (hx + x) / 2, my = Math.max(hy, 0.9) + 1.6; pts.push({ x: (1 - u) ** 2 * hx + 2 * u * (1 - u) * mx + u * u * x, y: (1 - u) ** 2 * hy + 2 * u * (1 - u) * my + u * u * 0.75 * z }); }
+    if (pts.length > 1) { sigRibbon(K, pts, ['#ffffff'], 0.62, 0.22 * a); sigRibbon(K, pts, RAINBOW, 0.07, 0.85 * a); }
+  }
+  K.disc(x, 0.55 * z, 1.15 * z, '#ffd23f', 0.13 * a); K.disc(x, 0.6 * z, 0.75 * z, '#fff3b0', 0.14 * a);   // the glow
+  K.oval(x, 0.03, 0.62 * z, 0.08 * z, '#000000', 0.25 * a);   // shadow
+  for (const sx of [-0.3, 0.3]) { K.box(x + sx * z, 0.08 * z, 0.12 * z, 0.16 * z, 0, '#141019', a); K.box(x + sx * z, 0.08 * z, 0.06 * z, 0.12 * z, 0, '#3a3a44', a); }
+  // the heap of gold, coins piled over the rim
+  K.oval(x, 0.6 * z, 0.47 * z, 0.3 * z, '#141019', a); K.oval(x, 0.6 * z, 0.42 * z, 0.25 * z, '#ffb81c', a);
+  const C = [[-0.25, 0.62, 0.7], [0.22, 0.64, -0.5], [0, 0.78, 1], [-0.1, 0.66, 0.3], [0.13, 0.76, 0.9], [-0.2, 0.74, -0.8], [0.3, 0.6, 0.6], [0.03, 0.64, -0.4]];
+  for (const [cx, cy, f] of C) sigCoin(K, x + cx * z, cy * z, 0.09 * z, f, a);
+  // the cauldron's round belly
+  K.oval(x, 0.32 * z, 0.52 * z, 0.3 * z, '#141019', a); K.oval(x, 0.32 * z, 0.46 * z, 0.25 * z, '#2b2b33', a);
+  K.oval(x - 0.2 * z, 0.38 * z, 0.12 * z, 0.08 * z, '#55556a', a);   // a shine on it
+  K.box(x, 0.54 * z, 1.0 * z, 0.13 * z, 0, '#141019', a); K.box(x, 0.54 * z, 0.92 * z, 0.07 * z, 0, '#45454f', a); K.box(x - 0.15 * z, 0.555 * z, 0.4 * z, 0.025 * z, 0, '#6a6a7a', a);
+  for (let i = 0; i < 4; i++) { const tw = Math.sin(t * 7 + i * 1.7); if (tw > 0.2) K.star(x + [-0.35, 0.28, 0.05, -0.12][i] * z, [0.9, 0.95, 1.12, 0.82][i] * z, 0.07 + 0.08 * tw, '#ffffff', a); }
+}
 function sigQuizBoard(K, x, y, sc, text, stamp, a) {
   if (sc <= 0.02) return;
   K.box(x, y, 1.7 * sc, 0.95 * sc, 0, '#141019', a); K.box(x, y, 1.6 * sc, 0.85 * sc, 0, '#8a5a2b', a); K.box(x, y, 1.44 * sc, 0.7 * sc, 0, '#2f5d3a', a);
@@ -662,11 +691,13 @@ const SIG_MARKS = {
   quiz: (K, m, u, a) => sigQuizBoard(K, m.x, m.y + 0.08 * u, 1, '2+2=4', Math.min(1, m.t / 0.25), a),
   rainbow: (K, m, u, a) => sigRibbon(K, m.pts, RAINBOW, 0.075, 0.85 * a),
   pot: (K, m, u, a) => {
-    const z = Math.min(1, m.t / 0.18) * (1 + 0.15 * Math.max(0, 1 - m.t / 0.4)), x = m.x;
-    K.box(x, 0.25 * z, 0.86 * z, 0.5 * z, 0, '#141019', a); K.box(x, 0.25 * z, 0.74 * z, 0.4 * z, 0, '#2b2b33', a);
-    K.disc(x, 0.52 * z, 0.36 * z, '#141019', a); K.disc(x, 0.52 * z, 0.31 * z, '#ffd23f', a); K.disc(x - 0.1 * z, 0.6 * z, 0.1 * z, '#fff3b0', a);
-    K.box(x, 0.48 * z, 0.94 * z, 0.1 * z, 0, '#141019', a); K.box(x, 0.48 * z, 0.86 * z, 0.05 * z, 0, '#3a3a44', a);
-    if (Math.sin(m.t * 9) > 0.3) K.star(x + 0.2 * z, 0.75 * z, 0.12, '#ffffff', a);
+    const z = 1.35 * Math.min(1, m.t / 0.18) * (1 + 0.18 * Math.max(0, 1 - m.t / 0.4));
+    sigPot(K, m.x, z, m.t, a, m.hx, m.hy);
+    for (let i = 0; i < 12; i++) {   // coins raining out of the net into the pot
+      const ct = m.t - 0.1 - i * 0.09; if (ct < 0 || ct > 0.7) continue;
+      const v = ct / 0.7, cx = lerp(m.hx, m.x, v) + Math.sin(i * 2.3) * 0.25 * (1 - v), cy = lerp(m.hy - 0.3, 0.75, v * v);
+      sigCoin(K, cx, cy, 0.08, Math.cos(ct * 18 + i), a);
+    }
   },
   puddle: (K, m, u, a) => { K.disc(m.x, 0.03, 0.001, '#000', 0); K.ring(m.x, 0.03, m.w, 0.07, '#c8a24a', a, 0.05); K.ring(m.x - m.w * 0.3, 0.05, m.w * 0.3, 0.04, '#fff3b0', a * 0.8, 0.03); },
   ice: (K, m, u, a) => {
@@ -789,17 +820,31 @@ const MEME_DUNKS = [
     end: { th: -0.3, rel: 1.9 },
     fx: (p, s, g, D) => {
       if (s < 0.92) sigHist(D, sigW(p, 0, 0.1), 999);   // the rainbow he rides up on
-      if (s > 0.05 && s < 0.9 && Math.random() < 0.3) { const c = p.center(); g.addPart(c.x + rand(-0.5, 0.5), c.y + rand(-0.5, 0.8), rand(-0.5, 0.5), rand(0.2, 1), 1.5, 0.8, pick(['#3ecf5a', '#2a9a40', '#9af0a8']), 2); }
+      const SH = D.sham || (D.sham = []);   // shamrocks floating off him
+      if (s > 0.05 && s < 0.9 && Math.random() < 0.18) { const c = p.center(); SH.push({ x: c.x + rand(-0.4, 0.4), y: c.y + rand(-0.4, 0.6), vx: rand(-0.6, 0.6), vy: rand(0.3, 1), r: rand(0.08, 0.13), a: rand(0, 6), w: rand(-4, 4), t: 0 }); }
+      for (const q of SH) { q.t += STEP; q.x += q.vx * STEP; q.y += q.vy * STEP; q.a += q.w * STEP; }
+      while (SH.length && SH[0].t > 1.1) SH.shift();
+      if (s > 0.05 && s < 0.9 && Math.random() < 0.25) { const c = p.center(); g.addPart(c.x + rand(-0.4, 0.4), c.y + rand(-0.6, 0.6), rand(-0.3, 0.3), rand(-0.5, 0.3), 2, 0.5, pick(['#ffd23f', '#fff3b0']), 1); }
     },
     draw: (K, p, s, D, layer) => {
-      if (layer === 'back') { if (D.hist) sigRibbon(K, D.hist, RAINBOW, 0.075, 0.9); return; }
+      if (layer === 'back') {
+        if (D.hist) {
+          const H = D.hist, o = H[0], fa = sigFade(s);
+          sigRibbon(K, H, ['#ffffff'], 0.62, 0.25 * fa); sigRibbon(K, H, RAINBOW, 0.075, 0.92 * fa);
+          for (const [cx, cy, r] of [[-0.3, -0.05, 0.28], [0.05, 0.05, 0.34], [0.38, -0.06, 0.26], [0.18, -0.15, 0.24]]) K.disc(o.x + cx, o.y + cy, r + 0.04, '#141019', 0.9 * fa);   // the cloud he launches from
+          for (const [cx, cy, r] of [[-0.3, -0.05, 0.28], [0.05, 0.05, 0.34], [0.38, -0.06, 0.26], [0.18, -0.15, 0.24]]) K.disc(o.x + cx, o.y + cy, r, '#ffffff', 0.95 * fa);
+          const tip = H[H.length - 1]; for (let i = 0; i < 3; i++) if (Math.sin(G.time * 9 + i * 2) > 0.4) K.star(tip.x + Math.cos(i * 2.1 + s * 9) * 0.5, tip.y + Math.sin(i * 2.1 + s * 9) * 0.5, 0.12, '#fff3b0', fa);
+        }
+        for (const q of D.sham || []) sigShamrock(K, q.x, q.y, q.r, q.a, Math.min(1, 3 * (1.1 - q.t)));
+        return;
+      }
       // the leprechaun hat
       const a = p.head.getAngle(), on = seg(s, 0, 0.06), b = sigHeadPt(p, -0.02, p.d.headR + 0.02), c = sigHeadPt(p, -0.02, p.d.headR + 0.2), bd = sigHeadPt(p, -0.02, p.d.headR + 0.08), bk = sigHeadPt(p, 0.02, p.d.headR + 0.08);
       K.box(c.x, c.y, 0.38 * on, 0.38 * on, a, '#141019'); K.box(c.x, c.y, 0.31 * on, 0.32 * on, a, '#2a9a40');
       K.box(b.x, b.y, 0.6 * on, 0.1 * on, a, '#141019'); K.box(b.x, b.y, 0.53 * on, 0.05 * on, a, '#2a9a40');
       K.box(bd.x, bd.y, 0.31 * on, 0.07 * on, a, '#141019'); K.box(bk.x, bk.y, 0.1 * on, 0.08 * on, a, '#ffd23f');
     },
-    slam: (g, h, p, D) => { if (D.hist) g.sigMark({ k: 'rainbow', pts: D.hist.slice(), life: 2.2 }); g.sigMark({ k: 'pot', x: h.cx - h.side * 0.1, life: 3 }); for (let i = 0; i < 26; i++) g.addPart(h.cx, h.y, rand(-4, 4), rand(2, 8), 14, rand(0.8, 1.4), pick(['#ffd23f', '#ffb81c', '#fff3b0']), 2); },
+    slam: (g, h, p, D) => { if (D.hist) g.sigMark({ k: 'rainbow', pts: D.hist.slice(), life: 2.2 }); g.sigMark({ k: 'pot', x: h.cx - h.side * 2.6, hx: h.cx, hy: h.y, life: 3.2 }); for (let i = 0; i < 26; i++) g.addPart(h.cx, h.y, rand(-4, 4), rand(2, 8), 14, rand(0.8, 1.4), pick(['#ffd23f', '#ffb81c', '#fff3b0']), 2); },
     events: [[0.25, (p, g) => { g.sfx && g.sfx.grab(); }], [0.5, (p, g) => { g.sfx && g.sfx.grab(); }],
       [0.99, (p, g, D) => { const h = D.hoop; sigBurst(g, h.cx, h.y + 0.3, ['#ffd23f', '#ffb81c', '#fff3b0'], 30, 4); g.popup('LUCKY!', h.cx, h.y + 1.3, '#3ecf5a', 12, 1.3); }]] },
   // James (the curls): goes up like a spring, boinging three times on the way to the rim
