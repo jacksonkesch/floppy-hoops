@@ -612,6 +612,98 @@ const POWER = { hammer: 1.6, shatter: 1.6, tomahawk: 1.3, superman: 1.35, kangar
   corkscrew: 1.3, scorpion: 1.0, slingshot: 1.2, tuckroll: 1.1, onearm: 1.0, betweenlegs: 1.1, wraparound: 1.1, rimrock: 1.1, elbowhang: 1.0, rimkiss: 0.9,
   windmill: 1.1, reverse: 1.1, reverse180: 1.1, rimswing: 1.1, cartwheel: 0.9, through: 0.8, tip: 0.8, cradle: 0.6, moonwalk: 0.5 };
 DUNKS.forEach(d => { d.power = POWER[d.id] || 1; });
+// ---- the MEME CHARACTERS' signature dunks: each one has his own (picked about 40% of his dunks, see pickDunk). Kept out of
+// DUNKS so they never show up for anyone else, in the dunk reel, or in the dunk settings. Extra hooks only these use:
+//   ballAt(p, s, D, hand) -> where the held ball sits instead of the hand ({x, y, a}), fx(p, s, g, D) runs every frame,
+//   bob(s) lifts the hip off the path, and an event can be a function (p, g, D).
+const sigLocal = (p, x, y) => { const c = p.center(), r = rot({ x, y }, p.body.getAngle()); return { x: c.x + r.x, y: c.y + r.y }; };
+const sigBurst = (g, x, y, cols, n, sp, grav = 6) => { for (let i = 0; i < n; i++) g.addPart(x, y, rand(-sp, sp), rand(0, sp * 1.2), grav, rand(0.5, 1), pick(cols), pick([1, 2])); };
+const sigPop = (text, col, dy = 0.9) => (p, g) => { const hp = p.head.getPosition(); g.popup(text, hp.x, hp.y + dy, col, 8, 1); };
+const sigLerpBall = (a, b, u) => ({ x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u), a: lerp(a.a || 0, b.a || 0, u) });
+const RAINBOW = ['#ff4d4d', '#ff9a3c', '#ffe14d', '#4ddb6a', '#4da6ff', '#a066ff'];
+const MEME_DUNKS = [
+  // Craig (the teacher): floats up to the board and writes out a quiz in chalk, then grades it with the slam
+  { id: 'sig_craig', name: 'POP QUIZ!', fixedT: 1.3, arc: 1.4, ease: moonEase, legs: driveLegs(0.35, 0.1), power: 1.2,
+    th: s => 0.06 * Math.sin(s * 11) * (1 - seg(s, 0.75, 1)) - 0.3 * seg(s, 0.8, 1),
+    rel: (s, r0) => s < 0.15 ? lerp(r0, 1.6, seg(s, 0, 0.15)) : s < 0.72 ? 1.6 + 0.35 * Math.sin(2 * Math.PI * 5 * (s - 0.15)) : s < 0.86 ? lerp(1.6, 2.95, seg(s, 0.72, 0.86)) : lerp(2.95, 1.9, seg(s, 0.86, 1)),
+    end: { th: -0.3, rel: 1.9 },
+    fx: (p, s, g, D) => { if (s > 0.18 && s < 0.7 && Math.random() < 0.7) { const h = p.handPos(D.arm); g.addPart(h.x, h.y, rand(-0.4, 0.4), rand(-0.6, 0.2), 3, 0.6, pick(['#ffffff', '#e8e8e8']), 1); } },
+    events: [[0.3, sigPop('POP QUIZ!', '#ffffff')], [0.55, sigPop('2 + 2 = ?', '#ffd23f')], [0.99, (p, g, D) => { const h = D.hoop; g.popup('A+', h.cx, h.y + 1.3, '#ff4d4d', 16, 1.3); }]] },
+  // Loren (the big forehead): balances the ball on the forehead the whole way up, then knocks it into his hand and slams it
+  { id: 'sig_loren', name: 'FOREHEAD BALANCE!', fixedT: 1.35, arc: 1.6, ease: moonEase, legs: driveLegs(0.3, 0.1), power: 1.1,
+    th: s => s < 0.68 ? 0.7 * seg(s, 0, 0.2) + 0.07 * Math.sin(s * 14) : lerp(0.7, -0.35, seg(s, 0.68, 0.9)),
+    rel: (s, r0) => s < 0.68 ? lerp(r0, 1.35, seg(s, 0, 0.15)) + 0.25 * Math.sin(s * 14) * seg(s, 0.1, 0.2) : s < 0.85 ? lerp(1.35, 2.95, seg(s, 0.68, 0.85)) : lerp(2.95, 1.9, seg(s, 0.85, 1)),
+    end: { th: -0.35, rel: 1.9 },
+    ballAt: (p, s, D, hand) => {
+      if (s > 0.78) return null;
+      const a = p.head.getAngle(), hc = p.head.getPosition(), o = rot({ x: p.dir * 0.08, y: p.d.headR + D.ball.r + 0.02 }, a);
+      const top = { x: hc.x + o.x, y: hc.y + o.y, a: s * 14 };
+      return s < 0.12 ? sigLerpBall(hand, top, seg(s, 0, 0.12)) : s < 0.66 ? top : sigLerpBall(top, hand, seg(s, 0.66, 0.78));
+    },
+    events: [[0.35, sigPop('NO HANDS!', '#ffd23f', 1.4)]] },
+  // Colton (the LV fit and the Jordans): a long, slow, legs-split glide with gold dripping off him
+  { id: 'sig_colton', name: 'DRIP GLIDE!', fixedT: 1.15, arc: 1.0, ease: s => s, trail: true, power: 1.2,
+    legs: s => { const k = seg(s, 0.05, 0.3) * (1 - seg(s, 0.85, 1)); return [1.1 * k, -1.0 * k]; },
+    th: s => -0.15 * seg(s, 0, 0.3) - 0.15 * seg(s, 0.85, 1),
+    rel: (s, r0) => s < 0.85 ? lerp(r0, 2.65, seg(s, 0, 0.3)) : lerp(2.65, 1.9, seg(s, 0.85, 1)),
+    end: { th: -0.3, rel: 1.9 },
+    fx: (p, s, g) => { if (s > 0.1 && s < 0.9 && Math.random() < 0.8) { const c = p.center(); g.addPart(c.x + rand(-0.4, 0.4), c.y + rand(-0.9, 0.5), 0, rand(-1, -0.3), 2, 0.7, pick(['#ffd23f', '#c8a24a', '#fff3b0', '#6b4a22']), pick([1, 2])); } },
+    events: [[0.45, sigPop('DRIP!', '#ffd23f')]] },
+  // Liam (the blonde swoop): a backflip that whips the hair round, blonde flying off it
+  { id: 'sig_liam', name: 'HAIR FLIP!', trail: true, legs: s => tuckLegs(1.8, s, 0.05, 0.85), minAhead: 0.6, extraT: 0.25, arc: 1.4, power: 1.2,
+    th: s => 2 * Math.PI * seg(s, 0, 0.85) - 0.25 * seg(s, 0.85, 1),
+    rel: (s, r0) => s < 0.85 ? lerp(r0, 2.9, seg(s, 0, 0.3)) : lerp(2.9, 1.9, seg(s, 0.85, 1)),
+    end: { th: 2 * Math.PI - 0.25, rel: 1.9 },
+    fx: (p, s, g) => { if (s > 0.15 && s < 0.85 && Math.random() < 0.9) { const h = p.head.getPosition(); g.addPart(h.x + rand(-0.2, 0.2), h.y + rand(-0.2, 0.2), rand(-2, 2), rand(-1, 2), 4, 0.6, pick(['#f1d57a', '#ffe9a8', '#d9b560']), pick([1, 2])); } },
+    events: [[0.5, sigPop('FLOW!', '#f1d57a', 1.2)]] },
+  // Brock (the orange hair, a leprechaun): clicks his heels the whole way up on a rainbow, and the slam pays out gold
+  { id: 'sig_brock', name: 'POT OF GOLD!', extraT: 0.4, arc: 1.4, power: 1.2,
+    legs: s => { const k = Math.sin(2 * Math.PI * 4 * s) * (1 - seg(s, 0.7, 0.85)); return [0.8 * k, -0.8 * k]; },
+    th: s => 0.12 * Math.sin(2 * Math.PI * 4 * s) * (1 - seg(s, 0.7, 0.85)) - 0.3 * seg(s, 0.85, 1),
+    rel: (s, r0) => s < 0.75 ? lerp(r0, 2.6, seg(s, 0, 0.2)) + 0.3 * Math.sin(2 * Math.PI * 4 * s) * seg(s, 0.1, 0.2) : s < 0.88 ? lerp(2.6, 2.95, seg(s, 0.75, 0.88)) : lerp(2.95, 1.9, seg(s, 0.88, 1)),
+    end: { th: -0.3, rel: 1.9 },
+    fx: (p, s, g) => { if (s > 0.03 && s < 0.92) { const c = p.center(), k = Math.floor(g.time * 30); for (let i = 0; i < 2; i++) g.addPart(c.x + rand(-0.15, 0.15), c.y - 0.6 + rand(-0.1, 0.1), 0, 0, 0, 0.9, RAINBOW[(k + i * 3) % 6], 2); } },
+    events: [[0.25, (p, g) => { g.sfx && g.sfx.grab(); }], [0.5, (p, g) => { g.sfx && g.sfx.grab(); }],
+      [0.99, (p, g, D) => { const h = D.hoop; sigBurst(g, h.cx, h.y + 0.3, ['#ffd23f', '#ffb81c', '#fff3b0'], 30, 4); g.popup('LUCKY!', h.cx, h.y + 1.3, '#3ecf5a', 12, 1.3); }]] },
+  // James (the curls): goes up like a spring, boinging three times on the way to the rim
+  { id: 'sig_james', name: 'BOING BOING!', fixedT: 1.3, arc: 0.8, power: 1.1,
+    bob: s => 0.6 * Math.sin(3 * Math.PI * s) ** 2 * (1 - seg(s, 0.67, 0.9)),
+    legs: s => { const c = (1 - Math.sin(3 * Math.PI * s) ** 2) * (1 - seg(s, 0.67, 0.9)); return [0.9 * c, 0.7 * c]; },
+    th: s => -0.1 * Math.sin(6 * Math.PI * s) * (1 - seg(s, 0.67, 0.9)) - 0.3 * seg(s, 0.85, 1),
+    rel: (s, r0) => s < 0.75 ? lerp(r0, 2.4, seg(s, 0, 0.2)) : s < 0.88 ? lerp(2.4, 2.95, seg(s, 0.75, 0.88)) : lerp(2.95, 1.9, seg(s, 0.88, 1)),
+    end: { th: -0.3, rel: 1.9 },
+    events: [[0.02, (p, g) => { g.sfx && g.sfx.boing(); }], [0.34, (p, g) => { g.sfx && g.sfx.boing(); sigPop('BOING!', '#ffd23f')(p, g); }],
+      [0.67, (p, g) => { g.sfx && g.sfx.boing(); sigPop('BOING!', '#ffd23f')(p, g); }]] },
+  // Jonas (the buff one): stops at the top for three curls of the ball, then hammers it down as hard as anything in the game
+  { id: 'sig_jonas', name: 'FLEX SLAM!', fixedT: 1.5, arc: 1.4, impact: 2, power: 1.6, trail: true, legs: cockLegs(0.5, 0.9),
+    ease: s => s < 0.3 ? 0.8 * (1 - (1 - s / 0.3) ** 2) : s < 0.78 ? 0.8 + 0.04 * seg(s, 0.3, 0.78) : 0.84 + 0.16 * seg(s, 0.78, 1) ** 2,
+    th: s => s < 0.78 ? 0.25 * seg(s, 0, 0.3) : s < 0.88 ? lerp(0.25, 0.6, seg(s, 0.78, 0.88)) : lerp(0.6, -0.45, seg(s, 0.88, 1)),
+    rel: (s, r0) => s < 0.15 ? lerp(r0, 1.0, seg(s, 0, 0.15)) : s < 0.72 ? 1.0 + 1.5 * (0.5 - 0.5 * Math.cos(2 * Math.PI * 3 * (s - 0.15) / 0.57)) : s < 0.88 ? lerp(1.0, Math.PI + 1.35, seg(s, 0.72, 0.88)) : lerp(Math.PI + 1.35, 1.6, seg(s, 0.88, 1)),
+    end: { th: -0.45, rel: 1.6 },
+    events: [[0.25, sigPop('REP 1', '#ffffff')], [0.44, sigPop('REP 2', '#ffffff')], [0.63, sigPop('REP 3!', '#ffd23f')]] },
+  // Jackson (the frosted tips): spins up like a top in a cloud of frost and freezes the rim
+  { id: 'sig_jackson', name: 'ICE COLD!', trail: true, extraT: 0.3, arc: 1.3, power: 1.2, spin: s => 4 * Math.PI * seg(s, 0, 0.9),
+    legs: s => { const w = Math.sin(Math.PI * Math.min(1, s / 0.9)); return [0.3 * w, -0.3 * w]; },
+    th: s => -0.2 * seg(s, 0.8, 1),
+    rel: (s, r0) => s < 0.85 ? lerp(r0, 2.95, seg(s, 0, 0.2)) : lerp(2.95, 1.95, seg(s, 0.85, 1)),
+    end: { th: -0.2, rel: 1.95 },
+    fx: (p, s, g) => { if (s < 0.92 && Math.random() < 0.9) { const c = p.center(); g.addPart(c.x + rand(-0.7, 0.7), c.y + rand(-1, 1), rand(-0.5, 0.5), rand(-0.8, 0.2), 1, 0.8, pick(['#bfe9ff', '#ffffff', '#7fd3ff']), pick([1, 2])); } },
+    events: [[0.99, (p, g, D) => { const h = D.hoop; sigBurst(g, h.cx, h.y, ['#bfe9ff', '#ffffff', '#7fd3ff'], 34, 3, 2); g.popup('FROZEN!', h.cx, h.y + 1.3, '#bfe9ff', 12, 1.3); }]] },
+  // Cam (the bulge): lies back flat in the air and spins the ball on his belly, then rolls up and slams it
+  { id: 'sig_cam', name: 'BELLY SPIN!', fixedT: 1.45, arc: 1.5, ease: moonEase, power: 1.2,
+    legs: s => { const k = seg(s, 0.1, 0.25) * (1 - seg(s, 0.7, 0.85)); return [0.25 * k + 0.2 * Math.sin(s * 20) * k, -0.1 * k]; },
+    th: s => s < 0.7 ? 1.5 * seg(s, 0, 0.22) + 0.06 * Math.sin(s * 16) * seg(s, 0.15, 0.25) : lerp(1.5, -0.3, seg(s, 0.7, 0.88)),
+    rel: (s, r0) => s < 0.7 ? lerp(r0, 2.7, seg(s, 0, 0.2)) : s < 0.86 ? lerp(2.7, 2.95, seg(s, 0.7, 0.86)) : lerp(2.95, 1.9, seg(s, 0.86, 1)),
+    end: { th: -0.3, rel: 1.9 },
+    ballAt: (p, s, D, hand) => {
+      if (s > 0.8) return null;
+      const b = sigLocal(p, p.dir * (p.d.torsoW / 2 + D.ball.r * 0.9), -0.12); b.a = s * 70;
+      return s < 0.2 ? sigLerpBall(hand, b, seg(s, 0, 0.2)) : s < 0.68 ? b : sigLerpBall(b, hand, seg(s, 0.68, 0.8));
+    },
+    fx: (p, s, g, D) => { if (s > 0.22 && s < 0.66 && Math.random() < 0.6) { const b = D.ball.body.getPosition(), a = rand(0, 2 * Math.PI); g.addPart(b.x + Math.cos(a) * 0.35, b.y + Math.sin(a) * 0.35, -Math.sin(a) * 2, Math.cos(a) * 2, 0, 0.4, pick(['#ffffff', '#ffd23f']), 1); } },
+    events: [[0.4, sigPop('SPIN CYCLE!', '#ffd23f', 1.4)]] },
+];
+MEME_DUNKS.forEach(d => { DUNK_BY_ID[d.id] = d; d.sig = true; });
 const REEL = [...DUNKS.map(d => ({ id: d.id, name: d.name.replace('!', ''), isNew: d.isNew })), { id: 'oop', name: 'ALLEY-OOP' },
   { id: 'glass', name: 'GLASS BREAKS', isNew: true }, { id: 'collapse', name: 'HOOP COLLAPSE', isNew: true }];
 const ALL_DUNKS = REEL.map(r => r.id);
@@ -1910,6 +2002,7 @@ class Player {
     D.t += dt;
     const s = clamp(D.t / D.T, 0, 1), s2 = clamp((D.t + dt) / D.T, 0, 1);
     const q = D.path(s2), pos = this.body.getPosition();
+    if (st.bob) q.y += st.bob(s2);
     let vx = (q.x - pos.x) / dt, vy = (q.y - pos.y) / dt; const sp = Math.hypot(vx, vy);
     if (sp > 30) { vx *= 30 / sp; vy *= 30 / sp; }
     this.body.setLinearVelocity({ x: vx, y: vy });
@@ -1921,6 +2014,7 @@ class Player {
     this.legA = st.legs ? st.legs(s2) : null; this.layer = st.layer ? st.layer(s2) : null;
     if (st.trail && !g.isShadow && (D.ghostK = (D.ghostK || 0) + 1) % 3 === 0) this.addGhost();
     this.front = !!st.front && s2 < 0.95;
+    if (st.fx && !g.isShadow) st.fx(this, s2, g, D);
     for (const [at, ev] of st.events || []) if (!D.fired[at] && s >= at) { D.fired[at] = true; this.dunkEvent(ev, D); }
     if (st.sparkle && s > st.sparkle[0] && s < st.sparkle[1] && Math.random() < 0.6) { const c = this.center(); g.addPart(c.x + rand(-0.6, 0.6), c.y + rand(-1, 0.8), 0, rand(-0.3, 0.3), 0, 0.5, pick(['#ffffff', '#c9d6ff', '#ffd23f']), 1); }
     if (s >= 1) this.finishDunk();
@@ -1933,6 +2027,7 @@ class Player {
   }
   dunkEvent(ev, D) {
     const g = this.game, dir = this.dir;
+    if (typeof ev === 'function') { ev(this, g, D); return; }
     if (ev === 'land') {
       const f = this.footPoint(0);
       for (let i = 0; i < 8; i++) g.addPart(f.x + rand(-0.4, 0.4), 0.05, rand(-1.5, 1.5), rand(0.3, 1.2), -1, rand(0.3, 0.5), g.cfg.court.dust, pick([1, 2]));
@@ -4931,19 +5026,19 @@ function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringi
 
 // ---------------------------------------------------------------- game
 // the MEME CHARACTERS (a setting): when it's on, all six players are drawn from these (nine, so a different six each game). Looks only,
-// nothing here touches the physics. Craig always wears #13.
+// nothing here touches the physics (except each one's signature dunk, MEME_DUNKS). Craig always wears #13.
 const MEME_LOOKS = [
-  { name: 'Craig', skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
-  { name: 'Loren', skin: '#fde8d8', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
-  { name: 'Colton', skin: '#e8b88f', hair: '#4a2c17', style: 'short', outfit: 'lv', shoes: 'jordan' },
-  { name: 'Liam', skin: '#f3cfa9', hair: '#f1d57a', style: 'swoop' },
-  { name: 'Brock', skin: '#f3cfa9', hair: '#ff7a1a', style: 'swoop' },
-  { name: 'James', skin: '#e8b88f', hair: '#3a2312', style: 'curly' },
-  { name: 'Jonas', skin: '#f6d9bf', hair: '#4a2c17', style: 'buzz', buff: true },
-  { name: 'Jackson', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f8f0c4' },
-  { name: 'Cam', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
+  { name: 'Craig', sig: 'sig_craig', skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
+  { name: 'Loren', sig: 'sig_loren', skin: '#fde8d8', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
+  { name: 'Colton', sig: 'sig_colton', skin: '#e8b88f', hair: '#4a2c17', style: 'short', outfit: 'lv', shoes: 'jordan' },
+  { name: 'Liam', sig: 'sig_liam', skin: '#f3cfa9', hair: '#f1d57a', style: 'swoop' },
+  { name: 'Brock', sig: 'sig_brock', skin: '#f3cfa9', hair: '#ff7a1a', style: 'swoop' },
+  { name: 'James', sig: 'sig_james', skin: '#e8b88f', hair: '#3a2312', style: 'curly' },
+  { name: 'Jonas', sig: 'sig_jonas', skin: '#f6d9bf', hair: '#4a2c17', style: 'buzz', buff: true },
+  { name: 'Jackson', sig: 'sig_jackson', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f8f0c4' },
+  { name: 'Cam', sig: 'sig_cam', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
 ];
-const MEME_LIST = MEME_LOOKS.map((m, i) => ({ id: 'meme' + i, name: m.name.toUpperCase(), when: 'MEME CHARACTER' }));
+const MEME_LIST = MEME_LOOKS.map((m, i) => ({ id: 'meme' + i, name: m.name.toUpperCase(), when: 'SIGNATURE: ' + DUNK_BY_ID[m.sig].name.replace('!', '') }));
 function makeLook(used) {
   let num; do { num = pick([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 21, 22, 23, 24, 30, 32, 33, 34, 35, 44, 77, 99]); } while (used.has(num));
   used.add(num);
@@ -5021,6 +5116,9 @@ class Game {
       (!d.req || (d.req.ground ? !air : air && rise >= d.req.air)));
   }
   pickDunk(p, ahead, rebound) {
+    // a meme character goes for his signature dunk a lot of the time
+    const sig = p.look && p.look.sig && DUNK_BY_ID[p.look.sig];
+    if (sig && !rebound && ahead > (sig.minAhead ?? 0.35) && ahead < DUNK_RANGE && Math.random() < 0.4) return sig;
     const pool = this.dunkPool(p, ahead);
     if (rebound && this.dunkOn('tip')) pool.push(DUNK_BY_ID.tip);
     let w = pool.reduce((a, d) => a + (d.weight || 1), 0) * Math.random();
@@ -5235,7 +5333,7 @@ class Game {
     this.nextShow();
   }
   showList() { return this.show.kind === 'sound' ? SOUND_LIST : this.show.kind === 'event' ? EVENT_LIST : this.show.kind === 'meme' ? MEME_LIST : REEL; }
-  showDunkId() { return this.show.kind === 'meme' ? 'hammer' : REEL[this.show.i].id; }
+  showDunkId() { return this.show.kind === 'meme' ? MEME_LOOKS[this.show.i].sig : REEL[this.show.i].id; }
   showPick(i) {
     const n = this.showList().length;
     this.show.mode = 'one'; this.show.i = (i + n) % n; this.sfx.stopClip();
@@ -5614,8 +5712,10 @@ class Game {
   }
   placeHeld(b) {
     const p = b.holder, arm = p.arms[b.arm];
-    const hp = arm.getWorldPoint({ x: 0, y: -(p.d.armLen + b.r * 0.45) });
-    b.body.setTransform(hp, arm.getAngle());
+    let hp = arm.getWorldPoint({ x: 0, y: -(p.d.armLen + b.r * 0.45) }), ang = arm.getAngle();
+    const D = p.dunk, at = D && D.style.ballAt && D.ball === b && D.style.ballAt(p, clamp(D.t / D.T, 0, 1), D, { x: hp.x, y: hp.y, a: ang });
+    if (at) { hp = { x: at.x, y: at.y }; ang = at.a; }   // (a signature dunk carrying it somewhere else: the forehead, the belly)
+    b.body.setTransform(hp, ang);
     b.body.setLinearVelocity(arm.getLinearVelocityFromWorldPoint(hp));
     b.body.setAngularVelocity(0);
   }
@@ -5773,6 +5873,7 @@ class Game {
     h.bend = Math.min(1.8, imp); h.shake = 1.2 * imp;
     this.stat(p.team, 'dunks');
     if (this.state !== 'showcase') this.popup(style.name, h.cx - h.side * 2.4, h.y + 1.7, TEAM[p.team].light, 16, 1.7);
+    if (style.sig) this.popup('SIG DUNK!', h.cx - h.side * 2.4, h.y + (this.state !== 'showcase' ? 2.6 : 1.0), '#ffd23f', 10, 1.7);   // (a meme character's own signature)
     for (let i = 0; i < 20 * imp; i++) this.addPart(h.frontX, h.y, rand(-5, 5), rand(0, 7), 20, rand(0.3, 0.7), pick(['#ffd23f', '#ffffff', ORANGE]), 1);
     this.sfx.dunk(); if (imp > 1) this.sfx.boom(); this.excite = 1;
     let poster = 0;
@@ -7207,7 +7308,7 @@ const reelEl = document.getElementById('reelpanel'), reelList = document.getElem
 const REEL_TEXT = {
   dunk: ['DUNK REEL', 'Click a dunk to watch it on loop. Switch a dunk off to keep it out of your games. Press TAB or click SOUNDS to switch reels.'],
   event: ['EVENTS', 'The rare things that can happen on some courts (about two in a game to 11 on that court). Click one to watch it on loop. Switch one off to keep it out of your games. Press TAB to switch reels.'],
-  meme: ['MEME CHARACTERS', 'Click a meme character to watch them dunk. Turn them on or off for games in SETTINGS. Press TAB to switch reels.'],
+  meme: ['MEME CHARACTERS', 'Every meme character has a signature dunk of his own. Click one to watch it. Turn them on or off for games in SETTINGS. Press TAB to switch reels.'],
   sound: ['SOUNDS', 'Click a sound to hear it in action. Switch one off to keep it out of your games. Every green plays one of the green sounds you leave on. A green that wins the game plays GREEN FN instead. M mutes everything. Press TAB or click DUNKS to switch reels.'],
 };
 function buildReel(kind) {
