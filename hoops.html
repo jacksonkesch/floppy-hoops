@@ -441,7 +441,7 @@ const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 const NET_KEEP = new Set(['isShadow', 'sfx', 'settings', 'realTime', 'menuOpen', 'menuSel']);   // what a match start leaves alone
 // what rewinding an online match leaves alone: this computer's own things, and the look of the screen
 const NET_LOCAL = new Set(['sfx', 'net', 'online', 'settings', 'homeSettings', 'show', 'netHeard', 'netSyncSent', 'netHeld', 'keysDown',
-  'humanHeld', 'isShadow', 'realTime', 'timeScale', 'tsT', 'tsTarget', 'shakeA', 'flash', 'cam', 'menuOpen', 'menuSel', 'paused']);
+  'humanHeld', 'isShadow', 'realTime', 'timeScale', 'tsT', 'tsTarget', 'shakeA', 'flash', 'cam', 'sigMarks', 'menuOpen', 'menuSel', 'paused']);
 const NET_OPAQUE = v => v instanceof Node || v instanceof CanvasRenderingContext2D || v instanceof AudioNode || v instanceof AudioBuffer ||
   (typeof ImageBitmap !== 'undefined' && v instanceof ImageBitmap) || (typeof OffscreenCanvas !== 'undefined' && v instanceof OffscreenCanvas);
 const CPU_LEVELS = {
@@ -621,16 +621,91 @@ const sigBurst = (g, x, y, cols, n, sp, grav = 6) => { for (let i = 0; i < n; i+
 const sigPop = (text, col, dy = 0.9) => (p, g) => { const hp = p.head.getPosition(); g.popup(text, hp.x, hp.y + dy, col, 8, 1); };
 const sigLerpBall = (a, b, u) => ({ x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u), a: lerp(a.a || 0, b.a || 0, u) });
 const RAINBOW = ['#ff4d4d', '#ff9a3c', '#ffe14d', '#4ddb6a', '#4da6ff', '#a066ff'];
+// drawn props for the signature dunks (world units; live only, a replay just shows the bodies). A style's draw(K, p, s, D, layer)
+// runs twice a frame, layer 'back' (behind the players) and 'front' (over them); slam(g, h, p, D) leaves marks that outlast the dunk.
+const SK = {
+  k: () => PPM * S,
+  box(x, y, w, h, ang, col, a = 1) { const k = PPM * S; ctx.save(); ctx.globalAlpha = a; ctx.translate(SX(x), SY(y)); if (ang) ctx.rotate(-ang); ctx.fillStyle = col; ctx.fillRect(-w * k / 2, -h * k / 2, w * k, h * k); ctx.restore(); },
+  disc(x, y, r, col, a = 1) { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(SX(x), SY(y), Math.max(0.5, r * PPM * S), 0, 7); ctx.fill(); ctx.globalAlpha = 1; },
+  ring(x, y, r, w, col, a = 1, ry = r, ang = 0, a0 = 0, a1 = 7) { const k = PPM * S; ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, w * k); ctx.beginPath(); ctx.ellipse(SX(x), SY(y), Math.max(0.5, r * k), Math.max(0.5, ry * k), -ang, a0, a1); ctx.stroke(); ctx.globalAlpha = 1; },
+  line(pts, w, col, a = 1) { if (pts.length < 2) return; ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, w * PPM * S); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(SX(q.x), SY(q.y)) : ctx.moveTo(SX(q.x), SY(q.y))); ctx.stroke(); ctx.globalAlpha = 1; },
+  poly(pts, col, a = 1) { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(SX(q.x), SY(q.y)) : ctx.moveTo(SX(q.x), SY(q.y))); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; },
+  text(str, x, y, size, col, a = 1) { ctx.globalAlpha = a; txt(str, SX(x), SY(y), size, col); ctx.globalAlpha = 1; },
+  star(x, y, r, col, a = 1) { SK.poly([{ x, y: y + r }, { x: x + r * 0.22, y: y + r * 0.22 }, { x: x + r, y }, { x: x + r * 0.22, y: y - r * 0.22 }, { x, y: y - r }, { x: x - r * 0.22, y: y - r * 0.22 }, { x: x - r, y }, { x: x - r * 0.22, y: y + r * 0.22 }], col, a); },
+};
+const sigW = (p, x, y) => p.body.getWorldPoint({ x, y });   // a point on the body (hip at 0,0, +y up the torso)
+const sigHeadPt = (p, x, y) => { const h = p.head.getPosition(), o = rot({ x: x * p.dir, y }, p.head.getAngle()); return { x: h.x + o.x, y: h.y + o.y, a: p.head.getAngle() }; };
+const sigFade = s => seg(s, 0, 0.08) * (1 - seg(s, 0.94, 1));
+const sigHist = (D, q, n) => { const H = D.hist || (D.hist = []); H.push({ x: q.x, y: q.y }); if (H.length > n) H.shift(); return H; };
+// a ribbon along a list of points, `bands` colours side by side across it
+function sigRibbon(K, pts, bands, bw, a = 1, taper = false) {
+  if (pts.length < 2) return;
+  const n = bands.length;
+  bands.forEach((col, j) => {
+    const off = (j - (n - 1) / 2) * bw, out = pts.map((q, i) => {
+      const A = pts[Math.max(0, i - 1)], B = pts[Math.min(pts.length - 1, i + 1)], dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy) || 1, t = taper ? i / (pts.length - 1) : 1;
+      return { x: q.x - dy / L * off * t, y: q.y + dx / L * off * t };
+    });
+    K.line(out, bw * 1.15, col, a);
+  });
+}
+function sigQuizBoard(K, x, y, sc, text, stamp, a) {
+  if (sc <= 0.02) return;
+  K.box(x, y, 1.7 * sc, 0.95 * sc, 0, '#141019', a); K.box(x, y, 1.6 * sc, 0.85 * sc, 0, '#8a5a2b', a); K.box(x, y, 1.44 * sc, 0.7 * sc, 0, '#2f5d3a', a);
+  K.box(x - 0.3 * sc, y - 0.22 * sc, 0.5 * sc, 0.03, 0, '#3f7a4d', a);   // the eraser smudge
+  if (sc > 0.9 && text) K.text(text, x - 0.1, y + 0.02, 8, '#ffffff', a);
+  if (stamp) { const u = clamp(stamp, 0, 1), z = 1 + 1.5 * (1 - u) ** 2; K.ring(x + 0.5, y + 0.12, 0.32 * z, 0.06, '#ff3b3b', a * u); K.text('A+', x + 0.5, y + 0.12, 9 * z, '#ff3b3b', a * u); }
+}
+// marks a slam leaves behind (plain data, drawn and aged by the game; fade over their last half second)
+const SIG_MARKS = {
+  ring: (K, m, u) => K.ring(m.x, m.y, m.r * (1 - (1 - u) ** 3), 0.09 * (1 - u) + 0.02, m.col, 1 - u, m.flat ? m.r * (1 - (1 - u) ** 3) * 0.22 : undefined),
+  quiz: (K, m, u, a) => sigQuizBoard(K, m.x, m.y + 0.08 * u, 1, '2+2=4', Math.min(1, m.t / 0.25), a),
+  rainbow: (K, m, u, a) => sigRibbon(K, m.pts, RAINBOW, 0.075, 0.85 * a),
+  pot: (K, m, u, a) => {
+    const z = Math.min(1, m.t / 0.18) * (1 + 0.15 * Math.max(0, 1 - m.t / 0.4)), x = m.x;
+    K.box(x, 0.25 * z, 0.86 * z, 0.5 * z, 0, '#141019', a); K.box(x, 0.25 * z, 0.74 * z, 0.4 * z, 0, '#2b2b33', a);
+    K.disc(x, 0.52 * z, 0.36 * z, '#141019', a); K.disc(x, 0.52 * z, 0.31 * z, '#ffd23f', a); K.disc(x - 0.1 * z, 0.6 * z, 0.1 * z, '#fff3b0', a);
+    K.box(x, 0.48 * z, 0.94 * z, 0.1 * z, 0, '#141019', a); K.box(x, 0.48 * z, 0.86 * z, 0.05 * z, 0, '#3a3a44', a);
+    if (Math.sin(m.t * 9) > 0.3) K.star(x + 0.2 * z, 0.75 * z, 0.12, '#ffffff', a);
+  },
+  puddle: (K, m, u, a) => { K.disc(m.x, 0.03, 0.001, '#000', 0); K.ring(m.x, 0.03, m.w, 0.07, '#c8a24a', a, 0.05); K.ring(m.x - m.w * 0.3, 0.05, m.w * 0.3, 0.04, '#fff3b0', a * 0.8, 0.03); },
+  ice: (K, m, u, a) => {
+    const h = m.h, grow = Math.min(1, m.t / 0.3);
+    K.box(h.side * (BOARD_X + 0.06), h.y + 0.75, 0.16, 1.9, 0, '#dff4ff', 0.55 * a);
+    for (let i = 0; i < 7; i++) {
+      const x = lerp(h.frontX, h.backX, i / 6), L = (0.18 + 0.22 * ((i * 37) % 5) / 4) * grow;
+      K.poly([{ x: x - 0.06, y: h.y - 0.02 }, { x: x + 0.06, y: h.y - 0.02 }, { x, y: h.y - 0.02 - L }], '#bfe9ff', a);
+      K.poly([{ x: x - 0.02, y: h.y - 0.03 }, { x: x + 0.01, y: h.y - 0.03 }, { x: x - 0.005, y: h.y - 0.02 - L * 0.7 }], '#ffffff', a);
+    }
+    K.box(h.cx, h.y + 0.02, 2 * RIM_HALF + 0.1, 0.07, 0, '#ffffff', 0.8 * a);
+  },
+  crack: (K, m, u, a) => {
+    for (const [dx, dy, n] of [[-1, 0.04, 0], [1, 0.03, 1], [-0.6, -0.02, 2], [0.7, 0.05, 3]]) {
+      const pts = [{ x: m.x, y: 0.02 }]; for (let i = 1; i <= 4; i++) pts.push({ x: m.x + dx * i * 0.32, y: 0.02 + ((i + n) % 2 ? dy : -dy * 0.5) });
+      K.line(pts, 0.05, '#141019', 0.85 * a);
+    }
+  },
+};
 const MEME_DUNKS = [
   // Craig (the teacher): floats up to the board and writes out a quiz in chalk, then grades it with the slam
-  { id: 'sig_craig', name: 'POP QUIZ!', fixedT: 1.3, arc: 1.4, ease: moonEase, legs: driveLegs(0.35, 0.1), power: 1.2,
+  { id: 'sig_craig', name: 'POP QUIZ!', col: '#ffffff', fixedT: 1.3, arc: 1.4, ease: moonEase, legs: driveLegs(0.35, 0.1), power: 1.2,
     th: s => 0.06 * Math.sin(s * 11) * (1 - seg(s, 0.75, 1)) - 0.3 * seg(s, 0.8, 1),
     rel: (s, r0) => s < 0.15 ? lerp(r0, 1.6, seg(s, 0, 0.15)) : s < 0.72 ? 1.6 + 0.35 * Math.sin(2 * Math.PI * 5 * (s - 0.15)) : s < 0.86 ? lerp(1.6, 2.95, seg(s, 0.72, 0.86)) : lerp(2.95, 1.9, seg(s, 0.86, 1)),
     end: { th: -0.3, rel: 1.9 },
-    fx: (p, s, g, D) => { if (s > 0.18 && s < 0.7 && Math.random() < 0.7) { const h = p.handPos(D.arm); g.addPart(h.x, h.y, rand(-0.4, 0.4), rand(-0.6, 0.2), 3, 0.6, pick(['#ffffff', '#e8e8e8']), 1); } },
-    events: [[0.3, sigPop('POP QUIZ!', '#ffffff')], [0.55, sigPop('2 + 2 = ?', '#ffd23f')], [0.99, (p, g, D) => { const h = D.hoop; g.popup('A+', h.cx, h.y + 1.3, '#ff4d4d', 16, 1.3); }]] },
+    fx: (p, s, g, D) => {
+      // the chalkboard rides along just ahead of him while he writes on it
+      const c = p.center(), want = { x: c.x + p.dir * 0.95, y: c.y + 0.75 };
+      D.qb = D.qb ? { x: lerp(D.qb.x, want.x, 0.25), y: lerp(D.qb.y, want.y, 0.25) } : want;
+      if (s > 0.18 && s < 0.7 && Math.random() < 0.8) { const h = p.handPos(D.arm); g.addPart(h.x, h.y, rand(-0.4, 0.4), rand(-0.6, 0.2), 3, 0.6, pick(['#ffffff', '#e8e8e8']), 1); }
+    },
+    draw: (K, p, s, D, layer) => {
+      if (layer === 'back' && D.qb) sigQuizBoard(K, D.qb.x, D.qb.y, seg(s, 0.08, 0.2) * (1 + 0.12 * Math.sin(Math.PI * seg(s, 0.08, 0.24))), '2+2=?'.slice(0, Math.ceil(seg(s, 0.2, 0.62) * 5)), 0, 1);
+      if (layer === 'front' && (Math.abs(s - 0.12) < 0.05 || Math.abs(s - 0.8) < 0.05)) { const q = sigHeadPt(p, 0.13, 0.04); K.star(q.x, q.y, 0.17 * (1 - Math.abs(s < 0.5 ? s - 0.12 : s - 0.8) / 0.05), '#ffffff'); }   // the glasses glint
+    },
+    slam: (g, h, p, D) => { if (D.qb) g.sigMark({ k: 'quiz', x: D.qb.x, y: D.qb.y, life: 2.2 }); },
+    events: [[0.3, sigPop('POP QUIZ!', '#ffffff', 1.5)], [0.99, (p, g, D) => { const h = D.hoop; g.popup('A+', h.cx, h.y + 1.3, '#ff4d4d', 16, 1.3); }]] },
   // Loren (the big forehead): balances the ball on the forehead the whole way up, then knocks it into his hand and slams it
-  { id: 'sig_loren', name: 'FOREHEAD BALANCE!', fixedT: 1.35, arc: 1.6, ease: moonEase, legs: driveLegs(0.3, 0.1), power: 1.1,
+  { id: 'sig_loren', name: 'FOREHEAD BALANCE!', col: '#fff3b0', fixedT: 1.35, arc: 1.6, ease: moonEase, legs: driveLegs(0.3, 0.1), power: 1.1,
     th: s => s < 0.68 ? 0.7 * seg(s, 0, 0.2) + 0.07 * Math.sin(s * 14) : lerp(0.7, -0.35, seg(s, 0.68, 0.9)),
     rel: (s, r0) => s < 0.68 ? lerp(r0, 1.35, seg(s, 0, 0.15)) + 0.25 * Math.sin(s * 14) * seg(s, 0.1, 0.2) : s < 0.85 ? lerp(1.35, 2.95, seg(s, 0.68, 0.85)) : lerp(2.95, 1.9, seg(s, 0.85, 1)),
     end: { th: -0.35, rel: 1.9 },
@@ -638,59 +713,169 @@ const MEME_DUNKS = [
       if (s > 0.78) return null;
       const a = p.head.getAngle(), hc = p.head.getPosition(), o = rot({ x: p.dir * 0.08, y: p.d.headR + D.ball.r + 0.02 }, a);
       const top = { x: hc.x + o.x, y: hc.y + o.y, a: s * 14 };
-      return s < 0.12 ? sigLerpBall(hand, top, seg(s, 0, 0.12)) : s < 0.66 ? top : sigLerpBall(top, hand, seg(s, 0.66, 0.78));
+      // pops up off the forehead and drops into the hand for the slam
+      if (s < 0.12) return sigLerpBall(hand, top, seg(s, 0, 0.12));
+      if (s < 0.66) { top.x += 0.06 * Math.sin(s * 23); return top; }
+      const u = seg(s, 0.66, 0.78), q = sigLerpBall(top, hand, u); q.y += 0.9 * Math.sin(Math.PI * u); q.a = s * 30; return q;
     },
-    events: [[0.35, sigPop('NO HANDS!', '#ffd23f', 1.4)]] },
+    draw: (K, p, s, D, layer) => {
+      const on = seg(s, 0.08, 0.16) * (1 - seg(s, 0.62, 0.7)), c = p.center();
+      if (layer === 'back' && on > 0) {   // a spotlight from the rafters
+        K.poly([{ x: c.x - 0.3, y: 9.5 }, { x: c.x + 0.3, y: 9.5 }, { x: c.x + 1.1, y: c.y - 1.3 }, { x: c.x - 1.1, y: c.y - 1.3 }], '#fff6d8', 0.16 * on);
+        K.ring(c.x, c.y - 1.3, 1.1, 0.06, '#fff6d8', 0.25 * on, 0.18);
+      }
+      if (layer === 'front' && on > 0) {
+        const f = sigHeadPt(p, 0.12, p.d.headR * 0.55), b = D.ball.body.getPosition(), w = 0.12 * Math.sin(s * 23);
+        if (Math.sin(s * 40) > 0) K.star(f.x, f.y, 0.16, '#ffffff', on);   // the forehead shine
+        K.ring(b.x, b.y, 0.42, 0.04, '#ffffff', 0.7 * on, 0.42, 0, Math.PI * 0.75 + w, Math.PI * 1.25 + w);   // wobble marks
+        K.ring(b.x, b.y, 0.42, 0.04, '#ffffff', 0.7 * on, 0.42, 0, -Math.PI * 0.25 + w, Math.PI * 0.25 + w);
+      }
+    },
+    events: [[0.35, sigPop('NO HANDS!', '#ffd23f', 1.6)], [0.99, (p, g, D) => { const h = D.hoop; g.popup('+100 IQ', h.cx, h.y + 1.3, '#fff3b0', 12, 1.3); }]] },
   // Colton (the LV fit and the Jordans): a long, slow, legs-split glide with gold dripping off him
-  { id: 'sig_colton', name: 'DRIP GLIDE!', fixedT: 1.15, arc: 1.0, ease: s => s, trail: true, power: 1.2,
+  { id: 'sig_colton', name: 'DRIP GLIDE!', col: '#ffd23f', fixedT: 1.15, arc: 1.0, ease: s => s, trail: true, power: 1.2,
     legs: s => { const k = seg(s, 0.05, 0.3) * (1 - seg(s, 0.85, 1)); return [1.1 * k, -1.0 * k]; },
     th: s => -0.15 * seg(s, 0, 0.3) - 0.15 * seg(s, 0.85, 1),
     rel: (s, r0) => s < 0.85 ? lerp(r0, 2.65, seg(s, 0, 0.3)) : lerp(2.65, 1.9, seg(s, 0.85, 1)),
     end: { th: -0.3, rel: 1.9 },
-    fx: (p, s, g) => { if (s > 0.1 && s < 0.9 && Math.random() < 0.8) { const c = p.center(); g.addPart(c.x + rand(-0.4, 0.4), c.y + rand(-0.9, 0.5), 0, rand(-1, -0.3), 2, 0.7, pick(['#ffd23f', '#c8a24a', '#fff3b0', '#6b4a22']), pick([1, 2])); } },
-    events: [[0.45, sigPop('DRIP!', '#ffd23f')]] },
+    fx: (p, s, g, D) => {
+      const c = p.center(), dt = STEP;
+      if (s > 0.1 && s < 0.9 && Math.random() < 0.8) g.addPart(c.x + rand(-0.4, 0.4), c.y + rand(-0.9, 0.5), 0, rand(-1, -0.3), 2, 0.7, pick(['#ffd23f', '#c8a24a', '#fff3b0', '#6b4a22']), pick([1, 2]));
+      // real drips: gold drops that fall off him and pool on the floor
+      const Dr = D.drips || (D.drips = []);
+      if (s > 0.08 && s < 0.9 && Math.random() < 0.35) Dr.push({ x: c.x + rand(-0.3, 0.3), y: c.y + rand(-0.7, 0.2), vy: 0 });
+      if (s > 0.15 && s < 0.85 && Math.random() < 0.12) (D.cash || (D.cash = [])).push({ x: c.x + rand(-0.6, 0.6), y: c.y + rand(0, 0.8), t: 0 });
+      for (const q of D.cash || []) { q.t += dt; q.y += dt * 0.9; }
+      for (let i = Dr.length - 1; i >= 0; i--) {
+        const q = Dr[i]; q.vy -= 14 * dt; q.y += q.vy * dt;
+        if (q.y < 0.05) { Dr.splice(i, 1); if (!D.pud) D.pud = g.sigMark({ k: 'puddle', x: q.x, w: 0.15, life: 3.5 }); else { D.pud.w = Math.min(1.4, D.pud.w + 0.03); D.pud.x = lerp(D.pud.x, q.x, 0.1); D.pud.t = Math.min(D.pud.t, 0.5); } }
+      }
+    },
+    draw: (K, p, s, D, layer) => {
+      if (layer === 'back') {
+        for (const q of D.drips || []) { K.box(q.x, q.y, 0.07, 0.13, 0, '#141019'); K.box(q.x, q.y, 0.045, 0.1, 0, '#ffd23f'); }
+        for (const q of D.cash || []) if (q.t < 0.8) K.text('$', q.x, q.y, 8, '#4ddb6a', 1 - q.t / 0.8);
+        return;
+      }
+      const on = seg(s, 0.03, 0.1), a = p.head.getAngle(), sh = sigHeadPt(p, 0.12, 0.04);   // the shades, and the chain
+      K.box(sh.x, sh.y, 0.4 * on, 0.11, a, '#141019'); K.box(sh.x + p.dir * 0.06, sh.y + 0.01, 0.12 * on, 0.04, a, '#5a6a8a');
+      if (Math.sin(s * 30) > 0.5) K.star(sh.x + p.dir * 0.1, sh.y + 0.03, 0.12, '#ffffff', on);
+      const n = sigW(p, 0, p.tc.y + p.d.torsoH * 0.36), pts = [];
+      for (let i = 0; i <= 6; i++) { const o = rot({ x: lerp(-0.2, 0.2, i / 6) * p.dir, y: -0.16 * Math.sin(Math.PI * i / 6) }, p.body.getAngle()); pts.push({ x: n.x + o.x, y: n.y + o.y }); }
+      K.line(pts, 0.07, '#141019', on); K.line(pts, 0.04, '#ffd23f', on); K.disc(pts[3].x, pts[3].y - 0.05, 0.07, '#ffd23f', on);
+    },
+    events: [[0.45, sigPop('DRIP!', '#ffd23f', 1.4)], [0.99, (p, g, D) => { const h = D.hoop; g.popup('NO CAP', h.cx, h.y + 1.3, '#ffd23f', 12, 1.3); }]] },
   // Liam (the blonde swoop): a backflip that whips the hair round, blonde flying off it
-  { id: 'sig_liam', name: 'HAIR FLIP!', trail: true, legs: s => tuckLegs(1.8, s, 0.05, 0.85), minAhead: 0.3, extraT: 0.25, arc: 1.4, power: 1.2,
+  { id: 'sig_liam', name: 'HAIR FLIP!', col: '#f1d57a', trail: true, legs: s => tuckLegs(1.8, s, 0.05, 0.85), minAhead: 0.3, extraT: 0.25, arc: 1.4, power: 1.2,
     th: s => 2 * Math.PI * seg(s, 0, 0.85) - 0.25 * seg(s, 0.85, 1),
     rel: (s, r0) => s < 0.85 ? lerp(r0, 2.9, seg(s, 0, 0.3)) : lerp(2.9, 1.9, seg(s, 0.85, 1)),
     end: { th: 2 * Math.PI - 0.25, rel: 1.9 },
-    fx: (p, s, g) => { if (s > 0.15 && s < 0.85 && Math.random() < 0.9) { const h = p.head.getPosition(); g.addPart(h.x + rand(-0.2, 0.2), h.y + rand(-0.2, 0.2), rand(-2, 2), rand(-1, 2), 4, 0.6, pick(['#f1d57a', '#ffe9a8', '#d9b560']), pick([1, 2])); } },
-    events: [[0.5, sigPop('FLOW!', '#f1d57a', 1.2)]] },
+    fx: (p, s, g, D) => {
+      const h = sigHeadPt(p, -0.14, 0.12); sigHist(D, h, 14);
+      if (s > 0.15 && s < 0.85 && Math.random() < 0.9) g.addPart(h.x + rand(-0.2, 0.2), h.y + rand(-0.2, 0.2), rand(-2, 2), rand(-1, 2), 4, 0.6, pick(['#f1d57a', '#ffe9a8', '#d9b560']), pick([1, 2]));
+    },
+    draw: (K, p, s, D, layer) => {
+      if (layer !== 'back' || !D.hist) return;
+      const a = sigFade(s), H = D.hist;   // the flowing hair: a long blonde streak off the back of his head
+      sigRibbon(K, H, ['#b8902f', '#f1d57a', '#ffe9a8', '#f1d57a'], 0.06, a, true);
+      if (s > 0.2 && s < 0.85) { const c = p.center(); for (let i = 0; i < 3; i++) K.ring(c.x, c.y, 1.0 + i * 0.25, 0.04, '#ffffff', 0.35 * a, 1.0 + i * 0.25, 0, -p.body.getAngle() + i * 2.1, -p.body.getAngle() + i * 2.1 + 1.1); }
+    },
+    events: [[0.5, sigPop('FLOW!', '#f1d57a', 1.4)], [0.99, (p, g, D) => { const h = D.hoop; g.popup('*HAIR FLIP*', h.cx, h.y + 1.3, '#f1d57a', 11, 1.3); }]] },
   // Brock (the orange hair, a leprechaun): clicks his heels the whole way up on a rainbow, and the slam pays out gold
-  { id: 'sig_brock', name: 'POT OF GOLD!', extraT: 0.4, arc: 1.4, power: 1.2,
+  { id: 'sig_brock', name: 'POT OF GOLD!', col: '#3ecf5a', extraT: 0.4, arc: 1.4, power: 1.2,
     legs: s => { const k = Math.sin(2 * Math.PI * 4 * s) * (1 - seg(s, 0.7, 0.85)); return [0.8 * k, -0.8 * k]; },
     th: s => 0.12 * Math.sin(2 * Math.PI * 4 * s) * (1 - seg(s, 0.7, 0.85)) - 0.3 * seg(s, 0.85, 1),
     rel: (s, r0) => s < 0.75 ? lerp(r0, 2.6, seg(s, 0, 0.2)) + 0.3 * Math.sin(2 * Math.PI * 4 * s) * seg(s, 0.1, 0.2) : s < 0.88 ? lerp(2.6, 2.95, seg(s, 0.75, 0.88)) : lerp(2.95, 1.9, seg(s, 0.88, 1)),
     end: { th: -0.3, rel: 1.9 },
-    fx: (p, s, g) => { if (s > 0.03 && s < 0.92) { const c = p.center(), k = Math.floor(g.time * 30); for (let i = 0; i < 2; i++) g.addPart(c.x + rand(-0.15, 0.15), c.y - 0.6 + rand(-0.1, 0.1), 0, 0, 0, 0.9, RAINBOW[(k + i * 3) % 6], 2); } },
+    fx: (p, s, g, D) => {
+      if (s < 0.92) sigHist(D, sigW(p, 0, 0.1), 999);   // the rainbow he rides up on
+      if (s > 0.05 && s < 0.9 && Math.random() < 0.3) { const c = p.center(); g.addPart(c.x + rand(-0.5, 0.5), c.y + rand(-0.5, 0.8), rand(-0.5, 0.5), rand(0.2, 1), 1.5, 0.8, pick(['#3ecf5a', '#2a9a40', '#9af0a8']), 2); }
+    },
+    draw: (K, p, s, D, layer) => {
+      if (layer === 'back') { if (D.hist) sigRibbon(K, D.hist, RAINBOW, 0.075, 0.9); return; }
+      // the leprechaun hat
+      const a = p.head.getAngle(), on = seg(s, 0, 0.06), b = sigHeadPt(p, -0.02, p.d.headR + 0.02), c = sigHeadPt(p, -0.02, p.d.headR + 0.2), bd = sigHeadPt(p, -0.02, p.d.headR + 0.08), bk = sigHeadPt(p, 0.02, p.d.headR + 0.08);
+      K.box(c.x, c.y, 0.38 * on, 0.38 * on, a, '#141019'); K.box(c.x, c.y, 0.31 * on, 0.32 * on, a, '#2a9a40');
+      K.box(b.x, b.y, 0.6 * on, 0.1 * on, a, '#141019'); K.box(b.x, b.y, 0.53 * on, 0.05 * on, a, '#2a9a40');
+      K.box(bd.x, bd.y, 0.31 * on, 0.07 * on, a, '#141019'); K.box(bk.x, bk.y, 0.1 * on, 0.08 * on, a, '#ffd23f');
+    },
+    slam: (g, h, p, D) => { if (D.hist) g.sigMark({ k: 'rainbow', pts: D.hist.slice(), life: 2.2 }); g.sigMark({ k: 'pot', x: h.cx - h.side * 0.1, life: 3 }); for (let i = 0; i < 26; i++) g.addPart(h.cx, h.y, rand(-4, 4), rand(2, 8), 14, rand(0.8, 1.4), pick(['#ffd23f', '#ffb81c', '#fff3b0']), 2); },
     events: [[0.25, (p, g) => { g.sfx && g.sfx.grab(); }], [0.5, (p, g) => { g.sfx && g.sfx.grab(); }],
       [0.99, (p, g, D) => { const h = D.hoop; sigBurst(g, h.cx, h.y + 0.3, ['#ffd23f', '#ffb81c', '#fff3b0'], 30, 4); g.popup('LUCKY!', h.cx, h.y + 1.3, '#3ecf5a', 12, 1.3); }]] },
   // James (the curls): goes up like a spring, boinging three times on the way to the rim
-  { id: 'sig_james', name: 'BOING BOING!', fixedT: 1.3, arc: 0.8, power: 1.1,
+  { id: 'sig_james', name: 'BOING BOING!', col: '#ff8ad8', fixedT: 1.3, arc: 0.8, power: 1.1,
     bob: s => 0.6 * Math.sin(3 * Math.PI * s) ** 2 * (1 - seg(s, 0.67, 0.9)),
     legs: s => { const c = (1 - Math.sin(3 * Math.PI * s) ** 2) * (1 - seg(s, 0.67, 0.9)); return [0.9 * c, 0.7 * c]; },
     th: s => -0.1 * Math.sin(6 * Math.PI * s) * (1 - seg(s, 0.67, 0.9)) - 0.3 * seg(s, 0.85, 1),
     rel: (s, r0) => s < 0.75 ? lerp(r0, 2.4, seg(s, 0, 0.2)) : s < 0.88 ? lerp(2.4, 2.95, seg(s, 0.75, 0.88)) : lerp(2.95, 1.9, seg(s, 0.88, 1)),
     end: { th: -0.3, rel: 1.9 },
-    events: [[0.02, (p, g) => { g.sfx && g.sfx.boing(); }], [0.34, (p, g) => { g.sfx && g.sfx.boing(); sigPop('BOING!', '#ffd23f')(p, g); }],
-      [0.67, (p, g) => { g.sfx && g.sfx.boing(); sigPop('BOING!', '#ffd23f')(p, g); }]] },
+    draw: (K, p, s, D, layer) => {
+      if (layer !== 'back') return;
+      // a pogo spring on his feet, stretched as he flies up off it and squashed at the bottom of each bounce
+      const on = 1 - seg(s, 0.67, 0.8); if (on <= 0) return;
+      const ft = sigW(p, 0, -p.d.legLen), ex = Math.sin(3 * Math.PI * s) ** 2, L = (0.35 + 0.75 * ex) * on, n = 7, pts = [];
+      for (let i = 0; i <= n * 2; i++) pts.push({ x: ft.x + (i === 0 || i === n * 2 ? 0 : (i % 2 ? 0.2 : -0.2)), y: ft.y - L * i / (n * 2) });
+      K.line(pts, 0.09, '#141019', on); K.line(pts, 0.05, '#d6dbe6', on);
+      K.box(ft.x, ft.y - L, 0.5, 0.08, 0, '#141019', on); K.box(ft.x, ft.y - L, 0.44, 0.04, 0, '#ff4d9a', on);
+      if (ex < 0.25) { K.text('~', ft.x - 0.45, ft.y - L + 0.1, 8, '#ffffff', on); K.text('~', ft.x + 0.45, ft.y - L + 0.1, 8, '#ffffff', on); }
+    },
+    events: [[0.02, (p, g) => { g.sfx && g.sfx.boing(); }], [0.34, (p, g) => { g.sfx && g.sfx.boing(); sigPop('BOING!', '#ff8ad8')(p, g); const f = sigW(p, 0, -p.d.legLen - 0.35); g.sigMark({ k: 'ring', x: f.x, y: f.y, r: 0.9, col: '#ff8ad8', flat: true, life: 0.5 }); }],
+      [0.67, (p, g) => { g.sfx && g.sfx.boing(); sigPop('BOING!', '#ff8ad8')(p, g); const f = sigW(p, 0, -p.d.legLen - 0.35); g.sigMark({ k: 'ring', x: f.x, y: f.y, r: 1.1, col: '#ff8ad8', flat: true, life: 0.5 }); }]] },
   // Jonas (the buff one): stops at the top for three curls of the ball, then hammers it down as hard as anything in the game
-  { id: 'sig_jonas', name: 'FLEX SLAM!', fixedT: 1.5, arc: 1.4, impact: 2, power: 1.6, trail: true, legs: cockLegs(0.5, 0.9),
-    ease: s => s < 0.3 ? 0.8 * (1 - (1 - s / 0.3) ** 2) : s < 0.78 ? 0.8 + 0.04 * seg(s, 0.3, 0.78) : 0.84 + 0.16 * seg(s, 0.78, 1) ** 2,
-    th: s => s < 0.78 ? 0.25 * seg(s, 0, 0.3) : s < 0.88 ? lerp(0.25, 0.6, seg(s, 0.78, 0.88)) : lerp(0.6, -0.45, seg(s, 0.88, 1)),
-    rel: (s, r0) => s < 0.15 ? lerp(r0, 1.0, seg(s, 0, 0.15)) : s < 0.72 ? 1.0 + 1.5 * (0.5 - 0.5 * Math.cos(2 * Math.PI * 3 * (s - 0.15) / 0.57)) : s < 0.88 ? lerp(1.0, Math.PI + 1.35, seg(s, 0.72, 0.88)) : lerp(Math.PI + 1.35, 1.6, seg(s, 0.88, 1)),
+  { id: 'sig_jonas', name: 'FLEX SLAM!', col: '#ff4d4d', fixedT: 1.75, arc: 1.4, impact: 2, power: 1.6, trail: true, legs: cockLegs(0.5, 0.9),
+    // floats up, turns to the crowd and hits a double-biceps pose (3 pumps, ball balanced on his head), then hammers it home
+    front: s => s > 0.22 && s < 0.76, hideArm: s => s > 0.2 && s < 0.77,
+    ease: s => s < 0.25 ? 0.9 * (1 - (1 - s / 0.25) ** 2) : s < 0.78 ? 0.9 + 0.03 * seg(s, 0.25, 0.78) : 0.93 + 0.07 * seg(s, 0.78, 1) ** 2,
+    th: s => s < 0.76 ? 0.1 * seg(s, 0, 0.2) * (1 - seg(s, 0.2, 0.3)) : s < 0.86 ? lerp(0, 0.6, seg(s, 0.76, 0.86)) : lerp(0.6, -0.45, seg(s, 0.86, 1)),
+    rel: (s, r0) => s < 0.2 ? lerp(r0, Math.PI, seg(s, 0, 0.2)) : s < 0.76 ? Math.PI : s < 0.86 ? lerp(Math.PI, Math.PI + 1.35, seg(s, 0.76, 0.86)) : lerp(Math.PI + 1.35, 1.6, seg(s, 0.86, 1)),
     end: { th: -0.45, rel: 1.6 },
-    events: [[0.25, sigPop('REP 1', '#ffffff')], [0.44, sigPop('REP 2', '#ffffff')], [0.63, sigPop('REP 3!', '#ffd23f')]] },
+    ballAt: (p, s, D, hand) => {
+      if (s < 0.16 || s > 0.84) return null;
+      const a = p.head.getAngle(), hc = p.head.getPosition(), o = rot({ x: 0, y: p.d.headR + D.ball.r + 0.02 }, a);
+      const top = { x: hc.x + o.x, y: hc.y + o.y + 0.03 * Math.sin(s * 40), a: 0 };
+      return s < 0.22 ? sigLerpBall(hand, top, seg(s, 0.16, 0.22)) : s < 0.77 ? top : sigLerpBall(top, hand, seg(s, 0.77, 0.84));
+    },
+    fx: (p, s, g) => { if (s > 0.25 && s < 0.8 && Math.random() < 0.3) { const h = p.head.getPosition(); g.addPart(h.x + rand(-0.25, 0.25), h.y + 0.1, rand(-1.5, 1.5), rand(0.5, 2), 8, 0.5, pick(['#bfe9ff', '#ffffff']), 1); } },
+    draw: (K, p, s, D, layer) => {
+      if (layer !== 'front' || s < 0.2 || s > 0.77) return;
+      // the double biceps: both arms out and up in an L, fists by the head, biceps pumping
+      const pump = 0.5 - 0.5 * Math.cos(2 * Math.PI * 3 * seg(s, 0.28, 0.74)), up = seg(s, 0.2, 0.27) * (1 - seg(s, 0.74, 0.77));
+      const skin = p.look ? p.look.skin : '#f6d9bf', shY = p.tc.y + p.d.torsoH * 0.4;
+      for (const side of [-1, 1]) {
+        const sh = sigW(p, side * 0.22, shY), el = sigW(p, side * lerp(0.3, 0.86, up), shY + lerp(-0.35, 0.06 + 0.05 * pump, up));
+        const fi = sigW(p, side * lerp(0.36, 0.74 - 0.06 * pump, up), shY + lerp(-0.7, 0.66 + 0.03 * pump, up));
+        K.line([sh, el, fi], 0.24, '#141019'); K.line([sh, el, fi], 0.16, skin);
+        // the bicep ball and the fist
+        const bc = sigW(p, side * lerp(0.26, 0.56, up), shY + lerp(-0.15, 0.16 + 0.05 * pump, up)), r = (0.08 + 0.06 * up + 0.07 * pump * up);
+        K.disc(bc.x, bc.y, r + 0.035, '#141019'); K.disc(bc.x, bc.y, r, skin); K.disc(bc.x - 0.03, bc.y + 0.04, r * 0.4, '#ffffff', 0.4);
+        K.disc(fi.x, fi.y, 0.12, '#141019'); K.disc(fi.x, fi.y, 0.085, skin);
+        if (pump > 0.8 && up > 0.9) for (let i = 0; i < 3; i++) { const an = Math.PI / 2 + side * (0.3 + i * 0.5); K.line([{ x: bc.x + Math.cos(an) * (r + 0.07), y: bc.y + Math.sin(an) * (r + 0.07) }, { x: bc.x + Math.cos(an) * (r + 0.2), y: bc.y + Math.sin(an) * (r + 0.2) }], 0.04, '#ffd23f'); }
+      }
+    },
+    slam: (g, h, p) => { g.sigMark({ k: 'crack', x: h.cx - h.side * 0.3, life: 3 }); g.sigMark({ k: 'ring', x: h.cx - h.side * 0.3, y: 0.05, r: 3.2, col: '#ff4d4d', flat: true, life: 0.7 }); g.sigMark({ k: 'ring', x: h.cx - h.side * 0.3, y: 0.05, r: 2, col: '#ffffff', flat: true, life: 0.5 }); },
+    events: [[0.26, sigPop('DOUBLE BICEPS!', '#ffd23f', 1.6)], [0.4, sigPop('FLEX', '#ffffff', 1.4)], [0.55, sigPop('FLEX', '#ffffff', 1.4)], [0.7, sigPop('FLEX!', '#ff4d4d', 1.4)], [0.99, (p, g, D) => { const h = D.hoop; g.popup('GAINS!', h.cx, h.y + 1.3, '#ff4d4d', 14, 1.3); }]] },
   // Jackson (the frosted tips): spins up like a top in a cloud of frost and freezes the rim
-  { id: 'sig_jackson', name: 'ICE COLD!', trail: true, extraT: 0.3, arc: 1.3, power: 1.2, spin: s => 4 * Math.PI * seg(s, 0, 0.9),
+  { id: 'sig_jackson', name: 'ICE COLD!', col: '#7fd3ff', trail: true, extraT: 0.3, arc: 1.3, power: 1.2, spin: s => 4 * Math.PI * seg(s, 0, 0.9),
     legs: s => { const w = Math.sin(Math.PI * Math.min(1, s / 0.9)); return [0.3 * w, -0.3 * w]; },
     th: s => -0.2 * seg(s, 0.8, 1),
     rel: (s, r0) => s < 0.85 ? lerp(r0, 2.95, seg(s, 0, 0.2)) : lerp(2.95, 1.95, seg(s, 0.85, 1)),
     end: { th: -0.2, rel: 1.95 },
     fx: (p, s, g) => { if (s < 0.92 && Math.random() < 0.9) { const c = p.center(); g.addPart(c.x + rand(-0.7, 0.7), c.y + rand(-1, 1), rand(-0.5, 0.5), rand(-0.8, 0.2), 1, 0.8, pick(['#bfe9ff', '#ffffff', '#7fd3ff']), pick([1, 2])); } },
+    draw: (K, p, s, D, layer) => {
+      // ice shards orbit him (the ones round the back are drawn behind him), with a frosty ring at his feet
+      const c = p.center(), a = sigFade(s), t = s * 22;
+      if (layer === 'back') K.ring(c.x, c.y - 1.1, 0.9, 0.06, '#bfe9ff', 0.6 * a, 0.18);
+      for (let i = 0; i < 6; i++) {
+        const an = t + i * Math.PI / 3, z = Math.sin(an); if ((z < 0) !== (layer === 'back')) continue;
+        const x = c.x + Math.cos(an) * 1.0, y = c.y + 0.2 + Math.sin(an * 0.5 + i) * 0.5, r = 0.13 + 0.05 * z;
+        K.poly([{ x, y: y + r * 1.6 }, { x: x + r * 0.7, y }, { x, y: y - r * 1.6 }, { x: x - r * 0.7, y }], '#141019', a);
+        K.poly([{ x, y: y + r * 1.3 }, { x: x + r * 0.45, y }, { x, y: y - r * 1.3 }, { x: x - r * 0.45, y }], z < 0 ? '#7fd3ff' : '#dff4ff', a);
+      }
+    },
+    slam: (g, h) => { g.sigMark({ k: 'ice', h, life: 3.5 }); for (let i = 0; i < 50; i++) g.addPart(h.cx + rand(-5, 5), rand(6, 9), rand(-0.3, 0.3), rand(-1, -0.4), 0.2, rand(2.5, 4), pick(['#ffffff', '#dff4ff']), pick([1, 2])); },
     events: [[0.99, (p, g, D) => { const h = D.hoop; sigBurst(g, h.cx, h.y, ['#bfe9ff', '#ffffff', '#7fd3ff'], 34, 3, 2); g.popup('FROZEN!', h.cx, h.y + 1.3, '#bfe9ff', 12, 1.3); }]] },
   // Cam (the bulge): lies back flat in the air and spins the ball on his bulge, then rolls up and slams it
-  { id: 'sig_cam', name: 'BULGE SPIN!', fixedT: 1.45, arc: 1.5, ease: moonEase, power: 1.2,
+  { id: 'sig_cam', name: 'BULGE SPIN!', col: '#ff8a2a', fixedT: 1.45, arc: 1.5, ease: moonEase, power: 1.2,
     legs: s => { const k = seg(s, 0.1, 0.25) * (1 - seg(s, 0.7, 0.85)); return [0.25 * k + 0.2 * Math.sin(s * 20) * k, -0.1 * k]; },
     th: s => s < 0.7 ? 1.5 * seg(s, 0, 0.22) + 0.06 * Math.sin(s * 16) * seg(s, 0.15, 0.25) : lerp(1.5, -0.3, seg(s, 0.7, 0.88)),
     rel: (s, r0) => s < 0.7 ? lerp(r0, 2.7, seg(s, 0, 0.2)) : s < 0.86 ? lerp(2.7, 2.95, seg(s, 0.7, 0.86)) : lerp(2.95, 1.9, seg(s, 0.86, 1)),
@@ -701,7 +886,17 @@ const MEME_DUNKS = [
       return s < 0.2 ? sigLerpBall(hand, b, seg(s, 0, 0.2)) : s < 0.68 ? b : sigLerpBall(b, hand, seg(s, 0.68, 0.8));
     },
     fx: (p, s, g, D) => { if (s > 0.22 && s < 0.66 && Math.random() < 0.6) { const b = D.ball.body.getPosition(), a = rand(0, 2 * Math.PI); g.addPart(b.x + Math.cos(a) * 0.35, b.y + Math.sin(a) * 0.35, -Math.sin(a) * 2, Math.cos(a) * 2, 0, 0.4, pick(['#ffffff', '#ffd23f']), 1); } },
-    events: [[0.4, sigPop('SPIN CYCLE!', '#ffd23f', 1.4)]] },
+    draw: (K, p, s, D, layer) => {
+      if (layer !== 'front') return;
+      const on = seg(s, 0.2, 0.26) * (1 - seg(s, 0.64, 0.7)); if (on <= 0) return;
+      // the ball's a blur: spin rings round it and whoosh lines streaming off
+      const b = D.ball.body.getPosition(), t = s * 90;
+      K.ring(b.x, b.y, 0.4, 0.05, '#ffffff', 0.8 * on, 0.13, Math.sin(t) * 0.3);
+      K.ring(b.x, b.y, 0.48, 0.04, '#ffd23f', 0.7 * on, 0.16, Math.cos(t) * 0.3 + 0.5);
+      for (let i = 0; i < 3; i++) { const an = t * 0.5 + i * 2.1; K.ring(b.x, b.y, 0.62, 0.035, '#ffffff', 0.55 * on, 0.62, 0, an, an + 0.9); }
+      if (Math.sin(s * 50) > 0) K.text('WHIRR', b.x, b.y + 0.75, 7, '#ffd23f', on);
+    },
+    events: [[0.4, sigPop('SPIN CYCLE!', '#ffd23f', 1.4)], [0.99, (p, g, D) => { const h = D.hoop; g.popup('RINSE & REPEAT', h.cx, h.y + 1.3, '#ff8a2a', 10, 1.3); }]] },
 ];
 MEME_DUNKS.forEach(d => { DUNK_BY_ID[d.id] = d; d.sig = true; });
 const REEL = [...DUNKS.map(d => ({ id: d.id, name: d.name.replace('!', ''), isNew: d.isNew })), { id: 'oop', name: 'ALLEY-OOP' },
@@ -2015,7 +2210,8 @@ class Player {
     this.spinA = st.spin ? st.spin(s2) : 0;
     this.legA = st.legs ? st.legs(s2) : null; this.layer = st.layer ? st.layer(s2) : null;
     if (st.trail && !g.isShadow && (D.ghostK = (D.ghostK || 0) + 1) % 3 === 0) this.addGhost();
-    this.front = !!st.front && s2 < 0.95;
+    this.front = (typeof st.front === 'function' ? st.front(s2) : !!st.front) && s2 < 0.95; this.hideArm = !!(st.hideArm && st.hideArm(s2));
+    if (st.sig && !D.sigGo && !g.isShadow) { D.sigGo = true; g.slowmo(0.55, 0.25); }   // a beat of slow-mo as a signature dunk takes off
     if (st.fx && !g.isShadow) st.fx(this, s2, g, D);
     for (const [at, ev] of st.events || []) if (!D.fired[at] && s >= at) { D.fired[at] = true; this.dunkEvent(ev, D); }
     if (st.sparkle && s > st.sparkle[0] && s < st.sparkle[1] && Math.random() < 0.6) { const c = this.center(); g.addPart(c.x + rand(-0.6, 0.6), c.y + rand(-1, 0.8), 0, rand(-0.3, 0.3), 0, 0.5, pick(['#ffffff', '#c9d6ff', '#ffd23f']), 1); }
@@ -2023,7 +2219,7 @@ class Player {
   }
   // the ball got taken mid-dunk: drop the pose and stop the tumble, so he comes down upright instead of rolling on
   cancelDunk() {
-    this.dunk = null; this.front = false; this.legA = null; this.layer = null; this.armScale = 1; this.spinA = 0;
+    this.dunk = null; this.front = false; this.hideArm = false; this.legA = null; this.layer = null; this.armScale = 1; this.spinA = 0;
     for (const b of this.parts) b.setAngularVelocity(clamp(b.getAngularVelocity(), -2, 2));
     this.upT = 0.9;
   }
@@ -2048,12 +2244,12 @@ class Player {
       b.body.setTransform({ x: h.cx, y: h.y + 0.3 }, 0); b.body.setLinearVelocity({ x: 0, y: -9 }); b.body.setAngularVelocity(-dir * 5);
       b.prevY = h.y + 0.3; b.ghost = true; b.ghostT = 0; b.dunked = D.style.name; b.lastThrower = this; b.throwTime = g.time;
       D.released = true;
-      g.onSlam(this, D.style, h);
+      g.onSlam(this, D.style, h, D);
     }
   }
   finishDunk() {
     const D = this.dunk, g = this.game, h = D.hoop, b = D.ball, dir = this.dir, st = D.style, after = st.after || { type: 'hang', dur: 0.7 };
-    this.dunk = null; this.front = false; this.layer = null; this.legA = null;
+    this.dunk = null; this.front = false; this.hideArm = false; this.layer = null; this.legA = null;
     if (after.type === 'fall') { if (!D.released) this.dunkEvent('through', D); return; }
     if (b.holder === this) { b.holder = null; b.setHeld(false); this.holding = null; }
     b.body.setTransform({ x: h.cx, y: h.y + 0.42 }, 0);
@@ -2061,7 +2257,7 @@ class Player {
     b.prevY = h.y + 0.42; b.ghost = true; b.ghostT = 0; b.dunked = st.name; b.lastThrower = this; b.throwTime = g.time;
     if (after.type === 'bonk') {
       const hp = this.head.getPosition();
-      g.onSlam(this, st, h);
+      g.onSlam(this, st, h, D);
       g.popup('BONK!', hp.x - dir * 0.6, hp.y + 0.7, '#ffd23f', 16, 1.2);
       for (let i = 0; i < 14; i++) g.addPart(hp.x, hp.y, rand(-3, 3), rand(0, 4), 8, rand(0.4, 0.8), pick(['#ffd23f', '#ffffff']), pick([1, 2]));
       h.shake = 1.5; g.sfx.board(1);
@@ -2075,7 +2271,7 @@ class Player {
     else { const la = h.body.getLocalPoint(grip); joint = g.world.createJoint(new pl.RevoluteJoint({ localAnchorA: { x: la.x, y: la.y }, localAnchorB: { x: 0, y: -this.d.armLen + 0.03 } }, h.body, this.arms[D.arm])); }
     this.hang = { t: 0, dur: after.dur || 0.7, joint, arm: D.arm, type: after.type, grip };
     if (after.type === 'swing') for (const q of this.parts) { const v = q.getLinearVelocity(); q.setLinearVelocity({ x: v.x + dir * 3, y: v.y }); }
-    g.onSlam(this, st, h);
+    g.onSlam(this, st, h, D);
   }
   // a faded copy of where the body just was, for the motion trail of flips and spins (live only, not in replays)
   addGhost() {
@@ -2093,7 +2289,7 @@ class Player {
       for (const q of this.trail) { ctx.globalAlpha = 0.22 * (1 - q.t / GHOST_T); this.drawBody(r, q.body, q.head, q.arm, null, null, q.spin, false, 1, q.legA, null); }
       ctx.globalAlpha = 1;
     }
-    this.drawBody(r, body, head, arm, ball, ballBody, spin, front, armScale, legA, layer);
+    this.posed = !!pose; this.drawBody(r, body, head, arm, ball, ballBody, spin, front, armScale, legA, layer);
   }
   // legA: [front leg, back leg] swung at the hip (radians, + forward), drawing only. layer: 'between' draws the ball and
   // arm between the two legs, 'back' behind the whole body
@@ -2108,7 +2304,7 @@ class Player {
       r.local(s.torsoF, body, 0, this.tc.y, false);
       r.part(s.headF, head, false);
       if (ball) { const bp = ballBody.getPosition(); r.part(ball.spr, new Pose(bp.x + off.x, bp.y + off.y, ballBody.getAngle()), false); }
-      r.part(s.arm, new Pose(ap.x + off.x, ap.y + off.y, arm.getAngle()), flip);
+      if (!this.hideArm || this.posed) r.part(s.arm, new Pose(ap.x + off.x, ap.y + off.y, arm.getAngle()), flip);
       return;
     }
     const sx = spin ? Math.cos(spin) : 1, lf = legA ? legA[0] * this.dir : 0, lb = legA ? legA[1] * this.dir : 0;
@@ -5064,7 +5260,7 @@ class Game {
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
     this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0;
     this.cam = { z: 1, x: 0, y: 3.5, fx: 0, fy: 3.5, watch: null };
-    this.parts = []; this.pops = []; this.sndQ = []; this.grabQ = []; this.dustQ = []; this.deflectQ = []; this.sndCD = {};
+    this.parts = []; this.pops = []; this.sigMarks = []; this.sndQ = []; this.grabQ = []; this.dustQ = []; this.deflectQ = []; this.sndCD = {};
     this.meters = []; this.rec = []; this.recCount = 0; this.replay = null; this.pendingReplay = false;
     this.bumpQ = []; this.bonkQ = []; this.airballQ = []; this.flails = 0; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
     this.snow = Array.from({ length: 70 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(6, 16), w: rand(0, 6) }));
@@ -5874,12 +6070,18 @@ class Game {
     if (w !== undefined) this.gameOver(w);
     else { const t = this.scorer; this.startTransition(TEAM[t].jersey, () => { this.round++; this.setupRound(this.nextRound()); this.state = 'play'; this.stateT = 0; this.checkGamePoint(); }); }
   }
-  onSlam(p, style, h) {
+  onSlam(p, style, h, D) {
     const imp = style.impact || 1;
     this.slowmo(0.3, 0.55); this.addShake(8 * imp); if (!REDUCED) this.flash = 0.3 * Math.min(imp, 1.5);
     h.bend = Math.min(1.8, imp); h.shake = 1.2 * imp;
     this.stat(p.team, 'dunks');
     if (this.state !== 'showcase') this.popup(style.name, h.cx - h.side * 2.4, h.y + 1.7, TEAM[p.team].light, 16, 1.7);
+    if (style.sig && !this.isShadow) {   // a signature slam: camera punch, a flash and a shockwave in his colour, plus whatever his dunk leaves behind
+      if (!REDUCED && !this.cam.punch) this.cam.punch = { x: h.cx - h.side * 0.8, y: h.y + 0.2, t: 0.75, z: 1.4 };
+      if (!REDUCED) this.flash = Math.max(this.flash, 0.35);
+      this.sigMark({ k: 'ring', x: h.cx, y: h.y, r: 2.4, col: style.col || '#ffd23f', life: 0.6 });
+      if (style.slam) style.slam(this, h, p, D || p.dunk || {});
+    }
     if (style.sig) this.popup('SIG DUNK!', h.cx - h.side * 2.4, h.y + (this.state !== 'showcase' ? 2.6 : 1.0), '#ffd23f', 10, 1.7);   // (a meme character's own signature)
     for (let i = 0; i < 20 * imp; i++) this.addPart(h.frontX, h.y, rand(-5, 5), rand(0, 7), 20, rand(0.3, 0.7), pick(['#ffd23f', '#ffffff', ORANGE]), 1);
     this.sfx.dunk(); if (imp > 1) this.sfx.boom(); this.excite = 1;
@@ -6037,6 +6239,7 @@ class Game {
   }
   slowmo(scale, dur) { this.tsTarget = scale; this.tsT = dur; }
   addShake(a) { this.shakeA = Math.max(this.shakeA, REDUCED ? a * 0.25 : a); }
+  sigMark(m) { m.t = 0; if (!this.isShadow && this.sigMarks.length < 40) this.sigMarks.push(m); return m; }
   addPart(x, y, vx, vy, g, life, col, sz, kind) { if (this.parts.length < 500) this.parts.push({ x, y, vx, vy, g, life, max: life, col, sz, kind }); }
   popup(text, x, y, col, size, dur) { this.pops.push({ text, x: clamp(x, -6.4, 6.4), y: clamp(y, 1.2, 6.4), col, size, dur, t: 0 }); }
 
@@ -6318,6 +6521,7 @@ class Game {
     if (this.pads) for (const pad of this.pads) pad.squash = Math.max(0, pad.squash - dt * 6);
     if (this.boosts) for (const q of this.boosts) { q.lit = Math.max(0, q.lit - dt * 2.5); q.cd -= dt; }
     if (this.wallHit) for (let i = 0; i < 3; i++) this.wallHit[i] = Math.max(0, this.wallHit[i] - dt * 4);
+    if (this.sigMarks.length) this.sigMarks = this.sigMarks.filter(m => (m.t += dt) < m.life);
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const q = this.parts[i];
       q.life -= dt; if (q.life <= 0) { this.parts.splice(i, 1); continue; }
@@ -7148,6 +7352,18 @@ function drawReplayOverlay(G) {
   txt(G.replayLabel, AX(160), AY(158), 16, ORANGE, { bold: true });
   txt('W OR UP ARROW TO SKIP', AX(316), AY(175.5), 8, '#b9c3dd', { align: 'right', ow: 0.6 });
 }
+// the signature dunks' props: a glow in his colour behind the dunker, each style's own drawing, and the marks slams leave
+function drawSig(G, layer) {
+  if (REDUCED && layer === 'back') { /* the glow pulses; skip it */ } else if (layer === 'back') for (const p of G.players) {
+    const D = p.dunk; if (!D || !D.style.sig) continue;
+    const s = clamp(D.t / D.T, 0, 1), c = p.center(), a = sigFade(s), pu = 0.5 + 0.5 * Math.sin(G.time * 14);
+    SK.disc(c.x, c.y, 1.35 + 0.12 * pu, D.style.col || '#ffd23f', 0.08 * a); SK.disc(c.x, c.y, 0.95, D.style.col || '#ffd23f', 0.1 * a);
+  }
+  for (const p of G.players) { const D = p.dunk; if (D && D.style.draw) D.style.draw(SK, p, clamp(D.t / D.T, 0, 1), D, layer); }
+  if (layer === 'back') for (const m of G.sigMarks || []) { const u = clamp(m.t / m.life, 0, 1), a = clamp((m.life - m.t) / 0.5, 0, 1); if (m.k !== 'ice') SIG_MARKS[m.k](SK, m, u, a); }
+  else for (const m of G.sigMarks || []) if (m.k === 'ice') SIG_MARKS.ice(SK, m, clamp(m.t / m.life, 0, 1), clamp((m.life - m.t) / 0.5, 0, 1));
+  ctx.globalAlpha = 1;
+}
 function render(G) {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -7185,11 +7401,13 @@ function render(G) {
     drawHUD(G);
     drawReplayOverlay(G);
   } else {
+    drawSig(G, 'back');
     for (const p of G.players) p.draw(RENDER);
     for (const b of G.allBalls) if (!b.holder && !b.gone) { if (b.out) ctx.globalAlpha = 0.55; RENDER.ball(b); ctx.globalAlpha = 1; }
     for (const h of G.hoops) drawHoopFront(G, h);
     for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
     ctx.globalAlpha = 1;
+    drawSig(G, 'front');
     for (const m of G.meters) drawMeter(m);
     drawWorldText(G);
     if (zoom) ctx.restore();
