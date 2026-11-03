@@ -612,8 +612,8 @@ const POWER = { hammer: 1.6, shatter: 1.6, tomahawk: 1.3, superman: 1.35, kangar
   corkscrew: 1.3, scorpion: 1.0, slingshot: 1.2, tuckroll: 1.1, onearm: 1.0, betweenlegs: 1.1, wraparound: 1.1, rimrock: 1.1, elbowhang: 1.0, rimkiss: 0.9,
   windmill: 1.1, reverse: 1.1, reverse180: 1.1, rimswing: 1.1, cartwheel: 0.9, through: 0.8, tip: 0.8, cradle: 0.6, moonwalk: 0.5 };
 DUNKS.forEach(d => { d.power = POWER[d.id] || 1; });
-// ---- the MEME CHARACTERS' signature dunks: each one has his own (picked about 40% of his dunks, see pickDunk). Kept out of
-// DUNKS so they never show up for anyone else, in the dunk reel, or in the dunk settings. Extra hooks only these use:
+// ---- the MEME CHARACTERS' signature dunks: each one has his own (picked about 70% of his dunks, see pickDunk). Kept out of
+// DUNKS so nobody else ever does them; they're at the end of the dunk reel (previewed by their character) and in the dunk settings. Extra hooks only these use:
 //   ballAt(p, s, D, hand) -> where the held ball sits instead of the hand ({x, y, a}), fx(p, s, g, D) runs every frame,
 //   bob(s) lifts the hip off the path, and an event can be a function (p, g, D).
 const sigLocal = (p, x, y) => { const c = p.center(), r = rot({ x, y }, p.body.getAngle()); return { x: c.x + r.x, y: c.y + r.y }; };
@@ -650,7 +650,7 @@ const MEME_DUNKS = [
     fx: (p, s, g) => { if (s > 0.1 && s < 0.9 && Math.random() < 0.8) { const c = p.center(); g.addPart(c.x + rand(-0.4, 0.4), c.y + rand(-0.9, 0.5), 0, rand(-1, -0.3), 2, 0.7, pick(['#ffd23f', '#c8a24a', '#fff3b0', '#6b4a22']), pick([1, 2])); } },
     events: [[0.45, sigPop('DRIP!', '#ffd23f')]] },
   // Liam (the blonde swoop): a backflip that whips the hair round, blonde flying off it
-  { id: 'sig_liam', name: 'HAIR FLIP!', trail: true, legs: s => tuckLegs(1.8, s, 0.05, 0.85), minAhead: 0.6, extraT: 0.25, arc: 1.4, power: 1.2,
+  { id: 'sig_liam', name: 'HAIR FLIP!', trail: true, legs: s => tuckLegs(1.8, s, 0.05, 0.85), minAhead: 0.3, extraT: 0.25, arc: 1.4, power: 1.2,
     th: s => 2 * Math.PI * seg(s, 0, 0.85) - 0.25 * seg(s, 0.85, 1),
     rel: (s, r0) => s < 0.85 ? lerp(r0, 2.9, seg(s, 0, 0.3)) : lerp(2.9, 1.9, seg(s, 0.85, 1)),
     end: { th: 2 * Math.PI - 0.25, rel: 1.9 },
@@ -689,8 +689,8 @@ const MEME_DUNKS = [
     end: { th: -0.2, rel: 1.95 },
     fx: (p, s, g) => { if (s < 0.92 && Math.random() < 0.9) { const c = p.center(); g.addPart(c.x + rand(-0.7, 0.7), c.y + rand(-1, 1), rand(-0.5, 0.5), rand(-0.8, 0.2), 1, 0.8, pick(['#bfe9ff', '#ffffff', '#7fd3ff']), pick([1, 2])); } },
     events: [[0.99, (p, g, D) => { const h = D.hoop; sigBurst(g, h.cx, h.y, ['#bfe9ff', '#ffffff', '#7fd3ff'], 34, 3, 2); g.popup('FROZEN!', h.cx, h.y + 1.3, '#bfe9ff', 12, 1.3); }]] },
-  // Cam (the bulge): lies back flat in the air and spins the ball on his belly, then rolls up and slams it
-  { id: 'sig_cam', name: 'BELLY SPIN!', fixedT: 1.45, arc: 1.5, ease: moonEase, power: 1.2,
+  // Cam (the bulge): lies back flat in the air and spins the ball on his bulge, then rolls up and slams it
+  { id: 'sig_cam', name: 'BULGE SPIN!', fixedT: 1.45, arc: 1.5, ease: moonEase, power: 1.2,
     legs: s => { const k = seg(s, 0.1, 0.25) * (1 - seg(s, 0.7, 0.85)); return [0.25 * k + 0.2 * Math.sin(s * 20) * k, -0.1 * k]; },
     th: s => s < 0.7 ? 1.5 * seg(s, 0, 0.22) + 0.06 * Math.sin(s * 16) * seg(s, 0.15, 0.25) : lerp(1.5, -0.3, seg(s, 0.7, 0.88)),
     rel: (s, r0) => s < 0.7 ? lerp(r0, 2.7, seg(s, 0, 0.2)) : s < 0.86 ? lerp(2.7, 2.95, seg(s, 0.7, 0.86)) : lerp(2.95, 1.9, seg(s, 0.86, 1)),
@@ -705,7 +705,9 @@ const MEME_DUNKS = [
 ];
 MEME_DUNKS.forEach(d => { DUNK_BY_ID[d.id] = d; d.sig = true; });
 const REEL = [...DUNKS.map(d => ({ id: d.id, name: d.name.replace('!', ''), isNew: d.isNew })), { id: 'oop', name: 'ALLEY-OOP' },
-  { id: 'glass', name: 'GLASS BREAKS', isNew: true }, { id: 'collapse', name: 'HOOP COLLAPSE', isNew: true }];
+  { id: 'glass', name: 'GLASS BREAKS', isNew: true }, { id: 'collapse', name: 'HOOP COLLAPSE', isNew: true },
+  // the meme characters' signature dunks (previewed by that character; meme is his index in MEME_LOOKS)
+  ...MEME_DUNKS.map((d, i) => ({ id: d.id, name: d.name.replace('!', ''), when: 'SIG DUNK: ' + d.id.slice(4).toUpperCase(), isNew: true, meme: i }))];   // (same order as MEME_LOOKS)
 const ALL_DUNKS = REEL.map(r => r.id);
 const DUNKS_BEFORE_OCT26 = ALL_DUNKS.filter(id => !['betweenlegs', 'wraparound', 'rimrock', 'elbowhang', 'corkscrew', 'scorpion', 'tuckroll', 'onearm', 'rimkiss', 'slingshot'].includes(id));
 // Meme clips (mp3s, base64 in the script tag above this one).
@@ -1945,7 +1947,7 @@ class Player {
     const g = this.game, h = g.hoopFor(this.team), dir = this.dir, b = this.holding;
     if (!b) return;
     const ahead = (h.cx - this.center().x) * dir;
-    style = style || (g.forceDunk && DUNK_BY_ID[g.forceDunk]) || (ahead <= 0.35 ? UNDER_REVERSE : g.pickDunk(this, ahead));
+    style = style || (g.forceDunk && DUNK_BY_ID[g.forceDunk]) || g.sigDunk(this, ahead) || (ahead <= 0.35 ? UNDER_REVERSE : g.pickDunk(this, ahead));
     if (!style) return;
     this.game.note(ahead >= DUNK_RANGE ? 'farslam' : 'slam', this);
     const rimLo = Math.min(h.frontX, h.backX) + 0.06, rimHi = Math.max(h.frontX, h.backX) - 0.06;
@@ -5115,10 +5117,14 @@ class Game {
     return DUNKS.filter(d => !d.situational && this.dunkOn(d.id) && ahead > (d.minAhead ?? 0.35) && ahead < (d.maxAhead || DUNK_RANGE) && (!d.needsMate || this.mateFor(p)) &&
       (!d.req || (d.req.ground ? !air : air && rise >= d.req.air)));
   }
-  pickDunk(p, ahead, rebound) {
-    // a meme character goes for his signature dunk a lot of the time
+  // a meme character goes for his signature dunk most of the time, even from right under the rim (unless it's turned off in the dunk settings)
+  sigDunk(p, ahead) {
     const sig = p.look && p.look.sig && DUNK_BY_ID[p.look.sig];
-    if (sig && !rebound && ahead > (sig.minAhead ?? 0.35) && ahead < DUNK_RANGE && Math.random() < 0.4) return sig;
+    return sig && this.dunkOn(sig.id) && ahead > (sig.minAhead ?? -0.2) && ahead < DUNK_RANGE && Math.random() < 0.7 ? sig : null;
+  }
+  pickDunk(p, ahead, rebound) {
+    const sig = !rebound && this.sigDunk(p, ahead);
+    if (sig) return sig;
     const pool = this.dunkPool(p, ahead);
     if (rebound && this.dunkOn('tip')) pool.push(DUNK_BY_ID.tip);
     let w = pool.reduce((a, d) => a + (d.weight || 1), 0) * Math.random();
@@ -5354,9 +5360,10 @@ class Game {
     if (this.show.kind === 'sound') { this.setupSoundShow(); return; }
     if (this.show.kind === 'event') { this.setupEventShow(); return; }
     const Sh = this.show, id = this.showDunkId();
-    if (Sh.kind === 'meme') {   // the featured meme dunks; five others fill the court
-      const others = MEME_LOOKS.filter((_, k) => k !== Sh.i).sort(() => Math.random() - 0.5), nums = [3, 8, 21, 44, 5, 10];
-      this.roster = [others[0], MEME_LOOKS[Sh.i], others[1], others[2], others[3], others[4]].map((m, k) => ({ ...m, num: m.teacher ? 13 : nums[k] }));
+    const mi = Sh.kind === 'meme' ? Sh.i : REEL[Sh.i] && REEL[Sh.i].meme;
+    if (mi !== undefined) {   // the featured meme dunks (or a signature dunk in the dunk reel); five others fill the court
+      const others = MEME_LOOKS.filter((_, k) => k !== mi).sort(() => Math.random() - 0.5), nums = [3, 8, 21, 44, 5, 10];
+      this.roster = [others[0], MEME_LOOKS[mi], others[1], others[2], others[3], others[4]].map((m, k) => ({ ...m, num: m.teacher ? 13 : nums[k] }));
     }
     Sh.t = 0; Sh.step = 0; this.forceDunk = null; this.forceFx = null; Sh.jumped = false; Sh.air = false;
     this.held = [false, false];
