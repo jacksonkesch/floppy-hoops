@@ -143,6 +143,7 @@
   #online button { font: inherit; font-size: 13px; line-height: 1.2; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; box-shadow: 0 3px 0 #141019; padding: 7px 10px; cursor: pointer; }
   #online button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
   #online button:disabled { opacity: 0.4; cursor: default; }
+  #menu .seg button:disabled { opacity: 0.45; cursor: default; }
   #online button:focus-visible, #online input:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
   #online button:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
   #online .go { background: #43f07a; color: #141019; font-size: 17px; padding: 9px 20px; }
@@ -170,10 +171,13 @@
     <div class="m-body">
     <section class="m-page" data-page="match">
       <div class="card"><h3>GAME</h3>
-      <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button></div></div>
+      <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button type="button" id="opt-target-3" data-v="3">3</button><button type="button" id="opt-target-5" data-v="5">5</button><button type="button" id="opt-target-7" data-v="7">7</button><button type="button" id="opt-target-11" data-v="11">11</button><button type="button" id="opt-target-21" data-v="21">21</button></div></div>
       <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button type="button" id="opt-winby2-on" data-v="on">ON</button><button type="button" id="opt-winby2-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button type="button" id="opt-memes-on" data-v="on">ON</button><button type="button" id="opt-memes-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
+      </div>
+      <div class="card"><h3>GREEN TRAIL</h3>
+      <div class="row"><span class="lbl" id="trail-count">GREENS: 0</span><div class="seg" data-key="trail" id="trail-seg"></div></div>
       </div>
       <div class="card"><h3>CPU</h3>
       <div class="row"><span class="lbl">VS CPU</span><div class="seg" data-key="level"><button type="button" id="opt-level-easy" data-v="easy">EASY</button><button type="button" id="opt-level-normal" data-v="normal">NORMAL</button><button type="button" id="opt-level-hard" data-v="hard">HARD</button><button type="button" id="opt-level-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
@@ -438,10 +442,12 @@ const FOUR_LABEL = { KeyQ: 'Q', KeyC: 'C', KeyB: 'B', KeyM: 'M', KeyP: 'P', Arro
 const REAL_RANDOM = Math.random;
 const ownDice = f => function (...a) { const r = Math.random; Math.random = REAL_RANDOM; try { return f.apply(this, a); } finally { Math.random = r; } };
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+// dice for looks only: they never touch the match's own dice, so they can't knock an online game or the CPU's look-ahead out of step
+const vrand = (a, b) => a + REAL_RANDOM() * (b - a);
 const NET_KEEP = new Set(['isShadow', 'sfx', 'settings', 'realTime', 'menuOpen', 'menuSel']);   // what a match start leaves alone
 // what rewinding an online match leaves alone: this computer's own things, and the look of the screen
 const NET_LOCAL = new Set(['sfx', 'net', 'online', 'settings', 'homeSettings', 'show', 'netHeard', 'netSyncSent', 'netHeld', 'keysDown',
-  'humanHeld', 'isShadow', 'realTime', 'timeScale', 'tsT', 'tsTarget', 'shakeA', 'flash', 'cam', 'sigMarks', 'menuOpen', 'menuSel', 'paused']);
+  'humanHeld', 'isShadow', 'realTime', 'timeScale', 'tsT', 'tsTarget', 'shakeA', 'flash', 'cam', 'sigMarks', 'trailFx', 'menuOpen', 'menuSel', 'paused']);
 const NET_OPAQUE = v => v instanceof Node || v instanceof CanvasRenderingContext2D || v instanceof AudioNode || v instanceof AudioBuffer ||
   (typeof ImageBitmap !== 'undefined' && v instanceof ImageBitmap) || (typeof OffscreenCanvas !== 'undefined' && v instanceof OffscreenCanvas);
 const CPU_LEVELS = {
@@ -456,7 +462,7 @@ const CPU_LEVELS = {
 // hanging (0) through forward (PI/2) to overhead (PI). end: the pose at the rim, used to put the hand
 // on the rim. after: what happens once the ball goes down. The rest are optional tweaks.
 const OVER = Math.PI - 0.1;
-const GHOST_T = 0.16;   // how long a motion-trail copy lingers
+const GHOST_T = 0.22;   // how long a motion-trail copy lingers
 // leg moves for the dunk drawings (see drawBody): both knees pulled up by a, eased in at s0 and out by s1
 const tuckLegs = (a, s, s0, s1) => { const k = seg(s, s0, s0 + 0.15) * (1 - seg(s, s1 - 0.15, s1)); return [a * k, a * k]; };
 // a knee drive on the way up that settles before the slam
@@ -687,6 +693,10 @@ function sigQuizBoard(K, x, y, sc, text, stamp, a) {
 }
 // marks a slam leaves behind (plain data, drawn and aged by the game; fade over their last half second)
 const SIG_MARKS = {
+  burst: (K, m, u) => { for (let i = 0; i < m.n; i++) {   // speed streaks flying out from the rim
+    const an = m.a0 + i * 2 * Math.PI / m.n, r0 = m.r * (0.2 + 0.8 * Math.sqrt(u)), r1 = r0 + m.r * 0.4 * (1 - u), c = Math.cos(an), s = Math.sin(an);
+    K.line([{ x: m.x + c * r0, y: m.y + s * r0 }, { x: m.x + c * r1, y: m.y + s * r1 }], 0.05 * (1 - u) + 0.015, m.col, 1 - u);
+  } },
   ring: (K, m, u) => K.ring(m.x, m.y, m.r * (1 - (1 - u) ** 3), 0.09 * (1 - u) + 0.02, m.col, 1 - u, m.flat ? m.r * (1 - (1 - u) ** 3) * 0.22 : undefined),
   quiz: (K, m, u, a) => sigQuizBoard(K, m.x, m.y + 0.08 * u, 1, '2+2=4', Math.min(1, m.t / 0.25), a),
   rainbow: (K, m, u, a) => sigRibbon(K, m.pts, RAINBOW, 0.075, 0.85 * a),
@@ -2298,7 +2308,17 @@ class Player {
     sj.setMaxMotorTorque(700); sj.setMotorSpeed(clamp((relT - sj.getJointAngle()) * 25, -45, 45));
     this.spinA = st.spin ? st.spin(s2) : 0;
     this.legA = st.legs ? st.legs(s2) : null; this.layer = st.layer ? st.layer(s2) : null;
-    if (st.trail && !g.isShadow && (D.ghostK = (D.ghostK || 0) + 1) % 3 === 0) this.addGhost();
+    // every dunk leaves a motion trail now (flips and spins a thicker one), and kicks off the floor with a puff and a ring
+    if (!g.isShadow && (D.ghostK = (D.ghostK || 0) + 1) % (st.trail ? 2 : 3) === 0) this.addGhost(st.trail ? 5 : 3);
+    if (!D.lift && !g.isShadow) {
+      D.lift = true; const f = this.footPoint(0), fy = Math.max(0.05, this.footY());
+      if (fy < 0.4) {
+        for (let i = 0; i < 12; i++) g.addPart(f.x + vrand(-0.4, 0.4), fy, vrand(-2.2, 2.2), vrand(0.2, 1.4), -1, vrand(0.25, 0.5), g.cfg.court.dust, 1 + (REAL_RANDOM() < 0.5));
+        g.sigMark({ k: 'ring', x: f.x, y: 0.04, r: 1.2, col: '#ffffff', life: 0.35, flat: true });
+      }
+    }
+    // a split second of hang time right before the rim
+    if (!st.sig && !D.hangBeat && s2 > 0.84 && !g.isShadow && st.path !== 'through') { D.hangBeat = true; g.slowmo(0.5, 0.1); }
     this.front = (typeof st.front === 'function' ? st.front(s2) : !!st.front) && s2 < 0.95; this.hideArm = !!(st.hideArm && st.hideArm(s2));
     if (st.sig && !D.sigGo && !g.isShadow) { D.sigGo = true; g.slowmo(0.55, 0.25); }   // a beat of slow-mo as a signature dunk takes off
     if (st.fx && !g.isShadow) st.fx(this, s2, g, D);
@@ -2363,10 +2383,10 @@ class Player {
     g.onSlam(this, st, h, D);
   }
   // a faded copy of where the body just was, for the motion trail of flips and spins (live only, not in replays)
-  addGhost() {
+  addGhost(keep = 3) {
     const T = this.trail || (this.trail = []), P = b => { const q = b.getPosition(); return new Pose(q.x, q.y, b.getAngle()); };
     T.push({ body: P(this.body), head: P(this.head), arm: P(this.arms[0]), spin: this.spinA, legA: this.legA, t: 0 });
-    if (T.length > 3) T.shift();
+    while (T.length > keep) T.shift();
   }
   draw(r, pose) {
     const s = this.spr, flip = this.dir < 0;
@@ -2375,7 +2395,7 @@ class Player {
     const spin = pose ? pose.spin : this.spinA, front = pose ? pose.front : this.front, armScale = (pose ? pose.armScale : this.armScale) || 1;
     const legA = pose ? pose.legA : this.legA, layer = pose ? pose.layer : this.layer;
     if (!pose && this.trail) {
-      for (const q of this.trail) { ctx.globalAlpha = 0.22 * (1 - q.t / GHOST_T); this.drawBody(r, q.body, q.head, q.arm, null, null, q.spin, false, 1, q.legA, null); }
+      for (const q of this.trail) { ctx.globalAlpha = 0.3 * (1 - q.t / GHOST_T); this.drawBody(r, q.body, q.head, q.arm, null, null, q.spin, false, 1, q.legA, null); }
       ctx.globalAlpha = 1;
     }
     this.posed = !!pose; this.drawBody(r, body, head, arm, ball, ballBody, spin, front, armScale, legA, layer);
@@ -5286,15 +5306,27 @@ function migrateModes(m, ver) {
   if (ver < 9) for (const id of ['slowball', 'fastball']) if (!m.includes(id)) m.push(id);   // (they replaced SPEED-UP and CRAZY SPEED)
   return m.filter(id => MODES.some(x => x.id === id));
 }
+// ------------------------------------------------ green trails: a green shot leaves one of these behind the ball.
+// They unlock as you rack up greens (counted forever, on this computer, for human shooters only).
+const TRAILS = [
+  { id: 'classic', name: 'CLASSIC', need: 0 }, { id: 'comet', name: 'COMET', need: 5 }, { id: 'fire', name: 'FIRE', need: 15 },
+  { id: 'ice', name: 'ICE', need: 30 }, { id: 'rainbow', name: 'RAINBOW', need: 50 }, { id: 'bolt', name: 'BOLT', need: 100 },
+  { id: 'galaxy', name: 'GALAXY', need: 200 },
+];
+const TRAIL_BY_ID = Object.fromEntries(TRAILS.map(t => [t.id, t]));
+const GREENS_KEY = 'floppy-hoops-greens';
+const lifeGreens = () => { try { return Math.max(0, Number(localStorage.getItem(GREENS_KEY)) || 0); } catch (e) { return 0; } };
+const addLifeGreen = () => { const n = lifeGreens() + 1; try { localStorage.setItem(GREENS_KEY, String(n)); } catch (e) { /* storage unavailable */ } return n; };
+const trailOpen = id => (TRAIL_BY_ID[id] || TRAILS[0]).need <= lifeGreens();
 function loadSettings() {
-  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', memes: 'off', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
+  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', memes: 'off', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [], trail: 'classic' };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
       mode: ['cpu', 'cvc', '4p', '6p'].includes(s.mode) ? s.mode : '2p', level: CPU_LEVELS[s.level] ? s.level : 'normal',
       cvcRed: CPU_LEVELS[s.cvcRed] ? s.cvcRed : 'impossible', cvcBlue: CPU_LEVELS[s.cvcBlue] ? s.cvcBlue : 'hard', cvcOop: s.cvcOop === 'on' ? 'on' : 'off',
       // games go to 11 by default since v10; a 5 saved before then was just the old default, so it moves up too
-      target: s.target === 5 && (s.ver || 0) < 10 ? 11 : [3, 5, 7, 11].includes(s.target) ? s.target : 11, winBy2: s.winBy2 === 'off' ? 'off' : 'on', memes: s.memes === 'on' ? 'on' : 'off',
+      target: s.target === 5 && (s.ver || 0) < 10 ? 11 : [3, 5, 7, 11, 21].includes(s.target) ? s.target : 11, winBy2: s.winBy2 === 'off' ? 'off' : 'on', memes: s.memes === 'on' ? 'on' : 'off',
       teamSize: [1, 2, 3].includes(s.teamSize) ? s.teamSize : 2,
       ver: 10,
       modes: Array.isArray(s.modes) ? migrateModes(s.modes.filter(id => MODES.some(m => m.id === id)), s.ver || 0) : def.modes,
@@ -5305,6 +5337,7 @@ function loadSettings() {
       // the sound list was redone in v4, so older switches start fresh
       soundsOff: (s.ver || 0) >= 4 && Array.isArray(s.soundsOff) ? s.soundsOff.filter(id => SOUND_BY_ID[id]) : [],
       eventsOff: Array.isArray(s.eventsOff) ? s.eventsOff.filter(id => EVENT_LIST.some(e => e.id === id)) : [],
+      trail: TRAIL_BY_ID[s.trail] ? s.trail : 'classic',
     };
   } catch (e) { /* storage unavailable */ }
   return def;
@@ -5350,7 +5383,7 @@ class Game {
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
     this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0;
     this.cam = { z: 1, x: 0, y: 3.5, fx: 0, fy: 3.5, watch: null };
-    this.parts = []; this.pops = []; this.sigMarks = []; this.sndQ = []; this.grabQ = []; this.dustQ = []; this.deflectQ = []; this.sndCD = {};
+    this.parts = []; this.trailFx = []; this.pops = []; this.sigMarks = []; this.sndQ = []; this.grabQ = []; this.dustQ = []; this.deflectQ = []; this.sndCD = {};
     this.meters = []; this.rec = []; this.recCount = 0; this.replay = null; this.pendingReplay = false;
     this.bumpQ = []; this.bonkQ = []; this.airballQ = []; this.flails = 0; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
     this.snow = Array.from({ length: 70 }, () => ({ x: rand(0, ART_W), y: rand(0, ART_H), s: rand(6, 16), w: rand(0, 6) }));
@@ -5939,6 +5972,13 @@ class Game {
     b.shotBy = p;
     if (green) {
       b.ghost = true; b.ghostT = 0; b.green = true; this.stat(p.team, 'greens');
+      // a person's green wears their trail (a CPU's keeps the classic sparks); every one counts toward the next trail
+      b.trail = 'classic';
+      if (!this.isShadow && this.state === 'play' && !this.cpus.some(c => c.team === p.team)) {
+        const n = addLifeGreen(), t = TRAILS.find(q => q.need === n);
+        if (t && n > 0) this.popup(`${t.name} TRAIL UNLOCKED!`, head.x, head.y + 1.6, '#ffd23f', 9, 2);
+        if (trailOpen(this.settings.trail)) b.trail = this.settings.trail;
+      }
       // a green that will win the game gets GREEN FN the moment it leaves the hand, and the camera watches it
       const win = this.winningGreen(p, b);
       if (win) this.cam.watch = { ball: b, team: p.team, hoop: this.hoopFor(p.team), t: 0, on: false, scored: 0 };
@@ -6172,8 +6212,17 @@ class Game {
       this.sigMark({ k: 'ring', x: h.cx, y: h.y, r: 2.4, col: style.col || '#ffd23f', life: 0.6 });
       if (style.slam) style.slam(this, h, p, D || p.dunk || {});
     }
+    if (!this.isShadow) {
+      const col = style.col || TEAM[p.team].light;
+      if (!style.sig) {
+        this.sigMark({ k: 'ring', x: h.cx, y: h.y, r: 1.5 * Math.min(imp, 1.6), col, life: 0.45 });
+        if (!REDUCED && !this.cam.punch) this.cam.punch = { x: h.cx - h.side * 0.6, y: h.y, t: 0.4, z: 1.15 };
+      }
+      this.sigMark({ k: 'burst', x: h.cx, y: h.y + 0.05, r: 1.3 + 0.5 * imp, n: 10, a0: REAL_RANDOM() * 0.6, col: '#ffffff', life: 0.3 });
+    }
     if (style.sig) this.popup('SIG DUNK!', h.cx - h.side * 2.4, h.y + (this.state !== 'showcase' ? 2.6 : 1.0), '#ffd23f', 10, 1.7);   // (a meme character's own signature)
     for (let i = 0; i < 20 * imp; i++) this.addPart(h.frontX, h.y, rand(-5, 5), rand(0, 7), 20, rand(0.3, 0.7), pick(['#ffd23f', '#ffffff', ORANGE]), 1);
+    if (!this.isShadow) for (let i = 0; i < 10 * imp; i++) this.addPart(h.cx + vrand(-0.3, 0.3), h.y - 0.2, vrand(-1.5, 1.5), vrand(-4, -1), 6, vrand(0.3, 0.6), TEAM[p.team].light, 2);   // spray down through the net
     this.sfx.dunk(); if (imp > 1) this.sfx.boom(); this.excite = 1;
     let poster = 0;
     for (const o of this.players) {
@@ -6330,6 +6379,18 @@ class Game {
   slowmo(scale, dur) { this.tsTarget = scale; this.tsT = dur; }
   addShake(a) { this.shakeA = Math.max(this.shakeA, REDUCED ? a * 0.25 : a); }
   sigMark(m) { m.t = 0; if (!this.isShadow && this.sigMarks.length < 40) this.sigMarks.push(m); return m; }
+  // one step of a green trail. These live off to the side of the match (own dice, no effect on play)
+  trailDot(b, p, v) {
+    if (this.isShadow || this.trailFx.length > 600) return;
+    const R = REAL_RANDOM, kind = b.trail, sp = Math.hypot(v.x, v.y) || 1, nx = -v.y / sp, ny = v.x / sp;
+    const add = (o) => this.trailFx.push(Object.assign({ x: p.x, y: p.y, vx: 0, vy: 0, t: 0, life: 0.45, kind, ball: b, born: this.time, r: R() }, o));
+    if (kind === 'comet') { add({ life: 0.5 }); if (R() < 0.5) add({ x: p.x + (R() - 0.5) * 0.3, y: p.y + (R() - 0.5) * 0.3, vx: -v.x * 0.1, vy: -v.y * 0.1, life: 0.6, spark: 1 }); }
+    else if (kind === 'fire') for (let i = 0; i < 2; i++) add({ x: p.x + (R() - 0.5) * 0.25, y: p.y + (R() - 0.5) * 0.25, vx: (R() - 0.5) * 0.8, vy: 1 + R() * 1.4, life: 0.35 + R() * 0.25 });
+    else if (kind === 'ice') { add({ life: 0.55 }); if (R() < 0.45) add({ x: p.x + nx * (R() - 0.5) * 0.5, y: p.y + ny * (R() - 0.5) * 0.5, vx: (R() - 0.5) * 0.4, vy: -0.6 - R() * 0.6, life: 0.9, spark: 1 }); }
+    else if (kind === 'rainbow') add({ life: 0.6 });
+    else if (kind === 'bolt') { add({ life: 0.28 }); if (R() < 0.25) add({ vx: nx * (R() - 0.5) * 6, vy: ny * (R() - 0.5) * 6, life: 0.2, spark: 1 }); }
+    else if (kind === 'galaxy') { add({ life: 0.7 }); for (let i = 0; i < 2; i++) if (R() < 0.6) add({ x: p.x + (R() - 0.5) * 0.4, y: p.y + (R() - 0.5) * 0.4, vx: (R() - 0.5) * 0.7, vy: (R() - 0.5) * 0.7, life: 0.6 + R() * 0.6, spark: 1 }); }
+  }
   addPart(x, y, vx, vy, g, life, col, sz, kind) { if (this.parts.length < 500) this.parts.push({ x, y, vx, vy, g, life, max: life, col, sz, kind }); }
   popup(text, x, y, col, size, dur) { this.pops.push({ text, x: clamp(x, -6.4, 6.4), y: clamp(y, 1.2, 6.4), col, size, dur, t: 0 }); }
 
@@ -6556,7 +6617,12 @@ class Game {
         for (const pad of this.pads) if (Math.abs(p.x - pad.x) < pad.w / 2) { b.body.setLinearVelocity({ x: v.x, y: Math.max(-v.y * 1.05, 8.5) }); pad.squash = 1; b.padCD = 0.3; this.sfx.boing(); break; }
       }
       if (b.ghost && (b.ghostT += dt) > 3) b.ghost = false;
-      if (b.green && !this.calm) this.addPart(p.x + rand(-0.1, 0.1), p.y + rand(-0.1, 0.1), 0, 0, 0, 0.3, GREEN, 2);
+      if (b.green && !this.calm) {
+        // (the two dice are rolled whatever the trail, so an online match stays in step when two people wear different ones)
+        const jx = rand(-0.1, 0.1), jy = rand(-0.1, 0.1);
+        if (!b.trail || b.trail === 'classic' || REDUCED) this.addPart(p.x + jx, p.y + jy, 0, 0, 0, 0.3, GREEN, 2);
+        else this.trailDot(b, p, v);
+      }
       else if (b.lastThrower && this.onFire(b.lastThrower.team) && !this.calm && Math.random() < 0.7) this.flame(p);
       const sp = Math.hypot(v.x, v.y);
       if (!b.waiting && sp < 0.3) b.stillT += dt; else b.stillT = 0;
@@ -6612,6 +6678,7 @@ class Game {
     if (this.boosts) for (const q of this.boosts) { q.lit = Math.max(0, q.lit - dt * 2.5); q.cd -= dt; }
     if (this.wallHit) for (let i = 0; i < 3; i++) this.wallHit[i] = Math.max(0, this.wallHit[i] - dt * 4);
     if (this.sigMarks.length) this.sigMarks = this.sigMarks.filter(m => (m.t += dt) < m.life);
+    if (this.trailFx.length) this.trailFx = this.trailFx.filter(q => { q.x += q.vx * dt; q.y += q.vy * dt; if (q.kind === 'fire') q.vy += dt; return (q.t += dt) < q.life; });
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const q = this.parts[i];
       q.life -= dt; if (q.life <= 0) { this.parts.splice(i, 1); continue; }
@@ -7443,6 +7510,36 @@ function drawReplayOverlay(G) {
   txt('W OR UP ARROW TO SKIP', AX(316), AY(175.5), 8, '#b9c3dd', { align: 'right', ow: 0.6 });
 }
 // the signature dunks' props: a glow in his colour behind the dunker, each style's own drawing, and the marks slams leave
+// green trails, drawn just behind the balls
+function drawTrails(G) {
+  const fx = G.trailFx; if (!fx || !fx.length) return;
+  const dot = (x, y, r, col, a) => { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(SX(x), SY(y), Math.max(0.5, r * PPM * S), 0, 7); ctx.fill(); };
+  const star = (x, y, r, col, a) => { ctx.globalAlpha = a; ctx.fillStyle = col; const cx = SX(x), cy = SY(y), k = r * PPM * S; ctx.beginPath();
+    ctx.moveTo(cx, cy - k); ctx.lineTo(cx + k * 0.25, cy - k * 0.25); ctx.lineTo(cx + k, cy); ctx.lineTo(cx + k * 0.25, cy + k * 0.25); ctx.lineTo(cx, cy + k); ctx.lineTo(cx - k * 0.25, cy + k * 0.25); ctx.lineTo(cx - k, cy); ctx.lineTo(cx - k * 0.25, cy - k * 0.25); ctx.closePath(); ctx.fill(); };
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  // the bolt is a jagged line through its own points, redrawn crooked every frame
+  const bolts = new Map();
+  for (const q of fx) if (q.kind === 'bolt' && !q.spark) { if (!bolts.has(q.ball)) bolts.set(q.ball, []); bolts.get(q.ball).push(q); }
+  for (const pts of bolts.values()) if (pts.length > 1) for (const [w, col, al] of [[7, '#ffe14a', 0.35], [3, '#fffbe0', 1]]) {
+    ctx.globalAlpha = al; ctx.strokeStyle = col; ctx.lineWidth = w * 0.012 * PPM * S; ctx.lineJoin = 'round'; ctx.beginPath();
+    pts.forEach((q, i) => { const j = i === pts.length - 1 ? 0 : 0.14; const X = SX(q.x + (REAL_RANDOM() - 0.5) * j), Y = SY(q.y + (REAL_RANDOM() - 0.5) * j); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    ctx.stroke();
+  }
+  for (const q of fx) {
+    const k = q.t / q.life, f = 1 - k, flat = q.kind === 'rainbow' || (q.kind === 'galaxy' && !q.spark);
+    ctx.globalCompositeOperation = flat ? 'source-over' : 'lighter';   // (glowing adds wash rainbow colours out to white)
+    if (q.kind === 'comet') { if (q.spark) star(q.x, q.y, 0.09 * f, '#ffffff', f); else { dot(q.x, q.y, 0.3 * f, '#3fd9ff', 0.22 * f); dot(q.x, q.y, 0.13 * f, '#ffffff', 0.9 * f); } }
+    else if (q.kind === 'fire') { const col = k < 0.3 ? '#fff3a0' : k < 0.6 ? '#ff9a2e' : '#ff3d1f'; dot(q.x, q.y, 0.2 * (1 - k * 0.6), col, 0.75 * f); }
+    else if (q.kind === 'ice') { if (q.spark) star(q.x, q.y, 0.1 * (0.5 + f * 0.5), '#e9fbff', f); else { dot(q.x, q.y, 0.24 * f, '#6fd6ff', 0.25 * f); dot(q.x, q.y, 0.1 * f, '#dff8ff', 0.8 * f); } }
+    else if (q.kind === 'rainbow') dot(q.x, q.y, 0.2 * (1 - k * 0.5), `hsl(${((q.born * 900) % 360).toFixed(0)},100%,58%)`, 0.85 * f);
+    else if (q.kind === 'bolt') { if (q.spark) dot(q.x, q.y, 0.05, '#fffbe0', f); else if (q.t < 0.05) dot(q.x, q.y, 0.3, '#ffe14a', 0.25); }
+    else if (q.kind === 'galaxy') {
+      if (q.spark) { const tw = 0.5 + 0.5 * Math.sin(G.time * 18 + q.r * 40); star(q.x, q.y, (0.05 + q.r * 0.07) * (0.6 + tw * 0.4), q.r < 0.33 ? '#ffffff' : q.r < 0.66 ? '#c9a6ff' : '#7fd1ff', f * tw); }
+      else { dot(q.x, q.y, 0.3 * f, '#2a1060', 0.35 * f); dot(q.x, q.y, 0.17 * f, q.r < 0.5 ? '#7b3cff' : '#3c7bff', 0.55 * f); }
+    }
+  }
+  ctx.restore(); ctx.globalAlpha = 1;
+}
 function drawSig(G, layer) {
   if (REDUCED && layer === 'back') { /* the glow pulses; skip it */ } else if (layer === 'back') for (const p of G.players) {
     const D = p.dunk; if (!D || !D.style.sig) continue;
@@ -7493,6 +7590,7 @@ function render(G) {
   } else {
     drawSig(G, 'back');
     for (const p of G.players) p.draw(RENDER);
+    drawTrails(G);
     for (const b of G.allBalls) if (!b.holder && !b.gone) { if (b.out) ctx.globalAlpha = 0.55; RENDER.ball(b); ctx.globalAlpha = 1; }
     for (const h of G.hoops) drawHoopFront(G, h);
     for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
@@ -7571,6 +7669,14 @@ let draft = null;
   }
 })();
 function syncMenu() {
+  // the trail buttons are rebuilt each time, since greens can unlock new ones between visits
+  const n = lifeGreens(), tseg = menuEl.querySelector('#trail-seg');
+  if (tseg) {
+    if (!trailOpen(draft.trail)) draft.trail = 'classic';
+    tseg.replaceChildren(...TRAILS.map(t => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = t.id; b.id = 'opt-trail-' + t.id;
+      const open = t.need <= n; b.disabled = !open; b.textContent = open ? t.name : `🔒 ${t.need}`; b.title = open ? t.name : `${t.name}: green ${t.need} shots to unlock`; return b; }));
+    menuEl.querySelector('#trail-count').textContent = `GREENS: ${n}`;
+  }
   for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
   const st = id => (draft.always.includes(id) ? 'always' : draft.modes.includes(id) ? 'on' : 'off');
   for (const b of menuEl.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(st(b.dataset.mode) === b.dataset.st));
