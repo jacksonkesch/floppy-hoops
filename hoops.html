@@ -176,9 +176,6 @@
       <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button type="button" id="opt-memes-on" data-v="on">ON</button><button type="button" id="opt-memes-off" data-v="off">OFF</button></div></div>
       <div class="row"><span class="lbl">TEAM SIZE</span><div class="seg" data-key="teamSize"><button type="button" id="opt-size-1" data-v="1">1 V 1</button><button type="button" id="opt-size-2" data-v="2">2 V 2</button><button type="button" id="opt-size-3" data-v="3">3 V 3</button></div></div>
       </div>
-      <div class="card"><h3>GREEN TRAIL</h3>
-      <div class="row"><span class="lbl" id="trail-count">GREENS: 0</span><div class="seg" data-key="trail" id="trail-seg"></div></div>
-      </div>
       <div class="card"><h3>CPU</h3>
       <div class="row"><span class="lbl">VS CPU</span><div class="seg" data-key="level"><button type="button" id="opt-level-easy" data-v="easy">EASY</button><button type="button" id="opt-level-normal" data-v="normal">NORMAL</button><button type="button" id="opt-level-hard" data-v="hard">HARD</button><button type="button" id="opt-level-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
       <div class="row"><span class="lbl">CPU VS CPU RED</span><div class="seg" data-key="cvcRed"><button type="button" id="opt-cvcred-easy" data-v="easy">EASY</button><button type="button" id="opt-cvcred-normal" data-v="normal">NORMAL</button><button type="button" id="opt-cvcred-hard" data-v="hard">HARD</button><button type="button" id="opt-cvcred-impossible" data-v="impossible">IMPOSSIBLE</button></div></div>
@@ -1433,6 +1430,7 @@ class Sfx {
   boom() { this.tone('sine', 70, 26, 0.9, 0.9); this.hiss(0.6, 0.4, 'lowpass', 900, 200); }
   creak() { this.tone('sawtooth', 150, 55, 0.7, 0.1); this.tone('square', 95, 60, 0.5, 0.05, 0.1); }
   crash() { this.tone('sine', 60, 22, 1.1, 1); this.hiss(0.9, 0.6, 'lowpass', 1400, 150); this.rim(1.5); }
+  clank() { this.tone('square', 1100, 820, 0.05, 0.05); this.tone('triangle', 2300, 1900, 0.06, 0.035); }
   glass() { this.hiss(0.7, 0.5, 'highpass', 2500, 9000); [2400, 3150, 3900, 4700, 5600].forEach((f, k) => this.tone('triangle', f, f * 0.8, 0.35, 0.06, k * 0.035)); }
   jingle(team) { const n = team === 0 ? [523.3, 659.3, 784] : [392, 493.9, 587.3]; n.forEach((f, k) => this.tone('square', f, f, 0.12, 0.05, 0.08 + k * 0.08)); }
   fanfare() { [523.3, 659.3, 784, 1046.5].forEach((f, k) => this.tone('square', f, f, k === 3 ? 0.5 : 0.14, 0.06, 0.9 + k * 0.13)); }
@@ -1822,6 +1820,15 @@ const COURT_CACHE = {};
 const courtImage = k => COURT_CACHE[k] || (COURT_CACHE[k] = paintCourt(k));
 
 // ---------------------------------------------------------------- hoop + net
+// REPAIR CREW: when a hoop is wrecked and the round carries on (the dunk got blocked), three guys in hard hats
+// sprint in, hammer away for a second and a half while the pole swings back up, and sprint off again.
+const CREW_IN = 0.6, CREW_WORK = 1.4, CREW_OUT = 0.7;
+function crewPos(h, C, i) {
+  const sx = h.side * 9.4, tx = h.side * (6.8 - i * 1.3), t = C.t - i * 0.08;
+  if (t < CREW_IN) { const k = clamp(t / (CREW_IN - 0.16), 0, 1); return { x: sx + (tx - sx) * k, f: -h.side, run: k < 1 }; }
+  if (t < CREW_IN + CREW_WORK) return { x: tx, f: h.side, run: false, work: true };
+  const k = clamp((t - CREW_IN - CREW_WORK) / CREW_OUT, 0, 1); return { x: tx + (sx - tx) * k, f: h.side, run: true };
+}
 class Hoop {
   constructor(game, side) {
     this.game = game; this.side = side; this.cx = side * HOOP_CX;
@@ -1878,6 +1885,19 @@ class Hoop {
       const o = rot({ x: q.x - this.pivot.x, y: q.y - this.pivot.y }, this.side * this.fall);
       q.x = this.pivot.x + o.x; q.y = Math.max(0.12, this.pivot.y + o.y); q.vx = rr(-3.5, 3.5); q.vy = rr(1.5, 5);
     }
+  }
+  // the repair crew is done: stand the hoop back up and put new glass in
+  rebuild() {
+    if (this.falling) {
+      this.falling = this.landed = false; this.fall = 0; this.collapseAt = 0;
+      this.body.setTransform(this.origin0, 0); this.moving = !!this.game.cfg.obst.move; this.y = this.prevY = this.base + this.origin0.y;
+    }
+    if (this.shattered) {
+      this.shattered = false; this.shards = null;
+      this.boardFix = this.body.createFixture(new pl.Box(0.06, 0.95, { x: this.side * (BOARD_X + 0.06), y: RIM_Y + 0.75 }, 0),
+        { friction: 0.4, restitution: 0.4, filterCategoryBits: CAT_HOOP, filterMaskBits: CAT_BALL, userData: { hoop: this, kind: 'board' } });
+    }
+    this.bend = 0; this.shake = 0;
   }
   fallArt() { return this.side > 0 ? 314 : 6; }
   // where the camera looks while the hoop comes down: partway up the pole, wherever the pole has got to
@@ -5307,19 +5327,10 @@ function migrateModes(m, ver) {
   return m.filter(id => MODES.some(x => x.id === id));
 }
 // ------------------------------------------------ green trails: a green shot leaves one of these behind the ball.
-// They unlock as you rack up greens (counted forever, on this computer, for human shooters only).
-const TRAILS = [
-  { id: 'classic', name: 'CLASSIC', need: 0 }, { id: 'comet', name: 'COMET', need: 5 }, { id: 'fire', name: 'FIRE', need: 15 },
-  { id: 'ice', name: 'ICE', need: 30 }, { id: 'rainbow', name: 'RAINBOW', need: 50 }, { id: 'bolt', name: 'BOLT', need: 100 },
-  { id: 'galaxy', name: 'GALAXY', need: 200 },
-];
-const TRAIL_BY_ID = Object.fromEntries(TRAILS.map(t => [t.id, t]));
-const GREENS_KEY = 'floppy-hoops-greens';
-const lifeGreens = () => { try { return Math.max(0, Number(localStorage.getItem(GREENS_KEY)) || 0); } catch (e) { return 0; } };
-const addLifeGreen = () => { const n = lifeGreens() + 1; try { localStorage.setItem(GREENS_KEY, String(n)); } catch (e) { /* storage unavailable */ } return n; };
-const trailOpen = id => (TRAIL_BY_ID[id] || TRAILS[0]).need <= lifeGreens();
+// Every green picks one at random (looks only: drawn from REAL_RANDOM so online and look-ahead games stay identical).
+const TRAILS = ['classic', 'comet', 'fire', 'ice', 'rainbow', 'bolt', 'galaxy'];
 function loadSettings() {
-  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', memes: 'off', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [], trail: 'classic' };
+  const def = { ver: 10, mode: '2p', level: 'normal', cvcRed: 'impossible', cvcBlue: 'hard', cvcOop: 'off', target: 11, winBy2: 'on', memes: 'off', teamSize: 2, modes: MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id)), dunks: ALL_DUNKS.slice(), always: [], soundsOff: [], eventsOff: [] };
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
     if (s && typeof s === 'object') return {
@@ -5337,7 +5348,6 @@ function loadSettings() {
       // the sound list was redone in v4, so older switches start fresh
       soundsOff: (s.ver || 0) >= 4 && Array.isArray(s.soundsOff) ? s.soundsOff.filter(id => SOUND_BY_ID[id]) : [],
       eventsOff: Array.isArray(s.eventsOff) ? s.eventsOff.filter(id => EVENT_LIST.some(e => e.id === id)) : [],
-      trail: TRAIL_BY_ID[s.trail] ? s.trail : 'classic',
     };
   } catch (e) { /* storage unavailable */ }
   return def;
@@ -5972,13 +5982,8 @@ class Game {
     b.shotBy = p;
     if (green) {
       b.ghost = true; b.ghostT = 0; b.green = true; this.stat(p.team, 'greens');
-      // a person's green wears their trail (a CPU's keeps the classic sparks); every one counts toward the next trail
-      b.trail = 'classic';
-      if (!this.isShadow && this.state === 'play' && !this.cpus.some(c => c.team === p.team)) {
-        const n = addLifeGreen(), t = TRAILS.find(q => q.need === n);
-        if (t && n > 0) this.popup(`${t.name} TRAIL UNLOCKED!`, head.x, head.y + 1.6, '#ffd23f', 9, 2);
-        if (trailOpen(this.settings.trail)) b.trail = this.settings.trail;
-      }
+      // every green gets a random trail
+      b.trail = TRAILS[Math.floor(REAL_RANDOM() * TRAILS.length)];
       // a green that will win the game gets GREEN FN the moment it leaves the hand, and the camera watches it
       const win = this.winningGreen(p, b);
       if (win) this.cam.watch = { ball: b, team: p.team, hoop: this.hoopFor(p.team), t: 0, on: false, scored: 0 };
@@ -6394,16 +6399,47 @@ class Game {
   addPart(x, y, vx, vy, g, life, col, sz, kind) { if (this.parts.length < 500) this.parts.push({ x, y, vx, vy, g, life, max: life, col, sz, kind }); }
   popup(text, x, y, col, size, dur) { this.pops.push({ text, x: clamp(x, -6.4, 6.4), y: clamp(y, 1.2, 6.4), col, size, dur, t: 0 }); }
 
+  // ------------------------------------------------ repair crew
+  crewStep(h, dt) {
+    const C = h.crew;
+    if (!C) {
+      if (this.state !== 'play') return;   // (a crew already at work keeps going through a score; a new one only comes out in play)
+      if (h.landed ? this.time - h.landAt > 0.6 : h.shattered && !h.falling && !h.collapseAt && this.time - h.shatterAt > 0.9) {
+        h.crew = { t: 0, fall0: h.fall || 0 };
+        this.popup('REPAIR CREW!', h.cx - h.side * 2.6, 4.4, '#ffb000', 8, 1.3);
+      }
+      return;
+    }
+    const t0 = C.t; C.t += dt;
+    const w = C.t - CREW_IN;
+    if (w > 0 && w < CREW_WORK) {
+      if (h.falling) { const k = clamp((w - 0.2) / (CREW_WORK - 0.35), 0, 1); h.fall = C.fall0 * (1 - k * k * (3 - 2 * k)); }
+      if (Math.floor(C.t * 7) !== Math.floor(t0 * 7)) {   // a hammer comes down
+        this.sfx.clank();
+        const q = crewPos(h, C, Math.floor(C.t * 7) % 3);
+        for (let n = 0; n < 5; n++) this.addPart(q.x + q.f * 0.9, 0.5, rand(-2, 2), rand(1, 4), 14, rand(0.15, 0.35), pick(['#ffd23f', '#ffffff', ORANGE]), 1);
+      }
+    }
+    if (!C.done && w >= CREW_WORK) {
+      C.done = true; h.rebuild(); this.sfx.dunk();
+      this.popup('GOOD AS NEW!', h.cx - h.side * 2.2, h.y + 2.4, '#7dff8a', 8, 1.3);
+      const bx = h.side * (BOARD_X + 0.06);
+      for (let n = 0; n < 24; n++) this.addPart(bx + rand(-0.2, 0.2), h.y + rand(0, 1.6), rand(-2, 2), rand(-1, 3), 6, rand(0.4, 0.8), pick(['#dff3ff', '#ffffff', '#ffd23f']), pick([1, 2]));
+    }
+    if (C.t > CREW_IN + CREW_WORK + CREW_OUT + 0.2) h.crew = null;
+  }
+
   // ------------------------------------------------ instant replay
   recordFrame() {
     if (this.state !== 'play' && this.state !== 'scored' && !(this.state === 'showcase' && this.show.kind === 'sound')) return;
     const pose = b => { const p = b.getPosition(); return [p.x, p.y, b.getAngle()]; };
     this.rec.push({
+      sc: this.score.slice(),
       pl: this.players.map(p => [...pose(p.body), ...pose(p.head), ...pose(p.arms[0]), p.spinA, p.front ? 1 : 0, p.armScale, p.legA ? p.legA[0] : 0, p.legA ? p.legA[1] : 0, p.layer === 'between' ? 1 : p.layer === 'back' ? 2 : 0]),
       b: this.allBalls.map(b => { const p = b.body.getPosition(); return [p.x, p.y, b.body.getAngle(), b.holder ? this.players.indexOf(b.holder) : -1]; }),
       h: this.hoops.map(h => ({ y: h.y, bend: h.bend, shake: h.shake, fall: h.fall || 0, ct: h.falling ? this.time - h.fallAt : -1, lt: h.landed ? this.time - h.landAt : -1, shattered: h.shattered, st: h.shattered ? this.time - h.shatterAt : -1, pts: h.pts.map(q => [q.x, q.y]) })),
     });
-    if (this.rec.length > 240) this.rec.shift();
+    if (this.rec.length > 360) this.rec.shift();   // (6 s: room for a long hang + a hoop coming down)
     this.recCount++;
   }
   // back: 'showcase' when the SOUNDS reel is showing a replay, so it carries on with the reel afterwards
@@ -6411,7 +6447,7 @@ class Game {
     const frames = this.rec.slice(), si = frames.length - 1 - (this.recCount - this.scoreRec);
     if (si < 0 || frames.length < 10) { if (back) this.nextShow(); else this.finishReplay(); return; }
     const fell = frames.some(f => f.h.some(x => x.ct >= 0));   // (a hoop collapse plays right through to the crash)
-    this.replay = { frames, a: Math.max(0, si - 130), z: fell ? frames.length - 1 : Math.min(frames.length - 1, si + 40), back };
+    this.replay = { frames, a: Math.max(0, si - 95), z: fell ? frames.length - 1 : Math.min(frames.length - 1, si + 40), back };
     this.replay.pos = this.replay.a;
     this.state = 'replay'; this.stateT = 0; this.cam.watch = null; this.cam.z = 1;
   }
@@ -6563,6 +6599,7 @@ class Game {
         else { b.body.setTransform({ x: b.spawnX, y: 5.8 + Math.sin(this.time * 4) * 0.05 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); }
       } else if (this.cfg.wind && !b.holder && !b.green) b.body.applyForceToCenter({ x: b.body.getMass() * this.cfg.wind * this.windCur, y: 0 }, true);
     }
+    if (this.state === 'play' || this.state === 'scored') for (const h of this.hoops) this.crewStep(h, dt);
     for (const h of this.hoops) h.preStep(this.time, dt);
     this.world.step(dt, 8, 3);
     this.afterStep(dt);
@@ -7247,6 +7284,28 @@ const HOOP_DECO = {
     R(sx, sy - 2, 1, 5, '#ffd23a'); R(sx - 2, sy, 5, 1, '#ffd23a'); R(sx - 1, sy - 1, 3, 3, '#ffd23a'); R(sx, sy, 1, 1, '#fff6b0');
   },
 };
+// the repair crew: little pixel guys in yellow hard hats and orange vests, hammers going
+function drawCrew(G) {
+  const fy = ay(0);
+  for (const h of G.hoops) {
+    const C = h.crew; if (!C) continue;
+    for (let i = 0; i < 3; i++) {
+      const q = crewPos(h, C, i), f = q.f;
+      const K = 1.75 * S;   // (drawn at player size)
+      const RF = (dx, dy, w, hh, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(OX + ax(q.x) * S + (f > 0 ? dx : -dx - w) * K + SHX), Math.round(OY + fy * S + dy * K + SHY), Math.ceil(w * K), Math.ceil(hh * K)); };
+      const step = q.run ? Math.floor(G.time * 14 + i) % 2 : 0, bob = q.run && step ? -1 : 0;
+      const skin = ['#f1c27d', '#c68642', '#8d5524'][i];
+      RF(-3, -9 + (step ? -1 : 0), 2, 7, '#3b5ba8'); RF(1, -9 - (step ? 0 : 1) * (q.run ? 1 : 0), 2, 7, '#3b5ba8');   // jeans
+      RF(-3, -2 + (step ? -1 : 0), 3, 2, '#5a3a1e'); RF(1, -2 - (!step && q.run ? 1 : 0), 3, 2, '#5a3a1e');               // boots
+      RF(-4, -17 + bob, 8, 8, '#ff7a1a'); RF(-4, -13 + bob, 8, 1, '#ffe14d');                                             // vest + stripe
+      RF(-3, -23 + bob, 6, 6, skin); RF(1, -21 + bob, 1, 1, '#1b1b1b');                                                    // head, eye
+      RF(-4, -25 + bob, 8, 3, '#ffd23f'); RF(-3, -23 + bob, 8, 1, '#e0a800');                                              // hard hat + brim
+      const up = q.work ? (G.time * 7 + i / 3) % 1 < 0.5 : step;
+      if (up) { RF(3, -22 + bob, 2, 6, skin); RF(2, -25 + bob, 2, 3, '#8a5a2b'); RF(1, -27 + bob, 5, 2, '#9aa3b5'); }   // hammer raised
+      else { RF(3, -15 + bob, 5, 2, skin); RF(7, -16 + bob, 3, 1, '#8a5a2b'); RF(9, -18 + bob, 2, 5, '#9aa3b5'); }       // hammer down
+    }
+  }
+}
 function drawHoopFront(G, h, hv) {
   hv = hv || h;
   if (hv.fall) {
@@ -7585,7 +7644,8 @@ function render(G) {
     if (zoom) ctx.restore();
     if (rb >= 0 && fr.h[rb].ct >= 0 && fr.h[rb].lt >= 0 && fr.h[rb].lt < 0.25 && !REDUCED) { ctx.fillStyle = `rgba(255,255,255,${(0.5 * (1 - fr.h[rb].lt / 0.25)).toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
     else if (rb >= 0 && fr.h[rb].st >= 0 && fr.h[rb].st < 0.25 && !REDUCED) { ctx.fillStyle = `rgba(255,255,255,${(0.55 * (1 - fr.h[rb].st / 0.25)).toFixed(3)})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S); }
-    drawHUD(G);
+    const sc = G.score; if (fr.sc) G.score = fr.sc;   // (the scoreboard shows the score as it was at that moment)
+    drawHUD(G); G.score = sc;
     drawReplayOverlay(G);
   } else {
     drawSig(G, 'back');
@@ -7593,6 +7653,7 @@ function render(G) {
     drawTrails(G);
     for (const b of G.allBalls) if (!b.holder && !b.gone) { if (b.out) ctx.globalAlpha = 0.55; RENDER.ball(b); ctx.globalAlpha = 1; }
     for (const h of G.hoops) drawHoopFront(G, h);
+    drawCrew(G);
     for (const q of G.parts) { const s = q.sz * S; ctx.globalAlpha = q.kind === 'confetti' ? 1 : clamp(q.life / q.max * 1.5, 0, 1); ctx.fillStyle = q.col; ctx.fillRect(Math.round(SX(q.x) - s / 2), Math.round(SY(q.y) - s / 2), Math.ceil(s), Math.ceil(s)); }
     ctx.globalAlpha = 1;
     drawSig(G, 'front');
@@ -7669,14 +7730,6 @@ let draft = null;
   }
 })();
 function syncMenu() {
-  // the trail buttons are rebuilt each time, since greens can unlock new ones between visits
-  const n = lifeGreens(), tseg = menuEl.querySelector('#trail-seg');
-  if (tseg) {
-    if (!trailOpen(draft.trail)) draft.trail = 'classic';
-    tseg.replaceChildren(...TRAILS.map(t => { const b = document.createElement('button'); b.type = 'button'; b.dataset.v = t.id; b.id = 'opt-trail-' + t.id;
-      const open = t.need <= n; b.disabled = !open; b.textContent = open ? t.name : `🔒 ${t.need}`; b.title = open ? t.name : `${t.name}: green ${t.need} shots to unlock`; return b; }));
-    menuEl.querySelector('#trail-count').textContent = `GREENS: ${n}`;
-  }
   for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
   const st = id => (draft.always.includes(id) ? 'always' : draft.modes.includes(id) ? 'on' : 'off');
   for (const b of menuEl.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(st(b.dataset.mode) === b.dataset.st));
