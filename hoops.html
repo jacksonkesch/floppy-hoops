@@ -5379,6 +5379,8 @@ function makeLook(used) {
 const ALL_MODES = MODES.map(m => m.id).filter(id => !OFF_BY_DEFAULT.includes(id));   // the menu background skips the ones that start off
 const TEAM_X = { 1: [-3.2], 2: [-5.2, -2.4], 3: [-5.8, -3.8, -1.8] };
 const newStats = () => [0, 1].map(() => ({ baskets: 0, shots: 0, greens: 0, dunks: 0, blocks: 0, steals: 0, skywalks: 0 }));
+// each player's own numbers, by player id (team * 3 + slot); d/n add up how far he stands from his own hoop, to tell offense from defense
+const newPStats = () => [0, 1, 2, 3, 4, 5].map(() => ({ pts: 0, baskets: 0, shots: 0, greens: 0, dunks: 0, blocks: 0, steals: 0, skywalks: 0, d: 0, n: 0 }));
 
 class Game {
   constructor(shadow) {   // (a shadow is the silent copy the IMPOSSIBLE brain plays ahead in: no sprites, no sound, no crowd)
@@ -5388,7 +5390,7 @@ class Game {
     this.time = 0; this.realTime = 0; this.state = 'title'; this.stateT = 0; this.paused = false; this.menuOpen = false;
     this.menuSel = 0; this.menuDrop = null; this.titleRollAt = 0;
     this.score = [0, 0]; this.scorePop = [0, 0]; this.round = 1; this.target = shadow ? 5 : this.settings.target; this.vsCpu = false; this.cvc = false;
-    this.teamSize = 2; this.tourney = null; this.stats = newStats();
+    this.teamSize = 2; this.tourney = null; this.stats = newStats(); this.pstats = newPStats();
     this.held = [false, false]; this.evq = []; this.keysDown = new Set(); this.humanHeld = false;
     this.timeScale = 1; this.tsT = 0; this.tsTarget = 1;
     this.shakeA = 0; this.flash = 0; this.trans = null; this.excite = 0;
@@ -5413,7 +5415,11 @@ class Game {
   hoopFor(team) { return this.hoops[team === 0 ? 1 : 0]; }
   meterOf(p) { return this.meters.find(m => m.player === p) || null; }
   clearMeter(p) { this.meters = this.meters.filter(m => m.player !== p); }
-  stat(team, key) { if (this.state === 'play' || this.state === 'scored') this.stats[team][key]++; }
+  stat(team, key, p) {
+    if (this.state !== 'play' && this.state !== 'scored') return;
+    this.stats[team][key]++;
+    const ps = p && this.pstats && this.pstats[p.id]; if (ps) ps[key]++;
+  }
   dunkOn(id) { return this.settings.dunks.includes(id); }
   // the SOUNDS reel plays only the sound it's showing; games play whatever's switched on
   soundOn(id) {
@@ -5577,7 +5583,7 @@ class Game {
     // 4 and 6 PLAYERS give each player a key of their own; online each computer drives its own player (so per-player
     // keys too, just with no key map)
     this.keyMap = mode === '4p' ? FOUR_KEYS : mode === '6p' ? SIX_KEYS : null; this.four = !!this.keyMap || mode === 'online';
-    this.stats = newStats(); this.replay = null; this.pendingReplay = false; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
+    this.stats = newStats(); this.pstats = newPStats(); this.replay = null; this.pendingReplay = false; this.streak = { team: -1, n: 0 }; this.gamePoint = false;
     this.lastRc = CLASSIC_ROUND; this.newRoster(); this.setupRound(CLASSIC_ROUND, mode === '4p' ? 2 : mode === '6p' ? 3 : s.teamSize);
     // ALLEY-OOP MODE plays the picked CVC levels too (IMPOSSIBLE gets the lob brain; set both to IMPOSSIBLE for the
     // all-out lob show)
@@ -5977,11 +5983,11 @@ class Game {
     const label = green && contested ? 'CONTESTED GREEN!' : result;
     const col = green ? GREEN : result.startsWith('SLIGHTLY') ? '#ffd23f' : '#ff6a4d';
     this.popup(label, head.x, head.y + 0.9, col, green ? (contested ? 8 : 16) : 8, 1.1);
-    this.stat(p.team, 'shots');
+    this.stat(p.team, 'shots', p);
     this.sfx.shot();
     b.shotBy = p;
     if (green) {
-      b.ghost = true; b.ghostT = 0; b.green = true; this.stat(p.team, 'greens');
+      b.ghost = true; b.ghostT = 0; b.green = true; this.stat(p.team, 'greens', p);
       // every green gets a random trail
       b.trail = TRAILS[Math.floor(REAL_RANDOM() * TRAILS.length)];
       // a green that will win the game gets GREEN FN the moment it leaves the hand, and the camera watches it
@@ -6016,8 +6022,8 @@ class Game {
       const wasDunk = !!prev.dunk;
       this.note(wasDunk ? 'block' : 'steal', p);
       prev.grabCD = 0.5; prev.holding = null; if (prev.dunk) prev.cancelDunk(); this.clearMeter(prev);
-      this.popup(wasDunk ? 'BLOCKED!' : 'STEAL!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 0.9); this.stat(p.team, wasDunk ? 'blocks' : 'steals'); this.sfx.steal();
-    } else if (inFlight) { this.note('goaltend', p); this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks'); this.sfx.steal(); }
+      this.popup(wasDunk ? 'BLOCKED!' : 'STEAL!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 0.9); this.stat(p.team, wasDunk ? 'blocks' : 'steals', p); this.sfx.steal();
+    } else if (inFlight) { this.note('goaltend', p); this.popup(b.green ? 'GOALTENDED!' : 'BLOCKED!', hp.x, hp.y + 0.9, TEAM[p.team].light, 8, 1); this.stat(p.team, 'blocks', p); this.sfx.steal(); }
     else { this.note('grab', p); this.sfx.grab(); }
     b.holder = p; b.arm = arm; b.setHeld(true); b.ghost = false; b.green = false; b.dunked = null; b.shotBy = null; b.greenClip = null;
     p.holding = b; p.grabT = this.time;
@@ -6046,7 +6052,7 @@ class Game {
     p.oopCatchT = -9;
     const hp = p.head.getPosition(), sky = this.time - (p.headJumpT || -9) < 1.6;   // caught it after jumping off somebody's head
     this.popup(sky ? 'SKY WALK ALLEY-OOP!' : self ? 'SELF ALLEY-OOP!' : 'ALLEY-OOP!', hp.x, hp.y + 1.2, sky ? '#ff4fa3' : '#ffd23f', sky ? 16 : 8, sky ? 1.6 : 1.2);
-    if (sky) { this.addShake(6); this.slowmo(0.4, 0.5); this.stat(p.team, 'skywalks'); }
+    if (sky) { this.addShake(6); this.slowmo(0.4, 0.5); this.stat(p.team, 'skywalks', p); }
   }
   placeHeld(b) {
     const p = b.holder, arm = p.arms[b.arm];
@@ -6121,6 +6127,7 @@ class Game {
     b.ghost = false;
     b.body.setLinearVelocity({ x: bv.x * 0.25, y: Math.min(bv.y * 0.45, -2) });
     const swish = this.time - b.rimT > 0.6;
+    const by = b.shotBy || b.lastThrower, scorer = by && by.team === team ? by : null;   // (who gets the points)
     b.shotBy = null;
     const W = this.cam.watch;
     if (W && W.ball === b) { W.scored = this.time; this.cam.fx = h.cx; this.cam.fy = h.y - 0.3; }
@@ -6128,7 +6135,7 @@ class Game {
     const label = (b.dunked ? 'DUNK!' : swish ? 'SWISH!' : 'BUCKET!') + (pts > 1 ? ' +2' : '');
     this.popup(label, h.cx - h.side * 0.6, h.y - 1.1, TEAM[team].light, 8, 1.2);
     if (this.state === 'play') {
-      this.stat(team, 'baskets');
+      this.stat(team, 'baskets', scorer); if (scorer && this.pstats) this.pstats[scorer.id].pts += pts;
       this.score[team] += pts; this.scorePop[team] = 1;
       // TWO BALLS: with the other ball still in play the basket counts and the game goes on, and this ball
       // drops out of the net and rolls off the court (a shadow just ends its try, like any basket)
@@ -6209,7 +6216,7 @@ class Game {
     const imp = style.impact || 1;
     this.slowmo(0.3, 0.55); this.addShake(8 * imp); if (!REDUCED) this.flash = 0.3 * Math.min(imp, 1.5);
     h.bend = Math.min(1.8, imp); h.shake = 1.2 * imp;
-    this.stat(p.team, 'dunks');
+    this.stat(p.team, 'dunks', p);
     if (this.state !== 'showcase') this.popup(style.name, h.cx - h.side * 2.4, h.y + 1.7, TEAM[p.team].light, 16, 1.7);
     if (style.sig && !this.isShadow) {   // a signature slam: camera punch, a flash and a shockwave in his colour, plus whatever his dunk leaves behind
       if (!REDUCED && !this.cam.punch) this.cam.punch = { x: h.cx - h.side * 0.8, y: h.y + 0.2, t: 0.75, z: 1.4 };
@@ -6405,7 +6412,8 @@ class Game {
     if (!C) {
       if (this.state !== 'play') return;   // (a crew already at work keeps going through a score; a new one only comes out in play)
       if (h.landed ? this.time - h.landAt > 0.6 : h.shattered && !h.falling && !h.collapseAt && this.time - h.shatterAt > 0.9) {
-        h.crew = { t: 0, fall0: h.fall || 0 };
+        const who = MEME_LOOKS.map((m, i) => i).sort(() => vrand(-1, 1)).slice(0, 3);   // the crew is three of the meme guys in hard hats
+        h.crew = { t: 0, fall0: h.fall || 0, who };
         this.popup('REPAIR CREW!', h.cx - h.side * 2.6, 4.4, '#ffb000', 8, 1.3);
       }
       return;
@@ -6600,6 +6608,7 @@ class Game {
       } else if (this.cfg.wind && !b.holder && !b.green) b.body.applyForceToCenter({ x: b.body.getMass() * this.cfg.wind * this.windCur, y: 0 }, true);
     }
     if (this.state === 'play' || this.state === 'scored') for (const h of this.hoops) this.crewStep(h, dt);
+    if (this.state === 'play' && this.pstats && !this.isShadow) for (const p of this.players) { const ps = this.pstats[p.id]; ps.d += Math.abs(p.x - this.hoops[p.team === 0 ? 0 : 1].cx); ps.n++; }
     for (const h of this.hoops) h.preStep(this.time, dt);
     this.world.step(dt, 8, 3);
     this.afterStep(dt);
@@ -7285,6 +7294,7 @@ const HOOP_DECO = {
   },
 };
 // the repair crew: little pixel guys in yellow hard hats and orange vests, hammers going
+function txtCrew(name, x, hy) { txt(name, AX(ax(x)), AY(ay(0) + (hy - 6) * 1.75), 8, '#ffd23f', { ow: 0.7 }); }
 function drawCrew(G) {
   const fy = ay(0);
   for (const h of G.hoops) {
@@ -7294,12 +7304,20 @@ function drawCrew(G) {
       const K = 1.75 * S;   // (drawn at player size)
       const RF = (dx, dy, w, hh, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(OX + ax(q.x) * S + (f > 0 ? dx : -dx - w) * K + SHX), Math.round(OY + fy * S + dy * K + SHY), Math.ceil(w * K), Math.ceil(hh * K)); };
       const step = q.run ? Math.floor(G.time * 14 + i) % 2 : 0, bob = q.run && step ? -1 : 0;
-      const skin = ['#f1c27d', '#c68642', '#8d5524'][i];
+      const M = MEME_LOOKS[C.who ? C.who[i] : i], skin = M.skin, wide = M.belly || M.buff ? 1 : 0, tall = M.style === 'bigforehead' ? 1 : 0;
       RF(-3, -9 + (step ? -1 : 0), 2, 7, '#3b5ba8'); RF(1, -9 - (step ? 0 : 1) * (q.run ? 1 : 0), 2, 7, '#3b5ba8');   // jeans
-      RF(-3, -2 + (step ? -1 : 0), 3, 2, '#5a3a1e'); RF(1, -2 - (!step && q.run ? 1 : 0), 3, 2, '#5a3a1e');               // boots
-      RF(-4, -17 + bob, 8, 8, '#ff7a1a'); RF(-4, -13 + bob, 8, 1, '#ffe14d');                                             // vest + stripe
-      RF(-3, -23 + bob, 6, 6, skin); RF(1, -21 + bob, 1, 1, '#1b1b1b');                                                    // head, eye
-      RF(-4, -25 + bob, 8, 3, '#ffd23f'); RF(-3, -23 + bob, 8, 1, '#e0a800');                                              // hard hat + brim
+      if (M.bulge) RF(0, -9, 3, 2, '#2f4a8c');
+      RF(-3, -2 + (step ? -1 : 0), 3, 2, M.shoes === 'jordan' ? '#d8383c' : M.shoes === 'sambas' ? '#f4f4f4' : '#5a3a1e'); RF(1, -2 - (!step && q.run ? 1 : 0), 3, 2, M.shoes === 'jordan' ? '#d8383c' : M.shoes === 'sambas' ? '#f4f4f4' : '#5a3a1e');   // boots
+      RF(-4 - wide, -17 + bob, 8 + wide * 2, 8, '#ff7a1a'); RF(-4 - wide, -13 + bob, 8 + wide * 2, 1, '#ffe14d');          // vest + stripe
+      if (M.belly) RF(2, -15 + bob, 3, 4, '#ff7a1a');
+      const hy = -23 + bob - tall;
+      RF(-3, hy, 6, 6 + tall, skin); RF(1, hy + 2 + tall, 1, 1, '#1b1b1b');                                                // head, eye
+      RF(-3, hy, 2, 4 + tall, M.hair); RF(-4, hy + 1, 1, 3, M.hair);                                                      // hair out the back of the hat
+      if (M.glasses) { RF(0, hy + 2 + tall, 3, 1, '#1b1b1b'); RF(2, hy + 1 + tall, 1, 2, '#1b1b1b'); }
+      if (M.beard) RF(-1, hy + 4 + tall, 4, 2, M.beard);
+      RF(-4, hy - 2, 8, 3, '#ffd23f'); RF(-3, hy, 8, 1, '#e0a800');                                                     // hard hat + brim
+      if (M.tip) RF(-4, hy - 2, 2, 1, M.tip);
+      if (q.run || q.work) txtCrew(M.name.toUpperCase(), q.x, hy - i * 5);   // (name tags stacked so they don't run together)
       const up = q.work ? (G.time * 7 + i / 3) % 1 < 0.5 : step;
       if (up) { RF(3, -22 + bob, 2, 6, skin); RF(2, -25 + bob, 2, 3, '#8a5a2b'); RF(1, -27 + bob, 5, 2, '#9aa3b5'); }   // hammer raised
       else { RF(3, -15 + bob, 5, 2, skin); RF(7, -16 + bob, 3, 1, '#8a5a2b'); RF(9, -18 + bob, 2, 5, '#9aa3b5'); }       // hammer down
@@ -7522,6 +7540,28 @@ function drawTrophy(x, y) {
   artRect(x - 3, y + 1, 3, 5, gold); artRect(x + 14, y + 1, 3, 5, gold);
   artRect(x + 6, y + 12, 2, 3, dark); artRect(x + 3, y + 15, 8, 3, dark); artRect(x + 2, y + 1, 1, 6, '#fff3b0');
 }
+// 2v2 / 3v3 game over: each team's offense (the one who played closest to the middle) with his scoring numbers,
+// and its defense (the one who stayed closest to his own hoop) with his stops
+function teamRoles(G, t) {
+  const ids = [0, 1, 2].slice(0, G.teamSize).map(s => t * 3 + s);
+  const far = id => { const ps = G.pstats[id]; return ps.n ? ps.d / ps.n : id % 3; };   // (no play yet: the higher slot starts nearer the middle)
+  const byFar = ids.slice().sort((x, y) => far(y) - far(x));
+  return { off: byFar[0], def: byFar[byFar.length - 1] };
+}
+function drawRoles(G) {
+  const nm = id => { const L = G.roster && G.roster[id]; return L && L.name ? L.name.toUpperCase() : '#' + (L && L.num != null ? L.num : id % 3 + 1); };
+  const n = (v, one, many) => `${v} ${v === 1 ? one : many}`;
+  for (let t = 0; t < 2; t++) {
+    const cx = t === 0 ? 84 : 236, { off, def } = teamRoles(G, t), O = G.pstats[off], D = G.pstats[def], col = TEAM[t].light;
+    txt(G.teamName(t), AX(cx), AY(64), 8, col, { ow: 0.8 });
+    txt('OFFENSE  ' + nm(off), AX(cx), AY(76), 8, ORANGE, { ow: 0.7 });
+    txt(`${n(O.pts, 'PT', 'PTS')}  ${n(O.dunks, 'DUNK', 'DUNKS')}`, AX(cx), AY(86), 8, CREAM, { ow: 0.7 });
+    txt(`${O.baskets}/${O.shots} FG  ${n(O.greens, 'GREEN', 'GREENS')}`, AX(cx), AY(95), 8, CREAM, { ow: 0.7 });
+    txt('DEFENSE  ' + nm(def), AX(cx), AY(108), 8, ORANGE, { ow: 0.7 });
+    txt(`${n(D.blocks, 'BLOCK', 'BLOCKS')}  ${n(D.steals, 'STEAL', 'STEALS')}`, AX(cx), AY(118), 8, CREAM, { ow: 0.7 });
+    txt(`${n(D.pts, 'PT', 'PTS')}  ${D.baskets}/${D.shots} FG`, AX(cx), AY(127), 8, '#b9c3dd', { ow: 0.7 });
+  }
+}
 function drawOver(G) {
   const a = clamp(G.stateT / 0.6, 0, 1), tr = G.tourney;
   ctx.fillStyle = `rgba(8,10,18,${0.62 * a})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
@@ -7534,12 +7574,15 @@ function drawOver(G) {
   }
   txt(title, AX(160), AY(28), 24 * k, col, { ow: 1.4 });
   txt(`${G.score[0]}  -  ${G.score[1]}`, AX(160), AY(50), 16, CREAM);
+  if (G.teamSize >= 2 && G.pstats) drawRoles(G);
+  else {
   txt(G.teamName(0), AX(112), AY(66), 8, TEAM[0].light, { ow: 0.8 }); txt(G.teamName(1), AX(208), AY(66), 8, TEAM[1].light, { ow: 0.8 });
   [['BASKETS', 'baskets'], ['SHOTS', 'shots'], ['GREENS', 'greens'], ['DUNKS', 'dunks'], ['BLOCKS', 'blocks'], ['STEALS', 'steals']].forEach(([label, key], i) => {
     const y = 77 + i * 9;
     txt(label, AX(160), AY(y), 8, '#b9c3dd', { ow: 0.7 });
     txt(String(G.stats[0][key]), AX(112), AY(y), 8, CREAM, { ow: 0.7 }); txt(String(G.stats[1][key]), AX(208), AY(y), 8, CREAM, { ow: 0.7 });
   });
+  }
   if (G.stateT > 1.2) {
     const next = !tr ? 'W OR UP ARROW FOR A REMATCH' : tr.result === 'champion' ? 'W OR UP ARROW FOR THE MAIN MENU' : tr.result === 'won' ? `W OR UP ARROW: ON TO ${tr.stage === TOURNEY.length - 1 ? 'THE FINAL' : `MATCH ${tr.stage + 1}`}` : 'W OR UP ARROW TO TRY AGAIN';
     if (Math.sin(G.realTime * 5) > -0.3) txt(next, AX(160), AY(142), 8, ORANGE);
