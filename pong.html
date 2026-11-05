@@ -51,6 +51,10 @@
   .snd-row { display: flex; gap: 6px; margin-bottom: 6px; }
   .snd-row .nm { flex: 1; text-align: left; }
   .tour-kind { align-self: flex-start; }
+  .tri-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 6px; }
+  .tri-row .nm { min-width: 150px; font-size: 13px; color: #fff6e0; }
+  .tri-row .sub { flex: 1 1 160px; font-size: 11px; color: #7d88a8; }
+  .tri-cat { margin: 10px 0 6px; font-size: 11px; color: #7d88a8; letter-spacing: 0.1em; }
 </style>
 </head>
 <body>
@@ -64,6 +68,10 @@
     <div class="group"><h3>BALLS</h3><div class="chips" data-pool="balls"></div></div>
     <div class="group"><h3>SPIN</h3><div class="chips" data-pool="spins"></div></div>
     <div class="group"><h3>FLOOR + GRAVITY</h3><div class="chips" data-pool="envs"></div></div>
+    <div class="modes-head"><span class="lbl">MODES</span><span class="hint">OFF / ON (SOME POINTS) / ALWAYS. OPPOSITES NEVER STACK.</span></div>
+    <div id="mode-list"></div>
+    <div class="modes-head"><span class="lbl">EVENTS</span><span class="hint">EACH ONE ONLY GOES OFF ON ITS OWN MAP</span></div>
+    <div id="event-list"></div>
     <div class="modes-head"><span class="lbl">MATCH</span></div>
     <div class="row"><span class="lbl">PLAYERS</span><div class="seg" data-key="doubles"><button data-v="0">SINGLES</button><button data-v="1">DOUBLES</button></div></div>
     <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button data-v="5">5</button><button data-v="7">7</button><button data-v="11">11</button><button data-v="21">21</button><button data-v="0">ENDLESS</button></div></div>
@@ -71,7 +79,7 @@
     <div class="row"><span class="lbl">SERVES EACH</span><div class="seg" data-key="serves"><button data-v="1">1</button><button data-v="2">2</button><button data-v="5">5</button></div></div>
     <div class="row"><span class="lbl">TOUCH TABLE</span><div class="seg" data-key="tableTouch"><button data-v="1">LOSE THE POINT</button><button data-v="0">ALLOWED</button></div></div>
     <div class="row"><span class="lbl">NEW MIX</span><div class="seg" data-key="shuffle"><button data-v="point">EVERY POINT</button><button data-v="game">EVERY GAME</button></div></div>
-    <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button></div></div>
+    <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="impossible">IMPOSSIBLE</button></div></div>
     <div class="foot"><button id="done">DONE</button><span class="hint">ESC TO CLOSE</span></div>
   </div>
 </div>
@@ -452,7 +460,8 @@ const PPM = 20, ART_W = 320, ART_H = 180, STAGE_W = 400, STAGE_H = 225, STAGE_GX
 const ax = x => STAGE_GX + x * PPM, ay = y => STAGE_GY - y * PPM;
 const STEP = 1 / 60, GAME_SPEED = 1;
 const GRAVITY = 9;                 // floaty, like the real thing: a tapped hop peaks at ~0.65 s and lands at ~1.3 s
-const TABLE_TOP = 1.05, TABLE_HALF = 2.5, TABLE_T = 0.09, NET_H = 0.22, LEG_X = 1.85;
+const TABLE_TOP = 1.05, TABLE_HALF = 2.5, TABLE_T = 0.09, NET_H0 = 0.22, LEG_X = 1.85;
+let NET_H = NET_H0;   // the TALL NET / LOW NET modes change it
 const HOME_X = [TABLE_HALF + 0.85, TABLE_HALF + 2.3];   // singles uses the first; doubles both (front, back)
 // the plank people: hip at the origin, legs below, torso above, head on a wobbly neck, a free arm with the paddle
 const BODY = { legLen: 0.95, legW: 0.2, torsoW: 0.46, torsoH: 0.82, headR: 0.29, armLen: 0.62, armW: 0.2, padR: 0.2 };
@@ -469,7 +478,48 @@ const MAPS = [
   { id: 'lodge', name: 'SKI LODGE', fric: 0.9 },
   { id: 'ferry', name: 'FERRY', fric: 0.9 },
   { id: 'diner', name: 'NIGHT DINER', fric: 0.9 },
+  { id: 'park', name: 'CITY PARK', fric: 1, sub: 'SPRINKLERS' },
+  { id: 'tokyo', name: 'DOWNTOWN TOKYO', fric: 0.9, sub: 'BOOST PADS' },
+  { id: 'castle', name: 'DRAGON CASTLE', fric: 0.9, sub: 'DRAGON FIRE' },
+  { id: 'ice', name: 'ICE RINK', fric: 0.03, sub: 'NO GRIP AT ALL' },
+  { id: 'moon', name: 'MOON', fric: 0.9, grav: 0.45, sub: 'LOW GRAVITY + METEORS' },
+  { id: 'rome', name: 'ROME COLOSSEUM', fric: 1.1, sub: 'LION RUN' },
+  { id: 'snow', name: 'SNOW', fric: 0.2, sub: 'SLIPPY + SNOWBALLS' },
+  { id: 'bounce', name: 'BOUNCY HOUSE', fric: 0.9, jump: 1.25, bouncy: true, sub: 'SPRINGY FLOOR' },
 ];
+// Tokyo's boost pads: where they sit (m from the middle) and how much more a hop off one goes
+const PADS = [-(TABLE_HALF + 1.55), TABLE_HALF + 1.55], PAD_W = 0.45, PAD_BOOST = 1.45;
+// mixable modes, like Floppy Hoops: OFF / ON (can turn up on a point) / ALWAYS. One per slot, so opposites never stack.
+const MODES = [
+  { id: 'longarm', cat: 'PLAYERS', slot: 'arms', name: 'LONG ARMS', sub: 'REACH WAY OUT', body: { armLen: 1.5 }, reach: 1.8 },
+  { id: 'shortarm', cat: 'PLAYERS', slot: 'arms', name: 'SHORT ARMS', sub: 'TINY T-REX REACH', body: { armLen: 0.55 }, reach: 0.55 },
+  { id: 'bighead', cat: 'PLAYERS', slot: 'heads', name: 'BIG HEADS', sub: 'EASY TO BONK', body: { headR: 1.7 }, headHit: 1 },
+  { id: 'smallhead', cat: 'PLAYERS', slot: 'heads', name: 'SMALL HEADS', sub: 'PEA BRAINS', body: { headR: 0.6 } },
+  { id: 'longleg', cat: 'PLAYERS', slot: 'legs', name: 'LONG LEGS', sub: 'TALL AND WOBBLY', body: { legLen: 1.4 } },
+  { id: 'shortleg', cat: 'PLAYERS', slot: 'legs', name: 'SHORT LEGS', sub: 'LOW TO THE GROUND', body: { legLen: 0.62 } },
+  { id: 'heavyp', cat: 'PLAYERS', slot: 'weight', name: 'HEAVY PLAYERS', sub: 'LOW HOPS, HARD TO KNOCK', jump: 0.8, mass: 1.8 },
+  { id: 'tinyball', cat: 'BALL', slot: 'size', name: 'TINY BALL', sub: 'HARD TO SEE', ballR: 0.55 },
+  { id: 'giantball', cat: 'BALL', slot: 'size', name: 'GIANT BALL', sub: 'HUGE AND BOUNCY', ballR: 2 },
+  { id: 'slowball', cat: 'BALL', slot: 'speed', name: 'SLOW BALL', sub: 'FLOATS ACROSS', ballG: 0.55 },
+  { id: 'fastball', cat: 'BALL', slot: 'speed', name: 'FAST BALL', sub: 'NO TIME TO THINK', ballG: 1.45 },
+  { id: 'superjump', cat: 'PHYSICS', slot: 'jump', name: 'SUPER JUMPS', sub: 'HOPS GO SKY HIGH', jump: 1.3 },
+  { id: 'wind', cat: 'PHYSICS', slot: 'wind', name: 'WINDY', sub: 'THE BALL DRIFTS', wind: 1 },
+  { id: 'tallnet', cat: 'TABLE', slot: 'net', name: 'TALL NET', sub: 'LOB IT OVER', net: 3 },
+  { id: 'lownet', cat: 'TABLE', slot: 'net', name: 'LOW NET', sub: 'SMASH CITY', net: 0.35 },
+  { id: 'tramp', cat: 'OBSTACLES', slot: 'tramp', name: 'TRAMPOLINES', sub: 'BOUNCE PADS BEHIND YOU' },
+];
+const MODE_CATS = ['PLAYERS', 'BALL', 'PHYSICS', 'TABLE', 'OBSTACLES'];
+const MODE_P = 0.5, MODE_EXTRA = 1 / 6;   // chance a point gets a mode, and of each further slot stacking on
+const TRAMPS = [-(TABLE_HALF + 3.1), TABLE_HALF + 3.1], TRAMP_W = 0.55;
+// court events (like Floppy Hoops): each map can have one, and it goes off on some points
+const EVENTS = [
+  { id: 'storm', map: 'snow', name: 'SNOWBALL STORM', sub: 'SNOW: DODGE THE SNOWBALLS' },
+  { id: 'meteor', map: 'moon', name: 'METEOR STRIKE', sub: 'MOON: BLAST KNOCKS YOU FLYING' },
+  { id: 'sprinkler', map: 'park', name: 'SPRINKLER', sub: 'PARK: THE JET SHOVES YOU' },
+  { id: 'lion', map: 'rome', name: 'LION RUN', sub: 'ROME: JUMP IT OR GET BOWLED' },
+  { id: 'dragon', map: 'castle', name: 'DRAGON FIRE', sub: 'CASTLE: JUMP THE FIRE' },
+];
+const EVENT_P = 0.3;
 // r: radius (m, drawn a bit bigger than real so you can see it), e: table bounce, gs: gravity scale, dens: how hard it hits people
 const BALLS = [
   { id: 'pingpong', name: 'PING PONG', r: 0.12, e: 0.86, gs: 1.1, dens: 2, spin: 1 },
@@ -495,6 +545,7 @@ const CPU_LEVELS = {
   easy:   { react: 0.45, err: 0.4, mis: 0.15, spin: 0.05, smash: 0.15, wrongHop: 0.18, aim: 0.2 },
   normal: { react: 0.25, err: 0.25, mis: 0.25, spin: 0.25, smash: 0.25, wrongHop: 0.06, aim: 0.5 },
   hard:   { react: 0.12, err: 0.08, mis: 0.08, spin: 0.5, smash: 0.6, wrongHop: 0.01, aim: 1 },
+  impossible: { react: 0.06, err: 0.02, mis: 0.03, spin: 0.7, smash: 0.85, wrongHop: 0, aim: 1, dodge: 1 },
 };
 
 // ---------------------------------------------------------------- sounds
@@ -528,12 +579,18 @@ const DEFAULTS = {
   doubles: 0, target: 7, winBy2: 0, serves: 1, tableTouch: 1, shuffle: 'point', level: 'normal', muted: 0, grunts: 1,
   pools: { maps: MAPS.map(m => m.id), balls: BALLS.map(b => b.id), spins: ['normal', 'extreme'], envs: ENVS.map(e => e.id) },
   sounds: {}, tour: { size: 4, names: ['YOU', 'CPU 1', 'CPU 2', 'CPU 3', 'CPU 4', 'CPU 5', 'CPU 6', 'CPU 7'], cpu: [0, 1, 1, 1, 1, 1, 1, 1] },
+  modes: Object.fromEntries(MODES.map(m => [m.id, 1])),   // 0 off, 1 on, 2 always
+  events: Object.fromEntries(EVENTS.map(e => [e.id, 1])),
 };
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { s = {}; }
-  const out = { ...DEFAULTS, ...s, pools: { ...DEFAULTS.pools, ...(s.pools || {}) }, tour: { ...DEFAULTS.tour, ...(s.tour || {}) }, sounds: { ...(s.sounds || {}) } };
+  const out = { ...DEFAULTS, ...s, pools: { ...DEFAULTS.pools, ...(s.pools || {}) }, tour: { ...DEFAULTS.tour, ...(s.tour || {}) }, sounds: { ...(s.sounds || {}) },
+    modes: { ...DEFAULTS.modes, ...(s.modes || {}) }, events: { ...DEFAULTS.events, ...(s.events || {}) } };
   for (const k of Object.keys(POOLS)) { out.pools[k] = out.pools[k].filter(id => POOLS[k].some(q => q.id === id)); if (!out.pools[k].length) out.pools[k] = [POOLS[k][0].id]; }
+  // maps added after a save start switched on
+  if (s.pools && s.pools.maps && !s.newMaps2) { for (const m of MAPS.slice(5)) if (!out.pools.maps.includes(m.id)) out.pools.maps.push(m.id); out.newMaps2 = 1; }
+  if (!CPU_LEVELS[out.level]) out.level = 'normal';
   return out;
 }
 function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
@@ -785,6 +842,90 @@ function paintStage(key) {
     R(0, 170, W, H - 170, '#e9e6dc');
     for (let y = 170; y < H; y += 7) for (let x = ((y - 170) / 7) % 2 ? 0 : 7; x < W; x += 14) R(x, y, 7, 7, '#2a2530');
     R(0, 170, W, 1, '#8a8796');
+  } else if (key === 'park') {   // a city park: skyline over the trees, fans on the grass, a concrete pad
+    bands(0, 96, ['#8fd0f2', '#9fd8f4', '#b1e0f6', '#c4e8f7']);
+    cloud(60, 26, 1.2); cloud(250, 18, 1); cloud(340, 40, 0.8);
+    for (let x = 0; x < W; x += 22 + ((rnd() * 18) | 0)) {
+      const h = 30 + ((rnd() * 40) | 0), w = 16 + ((rnd() * 12) | 0); R(x, 100 - h, w, h, '#9fb4c8');
+      for (let y = 104 - h; y < 96; y += 5) for (let k = x + 3; k < x + w - 3; k += 4) P(k, y, '#c9d7e3');
+    }
+    for (let x = -10; x < W + 10; x += 26) { disc(x, 96, 16, '#3f8a46', 12); disc(x + 10, 92, 12, '#4f9c52', 9); }
+    R(0, 100, W, 70, '#69b25a'); for (let i = 0; i < 400; i++) P(rnd() * W, 100 + rnd() * 70, rnd() < 0.5 ? '#5aa04c' : '#7cc26a');
+    for (let x = 6; x < W; x += 9) { R(x, 140, 1, 14, '#6d4a2f'); } R(0, 143, W, 1, '#8a6040'); R(0, 150, W, 1, '#8a6040');
+    R(0, 170, W, H - 170, '#bcb8b0'); for (let x = 0; x < W; x += 40) R(x, 170, 1, H - 170, '#a19d95');
+    for (let y = 182; y < H; y += 14) R(0, y, W, 1, '#a19d95');
+    R(0, 170, W, 1, '#8c887f'); R(0, 196, W, 1, '#f1efe8');
+  } else if (key === 'tokyo') {   // downtown at night: towers, neon, a street crossing for a floor
+    bands(0, 150, ['#120d2e', '#1a1240', '#26175a', '#3a1d6a', '#55247a']);
+    for (let i = 0; i < 70; i++) P(rnd() * W, rnd() * 50, '#cfd2ff');
+    for (let x = -6; x < W; x += 18 + ((rnd() * 16) | 0)) {
+      const h = 50 + ((rnd() * 80) | 0), w = 18 + ((rnd() * 18) | 0), col = ['#1c1830', '#241f3c', '#2c2448'][(rnd() * 3) | 0];
+      R(x, 150 - h, w, h, col);
+      for (let y = 154 - h; y < 146; y += 5) for (let k = x + 2; k < x + w - 2; k += 3) if (rnd() < 0.55) P(k, y, rnd() < 0.7 ? '#ffd86b' : '#7ff0ff');
+    }
+    const neon = [['#ff3fa4', 'PONG'], ['#3ff0ff', 'RAMEN'], ['#ffd23f', '24H'], ['#7dff6a', 'GAME']];
+    neon.forEach(([col, s], i) => { const x = 20 + i * 98 + ((rnd() * 20) | 0), y = 64 + ((rnd() * 30) | 0), w = s.length * 4 + 5;
+      R(x - 1, y - 1, w + 2, 9, col); R(x, y, w, 7, '#170f26'); tiny(g, s, x + 3, y + 1, col); });
+    R(0, 150, W, 20, '#2a2638'); R(0, 150, W, 1, '#4a4460');
+    R(0, 170, W, H - 170, '#34323d'); for (let x = 8; x < W; x += 22) R(x, 176, 12, 34, '#cfcfd8');
+    for (let i = 0; i < 300; i++) P(rnd() * W, 170 + rnd() * 55, '#2b2933');
+    R(0, 170, W, 1, '#5a566a');
+  } else if (key === 'castle') {   // a great hall: stone, banners, torches, flagstones
+    R(0, 0, W, 170, '#6e6a72');
+    for (let y = 0; y < 170; y += 8) { R(0, y, W, 1, '#5a5660'); for (let x = (y / 8) % 2 ? 0 : 12; x < W; x += 24) R(x, y, 1, 8, '#5a5660'); }
+    for (let i = 0; i < 260; i++) P(rnd() * W, rnd() * 170, rnd() < 0.5 ? '#7a767e' : '#625e68');
+    for (const x of [40, 160, 240, 360]) { R(x - 9, 30, 18, 46, '#2a2430'); disc(x, 30, 9, '#2a2430', 9); R(x - 7, 36, 14, 38, '#3c4a7a'); R(x - 1, 22, 2, 54, '#2a2430'); }
+    for (const [x, t] of [[100, 0], [300, 1]]) { const T = TEAM[t]; R(x - 10, 14, 20, 52, T.jersey); R(x - 10, 14, 20, 3, '#d8b25a'); for (let k = 0; k < 6; k++) R(x - 10 + k * 2, 66 + k, 20 - k * 4, 1, T.jersey); R(x - 3, 30, 6, 6, '#d8b25a'); }
+    for (const x of [10, 200, 390]) { R(x - 1, 70, 3, 10, '#4a3420'); disc(x, 66, 3, '#ff9a2a', 5); disc(x, 67, 1, '#ffe08a', 2); }
+    R(0, 100, W, 70, '#57525c'); R(0, 100, W, 2, '#7a767e'); for (let x = 0; x < W; x += 12) R(x, 100, 1, 70, '#4a4650');
+    R(0, 170, W, H - 170, '#8a8478');
+    for (let y = 170; y < H; y += 11) { R(0, y, W, 1, '#6c665c'); for (let x = (y / 11) % 2 ? 6 : 20; x < W; x += 28) R(x, y, 1, 11, '#6c665c'); }
+    R(0, 170, W, 1, '#4c4840');
+  } else if (key === 'ice') {   // a hockey rink: stands, glass, boards, ice
+    bands(0, 140, ['#2a3248', '#323b54', '#3a4460']);
+    for (let x = 0; x < W; x += 50) R(x, 0, 2, 70, '#232a3e');
+    R(0, 70, W, 70, '#4a5672'); for (let y = 76; y < 140; y += 12) R(0, y, W, 1, '#3c4660');
+    R(0, 118, W, 30, 'rgba(200,230,255,0.18)'); for (let x = 0; x < W; x += 40) R(x, 118, 1, 30, '#9fb8cc');
+    R(0, 148, W, 22, '#f4f6fa'); R(0, 148, W, 3, '#ffd23f'); R(0, 166, W, 4, '#ffd23f');
+    for (let x = 30; x < W; x += 90) { R(x, 152, 34, 12, '#2f6bd8'); tiny(g, 'SKATE', x + 7, 155, '#ffffff'); }
+    R(0, 170, W, H - 170, '#e6f2fa'); for (let i = 0; i < 160; i++) R(rnd() * W, 170 + rnd() * 55, 4 + rnd() * 10, 1, '#cfe2ef');
+    R(196, 170, 8, H - 170, '#d83a3f'); R(60, 170, 4, H - 170, '#3a6ad8'); R(336, 170, 4, H - 170, '#3a6ad8');
+    R(0, 170, W, 1, '#b5c9d8');
+  } else if (key === 'moon') {   // on the moon: stars, the Earth, grey dust, craters
+    R(0, 0, W, 170, '#07060f'); for (let i = 0; i < 160; i++) P(rnd() * W, rnd() * 160, rnd() < 0.2 ? '#ffe9a8' : '#c9cbe0');
+    disc(320, 40, 18, '#2f6bd8'); disc(314, 34, 7, '#43a85a', 5); disc(328, 46, 6, '#43a85a', 4); disc(322, 30, 4, '#ffffff', 2);
+    for (let x = 0; x < W; x++) { const h = 128 + Math.round(Math.sin(x * 0.05) * 6 + Math.sin(x * 0.13) * 3); R(x, h, 1, 170 - h, '#5a5868'); }
+    R(30, 120, 30, 30, '#cfd2e0'); disc(45, 120, 15, '#cfd2e0', 8); R(42, 100, 2, 20, '#8a8aa0'); R(44, 100, 12, 8, '#d83a3f'); for (let k = 0; k < 3; k++) R(44, 101 + k * 3, 12, 1, '#ffffff');
+    R(0, 170, W, H - 170, '#9a98a6'); for (let i = 0; i < 420; i++) P(rnd() * W, 170 + rnd() * 55, rnd() < 0.5 ? '#8a8896' : '#aaa8b6');
+    for (const [x, y, r] of [[40, 205, 12], [130, 216, 8], [270, 210, 14], [360, 200, 9]]) { disc(x, y, r, '#7f7d8c', r / 3); disc(x, y + 1, r - 2, '#8f8d9c', r / 3 - 1); }
+    R(0, 170, W, 1, '#b8b6c4');
+  } else if (key === 'rome') {   // the colosseum: tiers of arches, sand, a blue sky
+    bands(0, 60, ['#6fb6ea', '#86c2ee', '#9fcff2']);
+    R(0, 30, W, 140, '#d8b886');
+    for (const [y, h] of [[34, 30], [70, 34], [110, 34]]) {
+      R(0, y - 2, W, 2, '#b8955f'); for (let x = 4; x < W; x += 22) { R(x, y + 6, 14, h - 6, '#6a4a2a'); disc(x + 7, y + 6, 7, '#6a4a2a', 6); }
+    }
+    R(0, 144, W, 26, '#c8a46e'); R(0, 144, W, 2, '#a8844e'); for (let x = 0; x < W; x += 30) R(x, 144, 1, 26, '#a8844e');
+    R(0, 170, W, H - 170, '#e2c58c'); for (let i = 0; i < 500; i++) P(rnd() * W, 170 + rnd() * 55, rnd() < 0.5 ? '#d4b47a' : '#ecd29c');
+    R(0, 170, W, 1, '#b8955f');
+  } else if (key === 'snow') {   // a snowy field: pines, snowbanks, snow falling (painted), packed snow
+    bands(0, 120, ['#a9c4dc', '#b7cfe3', '#c6dbea', '#d6e6f1']);
+    for (let i = 0; i < 9; i++) { const x = i * 50 + ((rnd() * 20) | 0); for (let k = 0; k < 40; k++) R(x - 40 + k, 110 - k * 0.7, 80 - k * 2, 1, '#e8eff6'); }
+    for (let x = 4; x < W; x += 14 + ((rnd() * 10) | 0)) pine(x, 132 + ((rnd() * 8) | 0), 26 + ((rnd() * 16) | 0), '#2f5a44', '#f4f8fb');
+    R(0, 130, W, 40, '#eef3f8'); for (let x = 0; x < W; x += 3) R(x, 128 + Math.round(Math.sin(x * 0.07) * 2), 3, 3, '#eef3f8');
+    for (let i = 0; i < 140; i++) P(rnd() * W, rnd() * 160, '#ffffff');
+    R(0, 170, W, H - 170, '#f4f7fa'); for (let i = 0; i < 260; i++) P(rnd() * W, 170 + rnd() * 55, rnd() < 0.5 ? '#dfe8f0' : '#ffffff');
+    R(0, 170, W, 1, '#c8d6e2');
+  } else if (key === 'bounce') {   // a bounce house: puffy striped walls, a squishy floor
+    R(0, 0, W, 170, '#ffd23f');
+    const cols = ['#ff4a5c', '#ffd23f', '#3f8cff', '#43d07a'];
+    for (let x = 0, i = 0; x < W; x += 25, i++) { R(x, 0, 25, 170, cols[i % 4]); R(x, 0, 2, 170, 'rgba(255,255,255,0.35)'); R(x + 23, 0, 2, 170, 'rgba(0,0,0,0.15)'); }
+    for (let y = 20; y < 170; y += 30) R(0, y, W, 2, 'rgba(0,0,0,0.12)');
+    for (const x of [0, W - 24]) { R(x, 0, 24, 170, '#ff4a5c'); for (let y = 10; y < 170; y += 24) disc(x + 12, y, 11, '#ff6a7a', 10); }
+    R(0, 130, W, 40, 'rgba(20,16,25,0.25)');
+    R(0, 170, W, H - 170, '#3f8cff'); for (let x = 0; x < W; x += 40) { R(x, 170, 20, H - 170, '#5aa0ff'); }
+    for (let y = 180; y < H; y += 12) R(0, y, W, 1, 'rgba(0,0,0,0.12)');
+    R(0, 170, W, 3, '#ffffff');
   }
   return (MAP_ART[key] = c);
 }
@@ -840,6 +981,7 @@ function drawCrowd(g, crowd, t, excite, scorer) {
 // the bounce; backspin floats a touch and checks up after the bounce. The flight before the bounce barely changes.
 const TABLE_RECT = { x0: -TABLE_HALF, x1: TABLE_HALF, y0: TABLE_TOP - TABLE_T, y1: TABLE_TOP };
 const NET_RECT = { x0: -0.03, x1: 0.03, y0: TABLE_TOP, y1: TABLE_TOP + NET_H };
+function setNet(k) { const h = NET_H0 * k; if (h === NET_H) return; NET_H = h; NET_RECT.y1 = TABLE_TOP + h; TABLE_SPR = null; }
 function circRect(x, y, r, R) {
   const cx = clamp(x, R.x0, R.x1), cy = clamp(y, R.y0, R.y1), dx = x - cx, dy = y - cy, d2 = dx * dx + dy * dy;
   if (d2 > r * r) return null;
@@ -859,6 +1001,7 @@ function stepBall(b, dt, W, ev) {
   for (let i = 0; i < n; i++) {
     b.vy -= (W.g + b.spin * W.magnus) * h;
     if (W.drag) { const k = 1 - W.drag * h; b.vx *= k; b.vy *= k; }
+    if (W.wind) b.vx += W.wind * h;
     b.x += b.vx * h; b.y += b.vy * h; b.rot += b.w * h;
     let c = circRect(b.x, b.y, b.r, TABLE_RECT);
     if (c) {
@@ -886,11 +1029,14 @@ function stepBall(b, dt, W, ev) {
     }
     if (b.y - b.r < 0) {
       b.y = b.r;
-      if (b.vy < 0) { const s = -b.vy; b.vy = s * W.e * 0.7; if (b.vy < 0.4) b.vy = 0; b.vx *= 0.85; b.w = -b.vx / b.r; b.spin = 0; if (ev) ev('floor', b.x, s); }
+      if (b.vy < 0) { const s = -b.vy; b.vy = s * W.e * (W.floorE || 0.7) * (W.tramp && onTramp(b.x) ? 1.5 : 1); if (b.vy < 0.4) b.vy = 0; b.vx *= 0.85; b.w = -b.vx / b.r; b.spin = 0; if (ev) ev('floor', b.x, s); }
     }
-    if (Math.abs(b.x) > WALL_X - b.r) { b.x = Math.sign(b.x) * (WALL_X - b.r); b.vx = -b.vx * 0.6; if (ev) ev('wall', 0, 0); }
+    if (Math.abs(b.x) > WALL_X - b.r) { b.x = Math.sign(b.x) * (WALL_X - b.r); b.vx = -b.vx * (W.wallE || 0.6); if (ev) ev('wall', 0, 0); }
   }
 }
+function segDist(px, py, ax, ay, bx, by) { const dx = bx - ax, dy = by - ay, t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1), 0, 1); return Math.hypot(px - ax - dx * t, py - ay - dy * t); }
+const onTramp = x => TRAMPS.some(t => Math.abs(x - t) < TRAMP_W);
+const onPad = x => PADS.some(t => Math.abs(x - t) < PAD_W);
 // where the ball goes from here, if nobody touches it: samples every step until it hits the floor (or `maxT` runs out)
 function predictBall(b, W, maxT = 3) {
   const q = { ...b }, out = [], evs = [];
@@ -923,11 +1069,12 @@ function arcYAt(x0, y0, v, g, x) {
 
 // ---------------------------------------------------------------- ball sprites
 const BALL_SPR = {};
-function ballSpr(B) {
-  if (BALL_SPR[B.id]) return BALL_SPR[B.id];
-  const d = Math.max(5, Math.round(B.r * 2 * PPM));
-  if (B.id === 'basket') return (BALL_SPR[B.id] = ballSprite(d, 'basket'));
-  if (B.id === 'beach') return (BALL_SPR[B.id] = ballSprite(d, 'beach'));
+function ballSpr(B, br = B.r) {
+  const key = B.id + ':' + br.toFixed(3);
+  if (BALL_SPR[key]) return BALL_SPR[key];
+  const d = Math.max(3, Math.round(br * 2 * PPM));
+  if (B.id === 'basket') return (BALL_SPR[key] = ballSprite(d, 'basket'));
+  if (B.id === 'beach') return (BALL_SPR[key] = ballSprite(d, 'beach'));
   const [c, g] = mk(d, d), P = painter(g), r = d / 2;
   for (let y = 0; y < d; y++) for (let x = 0; x < d; x++) {
     const dx = x + 0.5 - r, dy = y + 0.5 - r, rr = Math.hypot(dx, dy);
@@ -942,7 +1089,7 @@ function ballSpr(B) {
     } else col = '#ffffff';
     P(x, y, col);
   }
-  return (BALL_SPR[B.id] = { c: outline(c), ox: r + 1, oy: r + 1 });
+  return (BALL_SPR[key] = { c: outline(c), ox: r + 1, oy: r + 1 });
 }
 // the paddle, seen edge-on: a thin red blade standing up out of the fist, a stub of wooden handle under it.
 // Anchored at the middle of the blade (that's the point that hits the ball).
@@ -963,8 +1110,17 @@ function paddleSpr(T) {
 // degrees). Let go and it jumps along the lean: a tap is a tall hop straight up, a long hold a long flat one. There is no
 // jumping in the air. The paddle is held up in front of the chest on a short arm and nudges toward the ball by itself;
 // nobody swings. The reach is small, so getting your body to the ball (lean, hop) is what makes the hit.
-const SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82, NECK_H = BODY.legLen + BODY.torsoH, COM_H = NECK_H * 0.55;
-const REACH = 0.42, PAD_REST = { x: 0.26, y: -0.1 }, JUMP_XK = 0.8;
+let SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82, NECK_H = BODY.legLen + BODY.torsoH, COM_H = NECK_H * 0.55, REACH = 0.42;
+const BODY0 = { ...BODY };
+// the body modes (long arms, big heads...) change everyone's plank at once; returns true when it changed
+function setBody(mods, reach) {
+  const nb = { ...BODY0 }; for (const k in mods) nb[k] = BODY0[k] * mods[k];   // mods are multipliers
+  if (Object.keys(nb).every(k => nb[k] === BODY[k]) && REACH === 0.42 * reach) return false;
+  Object.assign(BODY, nb);
+  SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82; NECK_H = BODY.legLen + BODY.torsoH; COM_H = NECK_H * 0.55; REACH = 0.42 * reach;
+  return true;
+}
+const PAD_REST = { x: 0.26, y: -0.1 }, JUMP_XK = 0.8;
 const leanAt = t => LEAN_MAX * (1 - Math.pow(1 - clamp(t / LEAN_T, 0, 1), LEAN_EXP));
 const leanTime = a => LEAN_T * (1 - Math.pow(1 - clamp(a / LEAN_MAX, 0, 1), 1 / LEAN_EXP));
 const groundAt = x => Math.abs(x) < TABLE_HALF ? TABLE_TOP : 0;
@@ -1009,6 +1165,11 @@ class Player {
     this.takeoff();
     this.vx = Math.sin(a) * JUMP_V * JUMP_XK + slide; this.vy = Math.cos(a) * JUMP_V * G.jumpK;
     this.w *= 0.25; this.slide = 0;
+    if (G.map.id === 'tokyo' && !this.ghost && this.fy === 0 && onPad(this.fx)) {   // a boost pad: the hop goes way further
+      this.vx *= PAD_BOOST; this.vy *= 1.15;
+      for (let i = 0; i < 10; i++) G.addPart(this.fx + rand(-0.3, 0.3), 0.05, rand(-1, 1), rand(1, 3), 3, rand(0.3, 0.5), pick(['#3ff0ff', '#ff3fa4', '#ffffff']), 1);
+      G.sfx.tone && G.sfx.tone('square', 400, 900, 0.12, 0.05);
+    }
     if (!this.ghost) { G.sfx.jump(); G.dust(this.cx, this.fy, 3); }
   }
   topple() {
@@ -1017,6 +1178,7 @@ class Player {
   }
   // a push of (jx, jy) m/s landing h metres up the plank: it turns the plank, and a big one throws it off its foot
   knock(jx, jy, h = COM_H) {
+    const mk = this.G.massK || 1; jx /= mk; jy /= mk;
     const m = Math.hypot(jx, jy); if (m < 0.05) return;
     if (m > 6) { jx *= 6 / m; jy *= 6 / m; }
     this.w += (jx * Math.cos(this.a) - jy * Math.sin(this.a)) * (h - (this.air ? COM_H : 0)) * 1.2;
@@ -1059,6 +1221,13 @@ class Player {
   }
   land(f, gr) {
     const G = this.G, hard = -this.vy;
+    // a trampoline, or the springy bouncy-house floor, throws you back up instead
+    if (gr === 0 && !this.ghost && ((G.W.tramp && onTramp(f.x) && hard > 1) || (G.map.bouncy && hard > 2.5))) {
+      const tramp = G.W.tramp && onTramp(f.x);
+      this.vy = tramp ? Math.max(6.5, hard * 1.05) : hard * 0.6; this.cy += 0.02; if (tramp) this.vx = this.vx * 0.7 - Math.sign(f.x) * 1.2; this.squash = 1;
+      G.sfx.tone && G.sfx.tone('sine', 180, 520, 0.15, 0.06); G.dust(f.x, 0, 3);
+      return;
+    }
     this.air = false; this.fx = f.x; this.fy = gr;
     this.slide = this.vx * ((1 - Math.min(1, G.fric)) * 0.9 + 0.12);
     this.w = this.w * 0.35 + this.vx * Math.cos(this.a) * 0.5; this.squash = 1;
@@ -1266,19 +1435,21 @@ const shortName = s => String(s || '').toUpperCase().replace(/[^A-Z0-9 !-]/g, ''
 const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER VS CPU' },
   { id: '2p', label: '2 PLAYERS' },
+  { id: '2v2', label: '2 V 2 (4 PLAYERS)' },
+  { id: 'watch', label: 'CPU VS CPU' },
   { id: 'tour', label: 'TOURNAMENT' },
   { id: 'modes', label: 'CUSTOMIZE' },
   { id: 'sounds', label: 'SOUNDS' },
   { id: 'help', label: 'HOW TO PLAY' },
   { id: 'switch', label: 'SWITCH GAME' },
 ];
-const MENU_X = 14, MENU_W = 104, MENU_Y0 = 58, MENU_DY = 14, MENU_H = 12;
+const MENU_X = 14, MENU_W = 104, MENU_Y0 = 54, MENU_DY = 12, MENU_H = 10;
 
 class Game {
   constructor() {
     this.sfx = new Sfx(); this.sfx.setMuted(!!SET.muted);
     Object.assign(this, { state: 'serve', menu: 'title', stateT: 0, menuSel: 0, paused: false, menuOpen: false, help: false, time: 0, parts: [], pops: [], trail: [],
-      cam: { x: 0, w: 380, r: 0 }, fin: null, shakeA: 0, ts: 1, tsT: 0, tourney: null, banner: null, kd: [[false, false], [false, false]], stepN: 0, trans: null });
+      cam: { x: 0, w: 380, r: 0 }, fin: null, ev: null, proj: [], modes: [], massK: 1, ballK: 1, shakeA: 0, ts: 1, tsT: 0, tourney: null, banner: null, kd: [[false, false], [false, false], [false, false], [false, false]], stepN: 0, trans: null });
     this.crowdSeed = (Math.random() * 1e6) | 0;
     this.setupMatch({ demo: true, humans: [false, false] });
   }
@@ -1286,15 +1457,16 @@ class Game {
   setupMatch(o) {
     this.demo = !!o.demo; this.humans = o.humans; this.names = o.names || null; if (!this.demo) this.menu = null;
     this.paused = false; this.help = false;
-    this.doubles = !!+SET.doubles; this.target = this.demo ? 0 : +SET.target; this.winBy2 = !!+SET.winBy2;
+    this.doubles = !!+SET.doubles || this.humans.includes(2); this.target = this.demo ? 0 : +SET.target; this.winBy2 = !!+SET.winBy2;
     this.servesEach = this.demo ? 1 : +SET.serves; this.tableRule = !!+SET.tableTouch;
     const used = new Set(); this.players = [];
     for (let t = 0; t < 2; t++) for (let s = 0; s < (this.doubles ? 2 : 1); s++) {
       const p = new Player(this, t, s, makeLook(used)); this.players.push(p);
-      if (!this.humans[t] || s > 0) p.cpu = new CPU(this, p, this.demo ? 'normal' : SET.level);   // in doubles a person plays the front one
+      const nh = this.humans[t] === 2 ? 2 : this.humans[t] ? 1 : 0;   // in doubles one person plays the front one; 2 V 2 has a person on each
+      if (s >= nh) p.cpu = new CPU(this, p, this.demo ? 'normal' : SET.level);
     }
     this.score = [0, 0]; this.serverTeam = Math.random() < 0.5 ? 0 : 1; this.servesLeft = this.servesEach; this.serveIdx = [0, 0];
-    this.rally = 0; this.bestRally = 0; this.smashes = [0, 0]; this.gamePt = -1; this.winner = -1;
+    this.rally = 0; this.bestRally = 0; this.smashes = [0, 0]; this.hits = [0, 0]; this.bonks = [0, 0]; this.gamePt = -1; this.winner = -1;
     this.ref = new Ref(this); this.map = null;
     this.pickMix(); this.newServe();
   }
@@ -1303,12 +1475,40 @@ class Game {
     const oldMap = this.map;
     this.map = pick(pool('maps')); this.B = pick(pool('balls')); this.spinMode = pick(pool('spins')); this.env = pick(pool('envs'));
     const B = this.B, E = this.env, S = this.spinMode;
-    this.W = { g: GRAVITY * B.gs * E.grav, e: B.e, magnus: 0.35 * S.k * B.spin, spinKick: 1.4 * S.k * B.spin, drag: B.id === 'beach' ? 0.55 : 0.03 };
-    this.pg = GRAVITY * E.grav; this.jumpK = Math.pow(E.grav, 0.25); this.fric = this.map.fric * E.fric;
-    if (this.map !== oldMap) { this.crowd = makeCrowd(this.map.id, this.crowdSeed); paintStage(this.map.id); }
+    this.rollModes();
+    const M = this.map, mod = this.modeK(), grav = Math.max(0.3, E.grav * (M.grav || 1));
+    this.W = { g: GRAVITY * B.gs * grav * mod.ballG, e: B.e, magnus: 0.35 * S.k * B.spin, spinKick: 1.4 * S.k * B.spin, drag: B.id === 'beach' ? 0.55 : 0.03,
+      wind: mod.wind ? (Math.random() < 0.5 ? -1 : 1) * rand(0.6, 1.1) : 0, tramp: mod.tramp, floorE: M.bouncy ? 1.05 : 0, wallE: M.bouncy ? 0.95 : 0 };
+    this.pg = GRAVITY * grav; this.jumpK = Math.pow(grav, 0.25) * (M.jump || 1) * mod.jump; this.fric = M.fric * E.fric;
+    this.massK = mod.mass; this.ballK = mod.ballR;
+    setNet(mod.net);
+    if (setBody(mod.body, mod.reach)) { for (const p of this.players) p.spr = null; if (this.ref) this.ref.spr = null; }
+    if (M !== oldMap) { this.crowd = makeCrowd(M.id, this.crowdSeed); paintStage(M.id); }
     this.buildHops();
   }
   mixLabel() { return [this.map.name, this.B.name, this.spinMode.name, this.env.id === 'normal' ? '' : this.env.name].filter(Boolean).join(' - '); }
+  // the modes for this point: every ALWAYS one, then a chance of one ON mode, and a smaller chance of more stacking on (one per slot)
+  rollModes() {
+    const act = {}, on = {};
+    for (const m of MODES) {
+      const v = +SET.modes[m.id] || 0; if (!v) continue;
+      if (v === 2) { if (!act[m.slot]) act[m.slot] = m; } else (on[m.slot] = on[m.slot] || []).push(m);
+    }
+    const free = Object.keys(on).filter(k => !act[k]).sort(() => Math.random() - 0.5);
+    let chance = MODE_P;
+    for (const k of free) { if (Math.random() >= chance) break; act[k] = pick(on[k]); chance = MODE_EXTRA; }
+    this.modes = MODES.filter(m => Object.values(act).includes(m));
+  }
+  hasMode(id) { return this.modes.some(m => m.id === id); }
+  modeK() {
+    const k = { body: {}, reach: 1, jump: 1, mass: 1, ballR: 1, ballG: 1, wind: 0, net: 1, tramp: false };
+    for (const m of this.modes) {
+      Object.assign(k.body, m.body || {});
+      for (const f of ['reach', 'jump', 'mass', 'ballR', 'ballG', 'net']) if (m[f]) k[f] *= m[f];
+      if (m.wind) k.wind = 1; if (m.id === 'tramp') k.tramp = true;
+    }
+    return k;
+  }
   // how far a hop goes for each hold time (the CPU's cheat sheet), measured by hopping a stand-in plank
   buildHops() {
     const q = new Player(this, 0, 0, {}); q.ghost = true; this.hops = [];
@@ -1326,10 +1526,11 @@ class Game {
     this.server = mates[this.serveIdx[this.serverTeam] % mates.length];
     for (const p of this.players) {
       p.reset(); if (p.cpu) p.cpu.reset();
-      else for (let k = 0; k < 2; k++) if (this.kd[p.team][k]) p.press(k ? 1 : -1);
+      else for (let k = 0; k < 2; k++) if (this.kd[p.team + 2 * p.slot][k]) p.press(k ? 1 : -1);
     }
-    this.ball = newBall(this.B); this.ref.reset(); this.trail = [];
-    if (!this.demo) this.banner = { text: this.mixLabel(), t: 2.4 };
+    this.ball = newBall({ r: this.B.r * this.ballK }); this.ref.reset(); this.trail = [];
+    this.rollEvent();
+    if (!this.demo) this.banner = { text: this.mixLabel(), sub: [...this.modes.map(m => m.name), this.ev ? this.ev.name + '!' : ''].filter(Boolean).join(' + '), t: 2.4 };
   }
   doToss() {
     const s = this.server, h = this.ref.hand(), b = this.ball, tx = s.home + s.dir * 0.42, ty = SHOULDER_H + 0.05;
@@ -1354,10 +1555,11 @@ class Game {
       p.release(side);
     }
   }
-  humanKey(team, k, down) {
-    if (this.kd[team][k] === down) return;
-    this.kd[team][k] = down;
-    const p = this.players.find(q => q.team === team && !q.cpu);
+  humanKey(team, k, down, slot = 0) {
+    const seat = team + 2 * slot;
+    if (this.kd[seat][k] === down) return;
+    this.kd[seat][k] = down;
+    const p = this.players.find(q => q.team === team && q.slot === slot && !q.cpu);
     if (!p) return;
     if (this.state === 'finish' && this.fin) {
       if (this.paused) return;
@@ -1369,7 +1571,7 @@ class Game {
     if (down && (this.paused || (this.state !== 'serve' && this.state !== 'play' && this.state !== 'point'))) return;
     this.playerKey(p, k, down);
   }
-  releaseAll() { for (let t = 0; t < 2; t++) for (let k = 0; k < 2; k++) if (this.kd[t][k]) this.humanKey(t, k, false); }
+  releaseAll() { for (let i = 0; i < 4; i++) for (let k = 0; k < 2; k++) if (this.kd[i][k]) this.humanKey(i & 1, k, false, i >> 1); }
   // ------------------------------------------------ rules
   incoming(p) { return this.state === 'play' && !this.ball.held && (this.toss ? p === this.server : this.lastTeam !== p.team); }
   canHit(p) { return this.incoming(p) && !p.hitCd && p.down <= 0 && p.up <= 0; }
@@ -1405,6 +1607,7 @@ class Game {
     const b = this.ball, W = this.W, d = p.dir, fwd = p.vel(SHOULDER_H).x * d, L = p.cpu && p.cpu.L;
     const inSpd = Math.hypot(b.vx, b.vy);
     let v = null, smash = false;
+    this.hits[p.team]++;
     // standing still, the paddle just bats it back in a high, slow lob that lands mid-table and rises to the other paddle (easy to
     // smash); lean or move into it, or jump, to drive it
     const lazy = this.lastLazy = clamp(1 - Math.abs(fwd) / 1.2 - (p.air ? 1 : 0), 0, 1) * (this.toss ? 0 : 1);
@@ -1478,6 +1681,7 @@ class Game {
       const push = J * (1 - share) * 0.8;
       p.knock(-nx * push, -ny * push, h);
       this.sfx.thud(clamp(J / 8, 0.2, 1)); if (push > 1.5 && SET.grunts) this.sfx.oof();
+      if (push > 1.5) this.bonks[p.team]++;
       if (push > 2.5) { this.addShake(2); this.popup(pick(['OOF', 'BONK', 'OUCH']), hc.x, hc.y + 0.6, CREAM, 0.9); }
       if (this.state === 'play' && (this.toss || p.team !== this.lastTeam)) {   // it counts as their touch
         Object.assign(this, { toss: false, lastTeam: p.team, oppBounces: 0, lastNet: false, spinTeam: -1 }); this.touches++;
@@ -1515,12 +1719,82 @@ class Game {
     this.newServe();
   }
   letBall() { this.popup('LET', 0, TABLE_TOP + 2.3, CREAM, 1.3); this.newServe(); }
+  // ------------------------------------------------ court events: chaos from the map itself on some points
+  rollEvent() {
+    this.ev = null; this.proj = [];
+    const E = EVENTS.find(e => e.map === this.map.id);
+    const v = E ? +SET.events[E.id] || 0 : 0;   // 0 off, 1 on (some points), 2 always
+    if (!v || (v === 1 && Math.random() >= EVENT_P)) return;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    this.ev = { id: E.id, name: E.name, t: 0, next: E.id === 'storm' ? 0.4 : rand(1.2, 2.2), side, spray: 0, warn: null };
+  }
+  stepEvent(dt) {
+    const E = this.ev, live = E && (this.state === 'play' || (this.state === 'point' && this.pointT < 1.5));
+    if (live) {
+      E.t += dt;
+      if (E.warn) { E.warn.t -= dt; if (E.warn.t <= 0) { this.fireEvent(E.warn); E.warn = null; } }
+      if (E.spray > 0) {   // the sprinkler jet
+        E.spray -= dt;
+        for (let i = 0; i < 2; i++) { const x = E.side * (WALL_X - 1.2); this.proj.push({ kind: 'water', x, y: 0.15, vx: -E.side * rand(4.5, 7), vy: rand(2.2, 4.2), r: 0.06, g: 6, life: 2 }); }
+      }
+      if ((E.next -= dt) <= 0) this.startEvent(E);
+    }
+    for (const q of this.proj) {
+      q.vy -= q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt;
+      if (q.kind === 'lion') q.y = 0; if (q.kind === 'fire') { q.y = Math.max(q.r, q.y); if (q.y <= q.r) q.vy = Math.abs(q.vy) * 0.5 + 1.2; }
+      if (q.kind === 'meteor' && q.y <= 0.2) { this.blast(q.x); q.life = 0; continue; }
+      if ((q.kind === 'snow' || q.kind === 'water') && (q.y <= 0 || (Math.abs(q.x) < TABLE_HALF && q.y <= TABLE_TOP && q.y > TABLE_TOP - 0.2))) {
+        q.life = 0; if (q.kind === 'snow') for (let i = 0; i < 4; i++) this.addPart(q.x, Math.max(0.05, q.y), rand(-1, 1), rand(0.5, 1.5), 4, 0.3, '#ffffff', 1);
+        continue;
+      }
+      if (Math.abs(q.x) > WALL_X + 1) { q.life = 0; continue; }
+      for (const p of this.players) {
+        if (p.evCd > this.time) continue;
+        const f = p.foot(), n = p.at(NECK_H), hc = p.headPos(), d = segDist(q.x, q.y, f.x, f.y, n.x, n.y) - BODY.torsoW / 2, dh = Math.hypot(q.x - hc.x, q.y - hc.y) - BODY.headR;
+        if (Math.min(d, dh) > q.r) continue;
+        const dir = Math.sign(q.vx) || (p.fx > q.x ? 1 : -1);
+        if (q.kind === 'snow') { p.knock(dir * 1.1 + rand(-0.4, 0.4), 0.4, dh < d ? NECK_H + 0.2 : COM_H * 1.3); q.life = 0; p.evCd = this.time + 0.15; this.sfx.thud(0.4); for (let i = 0; i < 5; i++) this.addPart(q.x, q.y, rand(-1.5, 1.5), rand(0, 2), 5, 0.3, '#ffffff', 1); }
+        else if (q.kind === 'water') { p.knock(dir * 0.5, 0.15, NECK_H * 0.8); q.life = 0; p.evCd = this.time + 0.05; }
+        else if (q.kind === 'lion' || q.kind === 'fire') {
+          if (f.y > 0.7) continue;   // jumped it
+          p.knock(dir * 5.5, 4.5, COM_H * 0.5); p.evCd = this.time + 0.8; this.addShake(0.5); this.sfx.thud(1); if (SET.grunts) this.sfx.oof();
+          this.popup(q.kind === 'lion' ? 'MAULED!' : 'TOASTED!', p.fx, p.headPos().y + 0.8, ORANGE, 1, 1);
+          if (q.kind === 'fire') for (let i = 0; i < 12; i++) this.addPart(f.x, 0.4 + rand(0, 1), rand(-1, 1), rand(1, 3), 2, rand(0.3, 0.6), pick(['#ff5a1f', '#ffb21f', '#ffe08a']), 2);
+        }
+      }
+    }
+    this.proj = this.proj.filter(q => q.life > 0);
+    if (E && this.state === 'serve') E.t = 0;
+  }
+  startEvent(E) {
+    const ps = this.players;
+    if (E.id === 'storm') { E.next = rand(0.2, 0.45); this.proj.push({ kind: 'snow', x: rand(-WALL_X + 0.6, WALL_X - 0.6), y: 8, vx: rand(-1.5, 1.5), vy: -rand(1, 3), r: 0.13, g: 5, life: 5 }); }
+    else if (E.id === 'meteor') { E.next = rand(2.2, 3.4); const p = pick(ps); E.warn = { kind: 'meteor', x: clamp(p.foot().x + rand(-0.8, 0.8), -WALL_X + 1, WALL_X - 1), t: 1, max: 1 }; this.sfx.tone('square', 900, 700, 0.15, 0.04); }
+    else if (E.id === 'sprinkler') { E.next = rand(2, 3.2); E.side = -E.side; E.spray = 1.1; this.sfx.tone('sine', 300, 600, 0.3, 0.02); }
+    else if (E.id === 'lion') { E.next = rand(3.6, 5); E.side = Math.random() < 0.5 ? -1 : 1; E.warn = { kind: 'lion', x: E.side * (WALL_X - 0.5), t: 0.9, max: 0.9 }; }
+    else if (E.id === 'dragon') { E.next = rand(2.6, 3.8); E.warn = { kind: 'fire', x: E.side * (WALL_X - 0.6), t: 0.8, max: 0.8 }; }
+  }
+  fireEvent(w) {
+    const side = Math.sign(w.x) || 1;
+    if (w.kind === 'meteor') this.proj.push({ kind: 'meteor', x: w.x + 2.5, y: 9, vx: -2.5 / 0.45, vy: -19, r: 0.3, g: 0, life: 2 });
+    else if (w.kind === 'lion') { this.proj.push({ kind: 'lion', x: side * (WALL_X + 0.6), y: 0, vx: -side * 7, vy: 0, r: 0.5, g: 0, life: 4 }); this.sfx.tone('sawtooth', 120, 70, 0.5, 0.06); }
+    else if (w.kind === 'fire') { this.proj.push({ kind: 'fire', x: side * (WALL_X - 0.8), y: 0.6, vx: -side * 6.5, vy: 0, r: 0.32, g: 9, life: 3 }); this.sfx.tone('sawtooth', 200, 90, 0.4, 0.05); }
+  }
+  blast(x) {
+    this.addShake(1.2); this.sfx.thud(1);
+    for (let i = 0; i < 24; i++) this.addPart(x + rand(-0.3, 0.3), 0.2, rand(-3.5, 3.5), rand(1, 5), 7, rand(0.4, 0.8), pick(['#ff5a1f', '#ffb21f', '#7a6a5a', '#cfcfd8']), 2);
+    for (const p of this.players) {
+      const f = p.foot(), dx = f.x - x; if (Math.abs(dx) > 1.4 || f.y > 1.6) continue;
+      p.knock(Math.sign(dx || 1) * 6, 5, COM_H * 0.5); if (SET.grunts) this.sfx.oof();
+      this.popup('BOOM!', p.fx, p.headPos().y + 0.8, ORANGE, 1.2, 1);
+    }
+  }
   // ------------------------------------------------ FINISH HIM: the winner gets one free shot at the loser
   // the aim sweeps up and down by itself; hold your key to power up and let go to fire
   startFinish(team) {
     const mine = this.players.filter(p => p.team === team), theirs = this.players.filter(p => p.team !== team);
     for (const p of this.players) { p.reset(); if (p.cpu) p.cpu.reset(); }
-    this.ball = newBall(this.B); this.ball.held = true; this.trail = []; this.ref.reset();
+    this.ball = newBall({ r: this.B.r * this.ballK }); this.ball.held = true; this.ev = null; this.proj = []; this.trail = []; this.ref.reset();
     this.state = 'finish'; this.call = null;
     this.fin = { team, shooter: mine.find(p => !p.cpu) || mine[0], target: pick(theirs), t: 0, pow: 0, hold: false, fired: false, flyT: 0, hitT: -1, missed: false, ang: -0.3, cpuPow: rand(0.4, 0.85) };
     this.banner = null; this.sfx.whistle();
@@ -1572,7 +1846,8 @@ class Game {
   startGame(mode) {
     const names = this.tourney ? null : undefined;
     this.tourney = null;
-    this.go(() => this.setupMatch({ humans: mode === '2p' ? [true, true] : [true, false], names }));
+    const humans = { '2p': [true, true], '2v2': [2, 2], watch: [false, false] }[mode] || [true, false];
+    this.go(() => this.setupMatch({ humans, names }));
   }
   go(cb) { this.trans = { t: 0, cb, done: false }; this.sfx.swish(); }
   toTitle() { this.tourney = null; this.go(() => { this.setupMatch({ demo: true, humans: [false, false] }); this.menu = 'title'; this.menuSel = 0; }); }
@@ -1580,7 +1855,7 @@ class Game {
   menuPick() {
     const id = MENU_ITEMS[this.menuSel].id;
     this.sfx.init();
-    if (id === 'cpu' || id === '2p') this.startGame(id);
+    if (id === 'cpu' || id === '2p' || id === '2v2' || id === 'watch') this.startGame(id);
     else if (id === 'tour') openTour();
     else if (id === 'modes') openMenu();
     else if (id === 'sounds') openSounds();
@@ -1675,6 +1950,7 @@ class Game {
       this.trail.push({ x: b.x, y: b.y }); if (this.trail.length > 12) this.trail.shift();
     }
     this.ref.update(dt);
+    if (this.ev || this.proj.length) this.stepEvent(dt);
     if (this.state === 'point') {
       this.pointT += dt;
       if (this.pointT > 0.5 && this.ref.mode === 'stand' && this.refTarget) this.ref.launchAt(this.refTarget);
@@ -1797,7 +2073,7 @@ function refSprites(R) {
 let TABLE_SPR = null;
 function tableSprite() {
   if (TABLE_SPR) return TABLE_SPR;
-  const half = Math.round(TABLE_HALF * PPM), W = half * 2 + 4, top = Math.round(TABLE_TOP * PPM), H = top + 9, cx = half + 2, ty = H - top;
+  const half = Math.round(TABLE_HALF * PPM), W = half * 2 + 4, top = Math.round(TABLE_TOP * PPM), H = top + Math.max(9, Math.round(NET_H * PPM) + 4), cx = half + 2, ty = H - top;
   const [c, g] = mk(W, H), R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
   for (const lx of [cx - Math.round(LEG_X * PPM), cx + Math.round(LEG_X * PPM)]) {
     R(lx - 2, ty + 2, 4, H - ty - 2, INK); R(lx - 1, ty + 2, 2, H - ty - 3, '#9aa0ab'); R(lx - 1, ty + 2, 1, H - ty - 3, '#c3c8d1'); R(lx - 3, H - 1, 6, 1, INK);
@@ -1854,7 +2130,7 @@ function drawRef(G) {
   limb(sp.arm, s, handA, false);
 }
 function drawBall(G) {
-  const b = G.ball, spr = ballSpr(G.B);
+  const b = G.ball, spr = ballSpr(G.B, b.r);
   if (!b.held) {
     // a streak behind it that tapers off: long when it's flying, a stub when it's slow
     const n = G.trail.length, col = b.spin > 0 ? ORANGE : b.spin < 0 ? '#86b2ff' : '#ffd6c4';
@@ -1875,6 +2151,63 @@ function drawBall(G) {
     ctx.fillStyle = col; ctx.fillRect(ex - K, ey - K, 2 * K, 2 * K);
   }
 }
+// a box in world metres (x, y = bottom-left)
+function wRect(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(Math.round(WX(x)), Math.round(WY(y + h)), Math.max(1, Math.ceil(w * PPM * K)), Math.max(1, Math.ceil(h * PPM * K))); }
+// things standing on the court: trampolines, Tokyo's boost pads, the sprinkler heads, the castle dragon
+function drawCourt(G) {
+  const px = 1 / PPM;
+  if (G.W.tramp) for (const x of TRAMPS) {
+    wRect(x - TRAMP_W - px, 0, px * 2, 0.3, INK); wRect(x + TRAMP_W - px, 0, px * 2, 0.3, INK);
+    wRect(x - TRAMP_W - px, 0.26, TRAMP_W * 2 + px * 2, px * 3, INK); wRect(x - TRAMP_W, 0.27, TRAMP_W * 2, px, '#3f8cff'); wRect(x - TRAMP_W, 0.27 + px, TRAMP_W * 2, px, '#86b2ff');
+  }
+  if (G.map.id === 'tokyo') for (const x of PADS) {
+    const on = (G.time * 3 | 0) % 2;
+    wRect(x - PAD_W - px, 0, PAD_W * 2 + px * 2, px * 2, INK); wRect(x - PAD_W, 0, PAD_W * 2, px, on ? '#3ff0ff' : '#ff3fa4');
+    for (let k = -1; k <= 1; k++) wRect(x + k * 0.22 - px, px * 3 + ((G.time * 4 + k) % 1) * 0.3, px * 2, px, on ? '#ff3fa4' : '#3ff0ff');
+  }
+  const E = G.ev; if (!E) return;
+  if (E.id === 'sprinkler') for (const sd of [-1, 1]) { const x = sd * (WALL_X - 1.2); wRect(x - 0.1, 0, 0.2, 0.12, INK); wRect(x - 0.06, 0.02, 0.12, 0.08, '#9aa0ab'); }
+  if (E.id === 'dragon') {   // a dragon head poking in from the wall
+    const sd = E.side, x = sd * (WALL_X - 0.2), open = E.warn ? 1 - E.warn.t / E.warn.max : 0.2, y = 0.4;
+    wRect(Math.min(x, x - sd * 1.1) - px, y - px, 1.1 + px * 2, 0.6 + px * 2, INK); wRect(Math.min(x, x - sd * 1.1), y, 1.1, 0.6, '#3f8a46');
+    wRect(Math.min(x - sd * 0.6, x - sd * 1.1), y - 0.05 - open * 0.25, 0.5, 0.15, '#2f6a36'); wRect(x - sd * 0.55 - 0.06, y + 0.38, 0.12, 0.12, '#ffd23f');
+    wRect(Math.min(x - sd * 0.2, x - sd * 0.5), y + 0.6, 0.3, 0.25, '#2f6a36');
+    if (E.warn) wRect(x - sd * 1.15 - 0.05, y + 0.1, 0.1, 0.1, (G.time * 10 | 0) % 2 ? '#ffb21f' : '#ff5a1f');
+  }
+}
+function drawProj(G) {
+  const px = 1 / PPM, E = G.ev;
+  if (E && E.warn) {   // warnings: a target on the floor, LION! at the wall
+    const w = E.warn, fl = (G.time * 8 | 0) % 2;
+    if (w.kind === 'meteor') { const r = 0.4 + (1 - w.t / w.max) * 1; wRect(w.x - r, 0, r * 2, px * 2, fl ? '#ff3a2a' : '#ffd23f'); wRect(w.x - px, 0, px * 2, 0.3, '#ff3a2a'); }
+    if (w.kind === 'lion') txt('LION!', WX(w.x - Math.sign(w.x) * 1.2), WY(1.6), 10, fl ? ORANGE : '#ffd23f', { bold: true, ow: 1 });
+  }
+  if (G.W.wind) {   // the wind: streaks blowing across
+    ctx.globalAlpha = 0.5;
+    for (let i = 0; i < 14; i++) { const x = ((i * 3.7 + G.time * G.W.wind * 9) % 20 + 20) % 20 - 10, y = 0.6 + (i * 1.37) % 5; wRect(x, y, 0.5, px, '#ffffff'); }
+    ctx.globalAlpha = 1;
+  }
+  for (const q of G.proj) {
+    if (q.kind === 'snow') { wRect(q.x - q.r - px, q.y - q.r - px, q.r * 2 + px * 2, q.r * 2 + px * 2, INK); wRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2, '#ffffff'); }
+    else if (q.kind === 'water') wRect(q.x - px, q.y - px, px * 2, px * 2, '#7fd4ff');
+    else if (q.kind === 'meteor') {
+      for (let k = 1; k < 6; k++) wRect(q.x - q.vx * k * 0.025 - q.r * 0.6, q.y - q.vy * k * 0.025 - q.r * 0.6, q.r * 1.2, q.r * 1.2, k < 3 ? '#ffb21f' : '#ff5a1f');
+      wRect(q.x - q.r - px, q.y - q.r - px, q.r * 2 + px * 2, q.r * 2 + px * 2, INK); wRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2, '#7a6a5a'); wRect(q.x - q.r * 0.4, q.y, q.r * 0.6, q.r * 0.6, '#9a8a7a');
+    } else if (q.kind === 'fire') {
+      const fl = (G.time * 14 | 0) % 2;
+      wRect(q.x - q.r - px, q.y - q.r - px, q.r * 2 + px * 2, q.r * 2 + px * 2, INK); wRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2, fl ? '#ff5a1f' : '#ff7a1f');
+      wRect(q.x - q.r * 0.5, q.y - q.r * 0.5, q.r, q.r, '#ffe08a');
+      if (Math.random() < 0.5) G.addPart(q.x, q.y, -q.vx * 0.1 + rand(-0.5, 0.5), rand(0.5, 1.5), -1, 0.3, pick(['#ff5a1f', '#ffb21f']), 2);
+    } else if (q.kind === 'lion') {   // a running lion: body, mane, legs on a two-frame gallop
+      const d = Math.sign(q.vx), st = (G.time * 12 | 0) % 2, x0 = q.x - 0.55, hx = q.x + d * 0.45;
+      wRect(x0 - px, 0.25 - px, 1.1 + px * 2, 0.4 + px * 2, INK); wRect(x0, 0.25, 1.1, 0.4, '#d8a24a'); wRect(x0, 0.25, 1.1, px * 2, '#b8822a');
+      wRect(hx - 0.28 - px, 0.35 - px, 0.56 + px * 2, 0.56 + px * 2, INK); wRect(hx - 0.28, 0.35, 0.56, 0.56, '#8a4a1a'); wRect(hx - 0.14 + d * 0.08, 0.45, 0.28, 0.3, '#e8b85a');
+      wRect(hx + d * 0.14 - px, 0.62, px * 2, px * 2, INK);
+      for (const [lx, ph] of [[-0.42, st], [-0.2, 1 - st], [0.2, st], [0.4, 1 - st]]) wRect(q.x + lx * d - px + (ph ? d * 0.06 : -d * 0.06), 0, px * 3, 0.27, '#b8822a');
+      wRect(q.x - d * 0.55 - d * 0.3, 0.55, 0.3, px * 2, '#b8822a');
+    }
+  }
+}
 function drawWorld(G) {
   lg.drawImage(paintStage(G.map.id), 0, 0);
   drawCrowd(lg, G.crowd, G.time, G.excite || 0, G.scorer >= 0 ? G.scorer : null);
@@ -1882,11 +2215,13 @@ function drawWorld(G) {
   const flying = G.ref.mode !== 'stand';
   if (!flying) drawRef(G);
   blit(tableSprite(), 0, 0);
+  drawCourt(G);
   for (const p of G.players) shadowAt(p.foot().x, p.foot().y, 0.6);
   if (!G.ball.held) shadowAt(G.ball.x, G.ball.y, G.ball.r * 2.4);
   // back players first, so the one at the front of a doubles pair is in front
   [...G.players].sort((a, b) => b.slot - a.slot).forEach(p => drawPlayer(G, p));
   if (flying) drawRef(G);
+  drawProj(G);
   drawBall(G);
   for (const q of G.parts) {
     const s = q.sz * K, x = WX(q.x), y = WY(q.y);
@@ -1963,11 +2298,12 @@ function drawHUD(G) {
   if (G.banner) {
     ctx.globalAlpha = clamp(G.banner.t / 0.4, 0, 1);
     txt(G.banner.text, AX(160), AY(52), 8, G.banner.col || CREAM, { ow: 0.9 });
+    if (G.banner.sub) txt(G.banner.sub, AX(160), AY(62), 8, ORANGE, { ow: 0.9 });
     ctx.globalAlpha = 1;
   }
   if (!G.demo && G.score[0] + G.score[1] < 2 && (G.state === 'serve' || G.state === 'play')) {
     txt('HOLD A KEY TO LEAN, LET GO TO JUMP', AX(160), AY(160), 8, GREEN, { ow: 0.8 });
-    txt(document.body.classList.contains('touch') ? 'HOLD THE LEFT OR RIGHT SIDE' : G.humans[1] ? 'RED: W E     BLUE: I O' : 'W E  OR  ARROW KEYS', AX(160), AY(170), 8, CREAM, { ow: 0.8 });
+    txt(document.body.classList.contains('touch') ? 'HOLD THE LEFT OR RIGHT SIDE' : G.humans[0] === 2 ? 'RED: W E + Z X    BLUE: I O + ARROWS' : G.humans[1] ? 'RED: W E     BLUE: I O' : 'W E  OR  ARROW KEYS', AX(160), AY(170), 8, CREAM, { ow: 0.8 });
   }
 }
 function drawKey(x, y, ch) {
@@ -2005,9 +2341,9 @@ function drawHelp(G) {
   drawKey(84, 36, 'W'); drawKey(100, 36, 'E'); txt('RED', AX(132), AY(43), 8, TEAM[0].light);
   drawKey(178, 36, 'I'); drawKey(194, 36, 'O'); txt('BLUE', AX(226), AY(43), 8, TEAM[1].light);
   ['HOLD A KEY: LEAN THAT WAY', 'LET GO: JUMP THE WAY YOU LEAN', 'TAP = HOP UP, HOLD LONG = BIG HOP', 'STAND STILL: SOFT LOB. LEAN IN: HARD HIT', 'BOUNCE IT ON THEIR HALF OF THE TABLE',
-    'PRESS A KEY RIGHT AFTER YOUR HIT: SPIN', 'JUMP AT A HIGH BALL: SMASH', 'DON\'T TOUCH THE TABLE']
-    .forEach((l, i) => txt(l, AX(160), AY(62 + i * 11), 8, i === 5 ? ORANGE : i === 6 ? GREEN : i === 7 ? '#ff8173' : CREAM, { ow: 0.8 }));
-  txt('PRESS ANY KEY OR CLICK TO GO BACK', AX(160), AY(158), 8, '#7d88a8', { ow: 0.6 });
+    'PRESS A KEY RIGHT AFTER YOUR HIT: SPIN', 'JUMP AT A HIGH BALL: SMASH', 'DON\'T TOUCH THE TABLE', '2 V 2 BACK PLAYERS: RED Z X, BLUE ARROWS']
+    .forEach((l, i) => txt(l, AX(160), AY(62 + i * 11), 8, i === 5 ? ORANGE : i === 6 ? GREEN : i === 7 ? '#ff8173' : i === 8 ? '#86b2ff' : CREAM, { ow: 0.8 }));
+  txt('PRESS ANY KEY OR CLICK TO GO BACK', AX(160), AY(162), 8, '#7d88a8', { ow: 0.6 });
 }
 const entryName = e => e === null ? '(BYE)' : e ? shortName(e.name) : '???';
 function drawBracket(G) {
@@ -2051,9 +2387,12 @@ function drawOver(G) {
   txt(title, AX(160), AY(36), (title.length > 12 ? 16 : 24) * k, T.light, { ow: 1.4 });
   txt(`${G.score[0]}  TO  ${G.score[1]}`, AX(160), AY(60), 16, CREAM);
   txt(G.teamName(0), AX(112), AY(76), 8, TEAM[0].light, { ow: 0.8 }); txt(G.teamName(1), AX(208), AY(76), 8, TEAM[1].light, { ow: 0.8 });
-  txt('SMASHES', AX(160), AY(88), 8, '#b9c3dd', { ow: 0.7 });
-  txt(String(G.smashes[0]), AX(112), AY(88), 8, CREAM, { ow: 0.7 }); txt(String(G.smashes[1]), AX(208), AY(88), 8, CREAM, { ow: 0.7 });
-  txt(`LONGEST RALLY: ${G.bestRally}`, AX(160), AY(104), 8, '#ffd23f', { ow: 0.7 });
+  [['HITS', G.hits], ['SMASHES', G.smashes], ['GOT BONKED', G.bonks]].forEach(([l, v], i) => {
+    const y = 86 + i * 9;
+    txt(l, AX(160), AY(y), 8, '#b9c3dd', { ow: 0.7 });
+    txt(String(v[0]), AX(112), AY(y), 8, CREAM, { ow: 0.7 }); txt(String(v[1]), AX(208), AY(y), 8, CREAM, { ow: 0.7 });
+  });
+  txt(`LONGEST RALLY: ${G.bestRally}`, AX(160), AY(116), 8, '#ffd23f', { ow: 0.7 });
   if (G.overT < 1.2) return;
   const labels = G.overButtons(), cols = [['#43b04a', '#2d7a33'], ['#d63a3f', '#8f222b']];
   OVER_BTNS.forEach((r, i) => {
@@ -2063,7 +2402,7 @@ function drawOver(G) {
     artRect(r.x, r.y + bob, r.w, r.h, cols[i][0]); artRect(r.x, r.y + r.h - 3 + bob, r.w, 3, cols[i][1]);
     txt(labels[i], AX(r.x + r.w / 2), AY(r.y + 9 + bob), 8, '#ffffff', { ow: 0.8 });
   });
-  txt('LEFT / RIGHT TO PICK, ENTER TO GO', AX(160), AY(126), 8, '#7d88a8', { ow: 0.6 });
+  txt('LEFT / RIGHT TO PICK, ENTER TO GO', AX(160), AY(170), 8, '#7d88a8', { ow: 0.6 });
 }
 function drawChampion(G) {
   ctx.fillStyle = 'rgba(8,10,18,0.7)'; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
@@ -2127,7 +2466,28 @@ for (const box of menuEl.querySelectorAll('.chips[data-pool]')) {
     const b = document.createElement('button'); b.type = 'button'; b.dataset.id = q.id; b.textContent = q.name; box.appendChild(b);
   }
 }
+// modes + events: one row each with OFF / ON / ALWAYS
+function triRow(kind, q) {
+  const row = document.createElement('div'); row.className = 'tri-row';
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = q.name;
+  const seg = document.createElement('div'); seg.className = 'tri'; seg.dataset.kind = kind; seg.dataset.id = q.id;
+  seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', q.name);
+  ['OFF', 'ON', 'ALWAYS'].forEach((t, v) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.tv = v; b.textContent = t; seg.appendChild(b); });
+  seg.style.display = 'flex'; seg.style.gap = '6px';
+  const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = q.sub;
+  row.append(nm, seg, sub); return row;
+}
+{
+  const ml = document.getElementById('mode-list');
+  for (const cat of MODE_CATS) {
+    const h = document.createElement('div'); h.className = 'tri-cat'; h.textContent = cat; ml.appendChild(h);
+    for (const m of MODES.filter(m => m.cat === cat)) ml.appendChild(triRow('modes', m));
+  }
+  const el = document.getElementById('event-list');
+  for (const e of EVENTS) el.appendChild(triRow('events', e));
+}
 function syncMenu() {
+  for (const seg of menuEl.querySelectorAll('.tri')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String((+draft[seg.dataset.kind][seg.dataset.id] || 0) === +b.dataset.tv));
   for (const seg of menuEl.querySelectorAll('.seg')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(String(draft[seg.dataset.key]) === b.dataset.v));
   for (const box of menuEl.querySelectorAll('.chips[data-pool]')) for (const b of box.querySelectorAll('button')) b.setAttribute('aria-pressed', String(draft.pools[box.dataset.pool].includes(b.dataset.id)));
 }
@@ -2149,8 +2509,13 @@ menuEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   G.sfx.click();
   if (b.id === 'done') { closeMenu(); return; }
-  const box = b.closest('.chips[data-pool]');
-  if (box) {
+  const box = b.closest('.chips[data-pool]'), tri = b.closest('.tri');
+  if (tri) {
+    const kind = tri.dataset.kind, id = tri.dataset.id, v = +b.dataset.tv;
+    draft[kind][id] = v;
+    // ALWAYS on one side of a pair turns its opposite (same slot) down to ON at most
+    if (kind === 'modes' && v === 2) { const m = MODES.find(q => q.id === id); for (const o of MODES) if (o.slot === m.slot && o.id !== id && draft.modes[o.id] === 2) draft.modes[o.id] = 1; }
+  } else if (box) {
     const k = box.dataset.pool, on = draft.pools[k], id = b.dataset.id;
     // keep at least one of everything switched on
     if (on.includes(id)) { if (on.length > 1) draft.pools[k] = on.filter(x => x !== id); }
@@ -2240,8 +2605,11 @@ tourEl.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagN
 // ---------------------------------------------------------------- keys
 // vs the CPU every key works for you: W, I and LEFT lean left, E, O and RIGHT lean right.
 // Two people: red has W E, blue has I O (or the arrows).
+// Four people (2 V 2): red front W E, red back Z X, blue front I O, blue back the arrows.
+const FOUR_KEYS = { KeyW: [0, 0, 0], KeyE: [0, 1, 0], KeyZ: [0, 0, 1], KeyX: [0, 1, 1], KeyI: [1, 0, 0], KeyO: [1, 1, 0], ArrowLeft: [1, 0, 1], ArrowRight: [1, 1, 1] };
 function keyFor(code) {
   if (G.menu || G.demo) return null;
+  if (G.humans[0] === 2) return FOUR_KEYS[code] || null;
   const two = G.humans[0] && G.humans[1], me = G.humans[0] ? 0 : 1;
   const k = { KeyW: 0, KeyE: 1, KeyI: 0, KeyO: 1, ArrowLeft: 0, ArrowRight: 1 }[code];
   if (k === undefined) return null;
@@ -2249,11 +2617,11 @@ function keyFor(code) {
 }
 const held = new Map();   // key code or touch id -> [team, k] it is holding
 function hold(id, tk, down) {
-  if (down) { if (held.has(id) || !tk) return; held.set(id, tk); G.humanKey(tk[0], tk[1], true); return; }
+  if (down) { if (held.has(id) || !tk) return; held.set(id, tk); G.humanKey(tk[0], tk[1], true, tk[2] || 0); return; }
   const was = held.get(id); if (!was) return;
   held.delete(id);
   // another key or finger may still hold the same side
-  if (![...held.values()].some(v => v[0] === was[0] && v[1] === was[1])) G.humanKey(was[0], was[1], false);
+  if (![...held.values()].some(v => v[0] === was[0] && v[1] === was[1] && (v[2] || 0) === (was[2] || 0))) G.humanKey(was[0], was[1], false, was[2] || 0);
 }
 function letGo() { held.clear(); G.releaseAll(); }
 const inRally = () => !G.menu && !G.demo && (G.state === 'serve' || G.state === 'play' || G.state === 'point' || G.state === 'finish');
