@@ -70,8 +70,6 @@
     <div class="group"><h3>FLOOR + GRAVITY</h3><div class="chips" data-pool="envs"></div></div>
     <div class="modes-head"><span class="lbl">MODES</span><span class="hint">OFF / ON (SOME POINTS) / ALWAYS. OPPOSITES NEVER STACK.</span></div>
     <div id="mode-list"></div>
-    <div class="modes-head"><span class="lbl">EVENTS</span><span class="hint">EACH ONE ONLY GOES OFF ON ITS OWN MAP</span></div>
-    <div id="event-list"></div>
     <div class="modes-head"><span class="lbl">MATCH</span></div>
     <div class="row"><span class="lbl">PLAYERS</span><div class="seg" data-key="doubles"><button data-v="0">SINGLES</button><button data-v="1">DOUBLES</button></div></div>
     <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button data-v="5">5</button><button data-v="7">7</button><button data-v="11">11</button><button data-v="21">21</button><button data-v="0">ENDLESS</button></div></div>
@@ -478,13 +476,13 @@ const MAPS = [
   { id: 'lodge', name: 'SKI LODGE', fric: 0.9 },
   { id: 'ferry', name: 'FERRY', fric: 0.9 },
   { id: 'diner', name: 'NIGHT DINER', fric: 0.9 },
-  { id: 'park', name: 'CITY PARK', fric: 1, sub: 'SPRINKLERS' },
+  { id: 'park', name: 'CITY PARK', fric: 1, sub: 'GRASS AND CONCRETE' },
   { id: 'tokyo', name: 'DOWNTOWN TOKYO', fric: 0.9, sub: 'BOOST PADS' },
-  { id: 'castle', name: 'DRAGON CASTLE', fric: 0.9, sub: 'DRAGON FIRE' },
+  { id: 'castle', name: 'DRAGON CASTLE', fric: 0.9, sub: 'STONE HALL' },
   { id: 'ice', name: 'ICE RINK', fric: 0.03, sub: 'NO GRIP AT ALL' },
-  { id: 'moon', name: 'MOON', fric: 0.9, grav: 0.45, sub: 'LOW GRAVITY + METEORS' },
-  { id: 'rome', name: 'ROME COLOSSEUM', fric: 1.1, sub: 'LION RUN' },
-  { id: 'snow', name: 'SNOW', fric: 0.2, sub: 'SLIPPY + SNOWBALLS' },
+  { id: 'moon', name: 'MOON', fric: 0.9, grav: 0.45, sub: 'LOW GRAVITY' },
+  { id: 'rome', name: 'ROME COLOSSEUM', fric: 1.1, sub: 'SAND FLOOR' },
+  { id: 'snow', name: 'SNOW', fric: 0.2, sub: 'SLIPPY' },
   { id: 'bounce', name: 'BOUNCY HOUSE', fric: 0.9, jump: 1.25, bouncy: true, sub: 'SPRINGY FLOOR' },
 ];
 // Tokyo's boost pads: where they sit (m from the middle) and how much more a hop off one goes
@@ -511,15 +509,6 @@ const MODES = [
 const MODE_CATS = ['PLAYERS', 'BALL', 'PHYSICS', 'TABLE', 'OBSTACLES'];
 const MODE_P = 0.5, MODE_EXTRA = 1 / 6;   // chance a point gets a mode, and of each further slot stacking on
 const TRAMPS = [-(TABLE_HALF + 3.1), TABLE_HALF + 3.1], TRAMP_W = 0.55;
-// court events (like Floppy Hoops): each map can have one, and it goes off on some points
-const EVENTS = [
-  { id: 'storm', map: 'snow', name: 'SNOWBALL STORM', sub: 'SNOW: DODGE THE SNOWBALLS' },
-  { id: 'meteor', map: 'moon', name: 'METEOR STRIKE', sub: 'MOON: BLAST KNOCKS YOU FLYING' },
-  { id: 'sprinkler', map: 'park', name: 'SPRINKLER', sub: 'PARK: THE JET SHOVES YOU' },
-  { id: 'lion', map: 'rome', name: 'LION RUN', sub: 'ROME: JUMP IT OR GET BOWLED' },
-  { id: 'dragon', map: 'castle', name: 'DRAGON FIRE', sub: 'CASTLE: JUMP THE FIRE' },
-];
-const EVENT_P = 0.3;
 // r: radius (m, drawn a bit bigger than real so you can see it), e: table bounce, gs: gravity scale, dens: how hard it hits people
 const BALLS = [
   { id: 'pingpong', name: 'PING PONG', r: 0.12, e: 0.86, gs: 1.1, dens: 2, spin: 1 },
@@ -580,13 +569,12 @@ const DEFAULTS = {
   pools: { maps: MAPS.map(m => m.id), balls: BALLS.map(b => b.id), spins: ['normal', 'extreme'], envs: ENVS.map(e => e.id) },
   sounds: {}, tour: { size: 4, names: ['YOU', 'CPU 1', 'CPU 2', 'CPU 3', 'CPU 4', 'CPU 5', 'CPU 6', 'CPU 7'], cpu: [0, 1, 1, 1, 1, 1, 1, 1] },
   modes: Object.fromEntries(MODES.map(m => [m.id, 1])),   // 0 off, 1 on, 2 always
-  events: Object.fromEntries(EVENTS.map(e => [e.id, 1])),
 };
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { s = {}; }
   const out = { ...DEFAULTS, ...s, pools: { ...DEFAULTS.pools, ...(s.pools || {}) }, tour: { ...DEFAULTS.tour, ...(s.tour || {}) }, sounds: { ...(s.sounds || {}) },
-    modes: { ...DEFAULTS.modes, ...(s.modes || {}) }, events: { ...DEFAULTS.events, ...(s.events || {}) } };
+    modes: { ...DEFAULTS.modes, ...(s.modes || {}) } };
   for (const k of Object.keys(POOLS)) { out.pools[k] = out.pools[k].filter(id => POOLS[k].some(q => q.id === id)); if (!out.pools[k].length) out.pools[k] = [POOLS[k][0].id]; }
   // maps added after a save start switched on
   if (s.pools && s.pools.maps && !s.newMaps2) { for (const m of MAPS.slice(5)) if (!out.pools.maps.includes(m.id)) out.pools.maps.push(m.id); out.newMaps2 = 1; }
@@ -1034,7 +1022,6 @@ function stepBall(b, dt, W, ev) {
     if (Math.abs(b.x) > WALL_X - b.r) { b.x = Math.sign(b.x) * (WALL_X - b.r); b.vx = -b.vx * (W.wallE || 0.6); if (ev) ev('wall', 0, 0); }
   }
 }
-function segDist(px, py, ax, ay, bx, by) { const dx = bx - ax, dy = by - ay, t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1), 0, 1); return Math.hypot(px - ax - dx * t, py - ay - dy * t); }
 const onTramp = x => TRAMPS.some(t => Math.abs(x - t) < TRAMP_W);
 const onPad = x => PADS.some(t => Math.abs(x - t) < PAD_W);
 // where the ball goes from here, if nobody touches it: samples every step until it hits the floor (or `maxT` runs out)
@@ -1449,7 +1436,7 @@ class Game {
   constructor() {
     this.sfx = new Sfx(); this.sfx.setMuted(!!SET.muted);
     Object.assign(this, { state: 'serve', menu: 'title', stateT: 0, menuSel: 0, paused: false, menuOpen: false, help: false, time: 0, parts: [], pops: [], trail: [],
-      cam: { x: 0, w: 380, r: 0 }, fin: null, ev: null, proj: [], modes: [], massK: 1, ballK: 1, shakeA: 0, ts: 1, tsT: 0, tourney: null, banner: null, kd: [[false, false], [false, false], [false, false], [false, false]], stepN: 0, trans: null });
+      cam: { x: 0, w: 380, r: 0 }, fin: null, modes: [], massK: 1, ballK: 1, shakeA: 0, ts: 1, tsT: 0, tourney: null, banner: null, kd: [[false, false], [false, false], [false, false], [false, false]], stepN: 0, trans: null });
     this.crowdSeed = (Math.random() * 1e6) | 0;
     this.setupMatch({ demo: true, humans: [false, false] });
   }
@@ -1529,8 +1516,7 @@ class Game {
       else for (let k = 0; k < 2; k++) if (this.kd[p.team + 2 * p.slot][k]) p.press(k ? 1 : -1);
     }
     this.ball = newBall({ r: this.B.r * this.ballK }); this.ref.reset(); this.trail = [];
-    this.rollEvent();
-    if (!this.demo) this.banner = { text: this.mixLabel(), sub: [...this.modes.map(m => m.name), this.ev ? this.ev.name + '!' : ''].filter(Boolean).join(' + '), t: 2.4 };
+    if (!this.demo) this.banner = { text: this.mixLabel(), sub: this.modes.map(m => m.name).join(' + '), t: 2.4 };
   }
   doToss() {
     const s = this.server, h = this.ref.hand(), b = this.ball, tx = s.home + s.dir * 0.42, ty = SHOULDER_H + 0.05;
@@ -1719,82 +1705,12 @@ class Game {
     this.newServe();
   }
   letBall() { this.popup('LET', 0, TABLE_TOP + 2.3, CREAM, 1.3); this.newServe(); }
-  // ------------------------------------------------ court events: chaos from the map itself on some points
-  rollEvent() {
-    this.ev = null; this.proj = [];
-    const E = EVENTS.find(e => e.map === this.map.id);
-    const v = E ? +SET.events[E.id] || 0 : 0;   // 0 off, 1 on (some points), 2 always
-    if (!v || (v === 1 && Math.random() >= EVENT_P)) return;
-    const side = Math.random() < 0.5 ? -1 : 1;
-    this.ev = { id: E.id, name: E.name, t: 0, next: E.id === 'storm' ? 0.4 : rand(1.2, 2.2), side, spray: 0, warn: null };
-  }
-  stepEvent(dt) {
-    const E = this.ev, live = E && (this.state === 'play' || (this.state === 'point' && this.pointT < 1.5));
-    if (live) {
-      E.t += dt;
-      if (E.warn) { E.warn.t -= dt; if (E.warn.t <= 0) { this.fireEvent(E.warn); E.warn = null; } }
-      if (E.spray > 0) {   // the sprinkler jet
-        E.spray -= dt;
-        for (let i = 0; i < 2; i++) { const x = E.side * (WALL_X - 1.2); this.proj.push({ kind: 'water', x, y: 0.15, vx: -E.side * rand(4.5, 7), vy: rand(2.2, 4.2), r: 0.06, g: 6, life: 2 }); }
-      }
-      if ((E.next -= dt) <= 0) this.startEvent(E);
-    }
-    for (const q of this.proj) {
-      q.vy -= q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt;
-      if (q.kind === 'lion') q.y = 0; if (q.kind === 'fire') { q.y = Math.max(q.r, q.y); if (q.y <= q.r) q.vy = Math.abs(q.vy) * 0.5 + 1.2; }
-      if (q.kind === 'meteor' && q.y <= 0.2) { this.blast(q.x); q.life = 0; continue; }
-      if ((q.kind === 'snow' || q.kind === 'water') && (q.y <= 0 || (Math.abs(q.x) < TABLE_HALF && q.y <= TABLE_TOP && q.y > TABLE_TOP - 0.2))) {
-        q.life = 0; if (q.kind === 'snow') for (let i = 0; i < 4; i++) this.addPart(q.x, Math.max(0.05, q.y), rand(-1, 1), rand(0.5, 1.5), 4, 0.3, '#ffffff', 1);
-        continue;
-      }
-      if (Math.abs(q.x) > WALL_X + 1) { q.life = 0; continue; }
-      for (const p of this.players) {
-        if (p.evCd > this.time) continue;
-        const f = p.foot(), n = p.at(NECK_H), hc = p.headPos(), d = segDist(q.x, q.y, f.x, f.y, n.x, n.y) - BODY.torsoW / 2, dh = Math.hypot(q.x - hc.x, q.y - hc.y) - BODY.headR;
-        if (Math.min(d, dh) > q.r) continue;
-        const dir = Math.sign(q.vx) || (p.fx > q.x ? 1 : -1);
-        if (q.kind === 'snow') { p.knock(dir * 1.1 + rand(-0.4, 0.4), 0.4, dh < d ? NECK_H + 0.2 : COM_H * 1.3); q.life = 0; p.evCd = this.time + 0.15; this.sfx.thud(0.4); for (let i = 0; i < 5; i++) this.addPart(q.x, q.y, rand(-1.5, 1.5), rand(0, 2), 5, 0.3, '#ffffff', 1); }
-        else if (q.kind === 'water') { p.knock(dir * 0.5, 0.15, NECK_H * 0.8); q.life = 0; p.evCd = this.time + 0.05; }
-        else if (q.kind === 'lion' || q.kind === 'fire') {
-          if (f.y > 0.7) continue;   // jumped it
-          p.knock(dir * 5.5, 4.5, COM_H * 0.5); p.evCd = this.time + 0.8; this.addShake(0.5); this.sfx.thud(1); if (SET.grunts) this.sfx.oof();
-          this.popup(q.kind === 'lion' ? 'MAULED!' : 'TOASTED!', p.fx, p.headPos().y + 0.8, ORANGE, 1, 1);
-          if (q.kind === 'fire') for (let i = 0; i < 12; i++) this.addPart(f.x, 0.4 + rand(0, 1), rand(-1, 1), rand(1, 3), 2, rand(0.3, 0.6), pick(['#ff5a1f', '#ffb21f', '#ffe08a']), 2);
-        }
-      }
-    }
-    this.proj = this.proj.filter(q => q.life > 0);
-    if (E && this.state === 'serve') E.t = 0;
-  }
-  startEvent(E) {
-    const ps = this.players;
-    if (E.id === 'storm') { E.next = rand(0.2, 0.45); this.proj.push({ kind: 'snow', x: rand(-WALL_X + 0.6, WALL_X - 0.6), y: 8, vx: rand(-1.5, 1.5), vy: -rand(1, 3), r: 0.13, g: 5, life: 5 }); }
-    else if (E.id === 'meteor') { E.next = rand(2.2, 3.4); const p = pick(ps); E.warn = { kind: 'meteor', x: clamp(p.foot().x + rand(-0.8, 0.8), -WALL_X + 1, WALL_X - 1), t: 1, max: 1 }; this.sfx.tone('square', 900, 700, 0.15, 0.04); }
-    else if (E.id === 'sprinkler') { E.next = rand(2, 3.2); E.side = -E.side; E.spray = 1.1; this.sfx.tone('sine', 300, 600, 0.3, 0.02); }
-    else if (E.id === 'lion') { E.next = rand(3.6, 5); E.side = Math.random() < 0.5 ? -1 : 1; E.warn = { kind: 'lion', x: E.side * (WALL_X - 0.5), t: 0.9, max: 0.9 }; }
-    else if (E.id === 'dragon') { E.next = rand(2.6, 3.8); E.warn = { kind: 'fire', x: E.side * (WALL_X - 0.6), t: 0.8, max: 0.8 }; }
-  }
-  fireEvent(w) {
-    const side = Math.sign(w.x) || 1;
-    if (w.kind === 'meteor') this.proj.push({ kind: 'meteor', x: w.x + 2.5, y: 9, vx: -2.5 / 0.45, vy: -19, r: 0.3, g: 0, life: 2 });
-    else if (w.kind === 'lion') { this.proj.push({ kind: 'lion', x: side * (WALL_X + 0.6), y: 0, vx: -side * 7, vy: 0, r: 0.5, g: 0, life: 4 }); this.sfx.tone('sawtooth', 120, 70, 0.5, 0.06); }
-    else if (w.kind === 'fire') { this.proj.push({ kind: 'fire', x: side * (WALL_X - 0.8), y: 0.6, vx: -side * 6.5, vy: 0, r: 0.32, g: 9, life: 3 }); this.sfx.tone('sawtooth', 200, 90, 0.4, 0.05); }
-  }
-  blast(x) {
-    this.addShake(1.2); this.sfx.thud(1);
-    for (let i = 0; i < 24; i++) this.addPart(x + rand(-0.3, 0.3), 0.2, rand(-3.5, 3.5), rand(1, 5), 7, rand(0.4, 0.8), pick(['#ff5a1f', '#ffb21f', '#7a6a5a', '#cfcfd8']), 2);
-    for (const p of this.players) {
-      const f = p.foot(), dx = f.x - x; if (Math.abs(dx) > 1.4 || f.y > 1.6) continue;
-      p.knock(Math.sign(dx || 1) * 6, 5, COM_H * 0.5); if (SET.grunts) this.sfx.oof();
-      this.popup('BOOM!', p.fx, p.headPos().y + 0.8, ORANGE, 1.2, 1);
-    }
-  }
   // ------------------------------------------------ FINISH HIM: the winner gets one free shot at the loser
   // the aim sweeps up and down by itself; hold your key to power up and let go to fire
   startFinish(team) {
     const mine = this.players.filter(p => p.team === team), theirs = this.players.filter(p => p.team !== team);
     for (const p of this.players) { p.reset(); if (p.cpu) p.cpu.reset(); }
-    this.ball = newBall({ r: this.B.r * this.ballK }); this.ball.held = true; this.ev = null; this.proj = []; this.trail = []; this.ref.reset();
+    this.ball = newBall({ r: this.B.r * this.ballK }); this.ball.held = true; this.trail = []; this.ref.reset();
     this.state = 'finish'; this.call = null;
     this.fin = { team, shooter: mine.find(p => !p.cpu) || mine[0], target: pick(theirs), t: 0, pow: 0, hold: false, fired: false, flyT: 0, hitT: -1, missed: false, ang: -0.3, cpuPow: rand(0.4, 0.85) };
     this.banner = null; this.sfx.whistle();
@@ -1950,7 +1866,6 @@ class Game {
       this.trail.push({ x: b.x, y: b.y }); if (this.trail.length > 12) this.trail.shift();
     }
     this.ref.update(dt);
-    if (this.ev || this.proj.length) this.stepEvent(dt);
     if (this.state === 'point') {
       this.pointT += dt;
       if (this.pointT > 0.5 && this.ref.mode === 'stand' && this.refTarget) this.ref.launchAt(this.refTarget);
@@ -2153,7 +2068,7 @@ function drawBall(G) {
 }
 // a box in world metres (x, y = bottom-left)
 function wRect(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(Math.round(WX(x)), Math.round(WY(y + h)), Math.max(1, Math.ceil(w * PPM * K)), Math.max(1, Math.ceil(h * PPM * K))); }
-// things standing on the court: trampolines, Tokyo's boost pads, the sprinkler heads, the castle dragon
+// things standing on the court: trampolines and Tokyo's boost pads
 function drawCourt(G) {
   const px = 1 / PPM;
   if (G.W.tramp) for (const x of TRAMPS) {
@@ -2165,47 +2080,13 @@ function drawCourt(G) {
     wRect(x - PAD_W - px, 0, PAD_W * 2 + px * 2, px * 2, INK); wRect(x - PAD_W, 0, PAD_W * 2, px, on ? '#3ff0ff' : '#ff3fa4');
     for (let k = -1; k <= 1; k++) wRect(x + k * 0.22 - px, px * 3 + ((G.time * 4 + k) % 1) * 0.3, px * 2, px, on ? '#ff3fa4' : '#3ff0ff');
   }
-  const E = G.ev; if (!E) return;
-  if (E.id === 'sprinkler') for (const sd of [-1, 1]) { const x = sd * (WALL_X - 1.2); wRect(x - 0.1, 0, 0.2, 0.12, INK); wRect(x - 0.06, 0.02, 0.12, 0.08, '#9aa0ab'); }
-  if (E.id === 'dragon') {   // a dragon head poking in from the wall
-    const sd = E.side, x = sd * (WALL_X - 0.2), open = E.warn ? 1 - E.warn.t / E.warn.max : 0.2, y = 0.4;
-    wRect(Math.min(x, x - sd * 1.1) - px, y - px, 1.1 + px * 2, 0.6 + px * 2, INK); wRect(Math.min(x, x - sd * 1.1), y, 1.1, 0.6, '#3f8a46');
-    wRect(Math.min(x - sd * 0.6, x - sd * 1.1), y - 0.05 - open * 0.25, 0.5, 0.15, '#2f6a36'); wRect(x - sd * 0.55 - 0.06, y + 0.38, 0.12, 0.12, '#ffd23f');
-    wRect(Math.min(x - sd * 0.2, x - sd * 0.5), y + 0.6, 0.3, 0.25, '#2f6a36');
-    if (E.warn) wRect(x - sd * 1.15 - 0.05, y + 0.1, 0.1, 0.1, (G.time * 10 | 0) % 2 ? '#ffb21f' : '#ff5a1f');
-  }
 }
-function drawProj(G) {
-  const px = 1 / PPM, E = G.ev;
-  if (E && E.warn) {   // warnings: a target on the floor, LION! at the wall
-    const w = E.warn, fl = (G.time * 8 | 0) % 2;
-    if (w.kind === 'meteor') { const r = 0.4 + (1 - w.t / w.max) * 1; wRect(w.x - r, 0, r * 2, px * 2, fl ? '#ff3a2a' : '#ffd23f'); wRect(w.x - px, 0, px * 2, 0.3, '#ff3a2a'); }
-    if (w.kind === 'lion') txt('LION!', WX(w.x - Math.sign(w.x) * 1.2), WY(1.6), 10, fl ? ORANGE : '#ffd23f', { bold: true, ow: 1 });
-  }
+function drawWind(G) {
+  const px = 1 / PPM;
   if (G.W.wind) {   // the wind: streaks blowing across
     ctx.globalAlpha = 0.5;
     for (let i = 0; i < 14; i++) { const x = ((i * 3.7 + G.time * G.W.wind * 9) % 20 + 20) % 20 - 10, y = 0.6 + (i * 1.37) % 5; wRect(x, y, 0.5, px, '#ffffff'); }
     ctx.globalAlpha = 1;
-  }
-  for (const q of G.proj) {
-    if (q.kind === 'snow') { wRect(q.x - q.r - px, q.y - q.r - px, q.r * 2 + px * 2, q.r * 2 + px * 2, INK); wRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2, '#ffffff'); }
-    else if (q.kind === 'water') wRect(q.x - px, q.y - px, px * 2, px * 2, '#7fd4ff');
-    else if (q.kind === 'meteor') {
-      for (let k = 1; k < 6; k++) wRect(q.x - q.vx * k * 0.025 - q.r * 0.6, q.y - q.vy * k * 0.025 - q.r * 0.6, q.r * 1.2, q.r * 1.2, k < 3 ? '#ffb21f' : '#ff5a1f');
-      wRect(q.x - q.r - px, q.y - q.r - px, q.r * 2 + px * 2, q.r * 2 + px * 2, INK); wRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2, '#7a6a5a'); wRect(q.x - q.r * 0.4, q.y, q.r * 0.6, q.r * 0.6, '#9a8a7a');
-    } else if (q.kind === 'fire') {
-      const fl = (G.time * 14 | 0) % 2;
-      wRect(q.x - q.r - px, q.y - q.r - px, q.r * 2 + px * 2, q.r * 2 + px * 2, INK); wRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2, fl ? '#ff5a1f' : '#ff7a1f');
-      wRect(q.x - q.r * 0.5, q.y - q.r * 0.5, q.r, q.r, '#ffe08a');
-      if (Math.random() < 0.5) G.addPart(q.x, q.y, -q.vx * 0.1 + rand(-0.5, 0.5), rand(0.5, 1.5), -1, 0.3, pick(['#ff5a1f', '#ffb21f']), 2);
-    } else if (q.kind === 'lion') {   // a running lion: body, mane, legs on a two-frame gallop
-      const d = Math.sign(q.vx), st = (G.time * 12 | 0) % 2, x0 = q.x - 0.55, hx = q.x + d * 0.45;
-      wRect(x0 - px, 0.25 - px, 1.1 + px * 2, 0.4 + px * 2, INK); wRect(x0, 0.25, 1.1, 0.4, '#d8a24a'); wRect(x0, 0.25, 1.1, px * 2, '#b8822a');
-      wRect(hx - 0.28 - px, 0.35 - px, 0.56 + px * 2, 0.56 + px * 2, INK); wRect(hx - 0.28, 0.35, 0.56, 0.56, '#8a4a1a'); wRect(hx - 0.14 + d * 0.08, 0.45, 0.28, 0.3, '#e8b85a');
-      wRect(hx + d * 0.14 - px, 0.62, px * 2, px * 2, INK);
-      for (const [lx, ph] of [[-0.42, st], [-0.2, 1 - st], [0.2, st], [0.4, 1 - st]]) wRect(q.x + lx * d - px + (ph ? d * 0.06 : -d * 0.06), 0, px * 3, 0.27, '#b8822a');
-      wRect(q.x - d * 0.55 - d * 0.3, 0.55, 0.3, px * 2, '#b8822a');
-    }
   }
 }
 function drawWorld(G) {
@@ -2221,7 +2102,7 @@ function drawWorld(G) {
   // back players first, so the one at the front of a doubles pair is in front
   [...G.players].sort((a, b) => b.slot - a.slot).forEach(p => drawPlayer(G, p));
   if (flying) drawRef(G);
-  drawProj(G);
+  drawWind(G);
   drawBall(G);
   for (const q of G.parts) {
     const s = q.sz * K, x = WX(q.x), y = WY(q.y);
@@ -2466,7 +2347,7 @@ for (const box of menuEl.querySelectorAll('.chips[data-pool]')) {
     const b = document.createElement('button'); b.type = 'button'; b.dataset.id = q.id; b.textContent = q.name; box.appendChild(b);
   }
 }
-// modes + events: one row each with OFF / ON / ALWAYS
+// modes: one row each with OFF / ON / ALWAYS
 function triRow(kind, q) {
   const row = document.createElement('div'); row.className = 'tri-row';
   const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = q.name;
@@ -2483,8 +2364,6 @@ function triRow(kind, q) {
     const h = document.createElement('div'); h.className = 'tri-cat'; h.textContent = cat; ml.appendChild(h);
     for (const m of MODES.filter(m => m.cat === cat)) ml.appendChild(triRow('modes', m));
   }
-  const el = document.getElementById('event-list');
-  for (const e of EVENTS) el.appendChild(triRow('events', e));
 }
 function syncMenu() {
   for (const seg of menuEl.querySelectorAll('.tri')) for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String((+draft[seg.dataset.kind][seg.dataset.id] || 0) === +b.dataset.tv));
