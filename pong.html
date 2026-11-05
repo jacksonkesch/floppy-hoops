@@ -1278,7 +1278,7 @@ class Game {
   constructor() {
     this.sfx = new Sfx(); this.sfx.setMuted(!!SET.muted);
     Object.assign(this, { state: 'serve', menu: 'title', stateT: 0, menuSel: 0, paused: false, menuOpen: false, help: false, time: 0, parts: [], pops: [], trail: [],
-      cam: { x: 0, w: 380 }, shakeA: 0, ts: 1, tsT: 0, tourney: null, banner: null, kd: [[false, false], [false, false]], stepN: 0, trans: null });
+      cam: { x: 0, w: 380, r: 0 }, fin: null, shakeA: 0, ts: 1, tsT: 0, tourney: null, banner: null, kd: [[false, false], [false, false]], stepN: 0, trans: null });
     this.crowdSeed = (Math.random() * 1e6) | 0;
     this.setupMatch({ demo: true, humans: [false, false] });
   }
@@ -1321,7 +1321,7 @@ class Game {
     }
   }
   newServe() {
-    Object.assign(this, { state: 'serve', t: 0, toss: false, lastTeam: -1, oppBounces: 0, spinTeam: -1, rally: 0, heat: 0, lastNet: false, touches: 0, playT: 0, pointT: 0, scorer: -1 });
+    Object.assign(this, { state: 'serve', t: 0, toss: false, lastTeam: -1, oppBounces: 0, spinTeam: -1, rally: 0, heat: 0, lastNet: false, touches: 0, playT: 0, pointT: 0, scorer: -1, call: null });
     const mates = this.players.filter(p => p.team === this.serverTeam);
     this.server = mates[this.serveIdx[this.serverTeam] % mates.length];
     for (const p of this.players) {
@@ -1359,6 +1359,13 @@ class Game {
     this.kd[team][k] = down;
     const p = this.players.find(q => q.team === team && !q.cpu);
     if (!p) return;
+    if (this.state === 'finish' && this.fin) {
+      if (this.paused) return;
+      const F = this.fin;
+      if (p === F.shooter) { if (down && !F.fired) F.hold = true; else if (!down && F.hold) this.fireFinish(); }
+      else if (p.team !== F.team) this.playerKey(p, k, down);   // the one getting shot at can try to duck
+      return;
+    }
     if (down && (this.paused || (this.state !== 'serve' && this.state !== 'play' && this.state !== 'point'))) return;
     this.playerKey(p, k, down);
   }
@@ -1483,7 +1490,7 @@ class Game {
     this.bestRally = Math.max(this.bestRally, this.rally);
     if (!this.demo) this.score[team]++;
     this.sfx.whistle(); this.sfx.jingle(team);
-    this.popup(why, 0, TABLE_TOP + 2.3, CREAM, 1.3, 2.2);
+    this.call = { team, why, t: 0 };   // the big POINT RED, drawn tilted with the camera
     const losers = this.players.filter(p => p.team !== team);
     this.refTarget = losers.reduce((a, p) => Math.abs(p.foot().x - this.ball.x) < Math.abs(a.foot().x - this.ball.x) ? p : a, losers[0]);
     // the serve changes hands every N points (every point once it's tight at the end, like real ping pong)
@@ -1492,7 +1499,7 @@ class Game {
     this.winner = this.won(team) ? team : -1;
     const gp = this.winner < 0 ? [0, 1].find(t => this.wouldWin(t)) : undefined;
     if (gp !== undefined && gp !== this.gamePt && !this.demo) {
-      this.banner = { text: 'GAME POINT ' + this.teamName(gp), t: 2.6, col: TEAM[gp].light };
+      this.call.gp = gp;   // GAME POINT goes under the big call so the two don't pile up
       const ids = SOUND_LIST.filter(e => !e.winner && this.soundOn(e.id)).map(e => e.id);
       if (ids.length) setTimeout(() => this.sfx.cue(pick(ids)), 500);
     }
@@ -1503,11 +1510,64 @@ class Game {
   wouldWin(t) { const s = this.score.slice(); s[t]++; return this.target > 0 && s[t] >= this.target && (!this.winBy2 || s[t] - s[1 - t] >= 2); }
   teamName(t) { return this.names ? shortName(this.names[t]) : this.humans[0] && !this.humans[1] ? (t === 0 ? 'YOU' : 'CPU') : TEAM[t].name; }
   afterPoint() {
-    if (this.winner >= 0) return this.gameOver(this.winner);
+    if (this.winner >= 0) return this.demo ? this.gameOver(this.winner) : this.startFinish(this.winner);
     if (SET.shuffle === 'point' || this.demo) this.pickMix();
     this.newServe();
   }
   letBall() { this.popup('LET', 0, TABLE_TOP + 2.3, CREAM, 1.3); this.newServe(); }
+  // ------------------------------------------------ FINISH HIM: the winner gets one free shot at the loser
+  // the aim sweeps up and down by itself; hold your key to power up and let go to fire
+  startFinish(team) {
+    const mine = this.players.filter(p => p.team === team), theirs = this.players.filter(p => p.team !== team);
+    for (const p of this.players) { p.reset(); if (p.cpu) p.cpu.reset(); }
+    this.ball = newBall(this.B); this.ball.held = true; this.trail = []; this.ref.reset();
+    this.state = 'finish'; this.call = null;
+    this.fin = { team, shooter: mine.find(p => !p.cpu) || mine[0], target: pick(theirs), t: 0, pow: 0, hold: false, fired: false, flyT: 0, hitT: -1, missed: false, ang: -0.3, cpuPow: rand(0.4, 0.85) };
+    this.banner = null; this.sfx.whistle();
+  }
+  finShot() { const F = this.fin, spd = 7 + F.pow * 11; return { vx: F.shooter.dir * Math.cos(F.ang) * spd, vy: Math.sin(F.ang) * spd }; }
+  finAimErr() {   // how far over (+) or under (-) the target's chest the shot would go right now
+    const F = this.fin, b = this.ball, v = this.finShot(), f = F.target.foot(), T = (f.x - b.x) / v.vx;
+    return T > 0 ? b.y + v.vy * T - this.W.g * T * T / 2 - (f.y + 1.5) : 9;
+  }
+  fireFinish() {
+    const F = this.fin; if (!F || F.fired) return;
+    const v = this.finShot();
+    Object.assign(this.ball, { vx: v.vx, vy: v.vy, held: false, spin: 0, w: -F.shooter.dir * 30 });
+    Object.assign(F, { fired: true, hold: false }); F.shooter.swing = 1;
+    this.sfx.smash(); this.addShake(2);
+  }
+  stepFinish(dt) {
+    const F = this.fin, b = this.ball, s = F.shooter, d = s.dir;
+    F.t += dt;
+    if (!F.fired) {
+      F.ang = -0.3 + 0.95 * (0.5 - 0.5 * Math.cos(F.t * 2.4));
+      if (F.hold) F.pow = Math.min(s.cpu ? F.cpuPow : 1, F.pow + dt * 0.85);
+      if (s.cpu && F.t > 0.8) {
+        if (!F.hold && !F.pow) F.hold = true;
+        else if (F.hold && F.pow >= F.cpuPow && Math.abs(this.finAimErr()) < 0.3) this.fireFinish();
+        if (F.t > 4.5) this.fireFinish();
+      }
+      if (!F.fired) { const x = s.pad.x + d * 0.18, y = s.pad.y + 0.06; Object.assign(b, { x, y, px: x, py: y, vx: 0, vy: 0, held: true }); }
+    } else {
+      F.flyT += dt; b.px = b.x; b.py = b.y;
+      stepBall(b, dt, this.W, (type, a, sp) => this.ballEvent(type, a, sp));
+      this.trail.push({ x: b.x, y: b.y }); if (this.trail.length > 12) this.trail.shift();
+      const tg = F.target, f = tg.foot(), hc = tg.headPos(), rr = BODY.torsoW / 2 + b.r + 0.06;
+      if (F.hitT < 0 && Math.min(segDist({ x: b.x, y: b.y }, f.x, f.y, hc.x, hc.y), segDist({ x: (b.x + b.px) / 2, y: (b.y + b.py) / 2 }, f.x, f.y, hc.x, hc.y)) < rr) {
+        F.hitT = 0;
+        tg.knock(d * (5 + F.pow * 4), 3.5, NECK_H);
+        this.sfx.smash(); this.sfx.thud(1); if (SET.grunts) this.sfx.oof();
+        this.addShake(5); this.slowmo(0.3, 0.7); this.excite = 1;
+        this.popup('FINISHED!', f.x * 0.7, TABLE_TOP + 2.8, ORANGE, 1.6, 2.2);
+        for (let i = 0; i < 16; i++) this.addPart(b.x, b.y, rand(-3, 3), rand(-1, 4), 9, 0.5, pick([ORANGE, '#ffd23a', CREAM]), 1);
+        b.vx *= -0.3; b.vy = Math.abs(b.vy) * 0.3 + 2;
+      }
+      if (F.hitT < 0 && F.flyT > 1.5 && !F.missed) { F.missed = true; this.popup('MISSED!', clamp(b.x, -5, 5), TABLE_TOP + 2.4, CREAM, 1.3, 1.4); }
+    }
+    if (F.hitT >= 0) F.hitT += dt;
+    if (F.hitT > 2.3 || (F.hitT < 0 && F.flyT > 2.6)) { this.fin = null; this.gameOver(F.team); }
+  }
   // ------------------------------------------------ menus, game over, tournament
   startGame(mode) {
     const names = this.tourney ? null : undefined;
@@ -1602,15 +1662,17 @@ class Game {
     if (this.state === 'over') this.overT += dt;
     if (this.state === 'serve' && this.t >= SERVE_T) this.doToss();
     if (this.state === 'play' && (this.playT += dt) > 6) this.letBall();   // nobody has touched it for ages: it's stuck somewhere
-    for (const p of this.players) { if (p.cpu) p.cpu.update(dt); p.update(dt); }
+    for (const p of this.players) { if (p.cpu && this.state !== 'finish') p.cpu.update(dt); p.update(dt); }
     for (const p of this.players) p.arm(dt, this.armTarget(p));
     const b = this.ball;
-    if (b.held) { const h = this.ref.hand(); Object.assign(b, { x: h.x, y: h.y + Math.sin(this.time * 6) * 0.03, vx: 0, vy: 0, px: h.x, py: h.y }); }
+    if (this.call) this.call.t += dt;
+    if (this.state === 'finish') this.stepFinish(dt);
+    else if (b.held) { const h = this.ref.hand(); Object.assign(b, { x: h.x, y: h.y + Math.sin(this.time * 6) * 0.03, vx: 0, vy: 0, px: h.x, py: h.y }); }
     else {
       b.px = b.x; b.py = b.y;
       stepBall(b, dt, this.W, (type, a, sp) => this.ballEvent(type, a, sp));
       this.bodyHits(); this.paddleHits();
-      this.trail.push({ x: b.x, y: b.y }); if (this.trail.length > 8) this.trail.shift();
+      this.trail.push({ x: b.x, y: b.y }); if (this.trail.length > 12) this.trail.shift();
     }
     this.ref.update(dt);
     if (this.state === 'point') {
@@ -1626,15 +1688,29 @@ class Game {
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
     this.updateCam(dt);
   }
+  // a TV camera: it frames both players and the ball, tight when they're close and pulled back when the ball flies off,
+  // then on a point it swoops in close and tilted on the ref flying at whoever lost it
   updateCam(dt) {
-    const b = this.ball, title = this.menu === 'title', menu = !!this.menu;
-    let tw = title ? 320 : menu ? 384 : 344, tx = title ? -2 : menu ? 0 : clamp(b.x * 0.3, -1.6, 1.6);
-    const far = Math.max(Math.abs(b.x), ...this.players.map(p => Math.abs(p.foot().x)));
-    const high = Math.max(b.held ? 0 : b.y, ...this.players.map(p => p.headPos().y), this.ref.y + 2.5);
-    if (!title && (high > 4.4 || far > 6.2)) tw = 400;
-    if (this.state === 'point' && this.pointT > 0.4 && this.refTarget && !menu) { tx = clamp(this.refTarget.foot().x * 0.6, -3, 3); tw = Math.min(tw, 330); }
-    const k = 1 - Math.exp(-dt * 2.6);
-    this.cam.w += (tw - this.cam.w) * k; this.cam.x += (tx - this.cam.x) * k;
+    const b = this.ball, title = this.menu === 'title', menu = !!this.menu, F = this.fin;
+    let tw, tx, tr = 0, sp = 2.6;
+    if (title || menu) { tw = title ? 320 : 384; tx = title ? -2 : 0; }
+    else {
+      const xs = this.players.map(p => p.foot().x); if (!b.held) xs.push(b.x);
+      const lo = Math.min(...xs) - 1.7, hi = Math.max(...xs) + 1.7;
+      const top = Math.max(b.held ? 0 : b.y + 0.4, ...this.players.map(p => p.headPos().y + 0.3), this.ref.y + 2.4);
+      tw = clamp(Math.max((hi - lo) * PPM, top * PPM * ART_W / 122), 290, 400);
+      tx = clamp((lo + hi) / 2, -3, 3);
+      const close = this.state === 'point' && this.refTarget && this.pointT > 0.35 ? this.refTarget
+        : this.state === 'finish' && F && F.hitT >= 0 ? F.target : null;
+      if (close) {
+        const f = close.foot(), fx = this.state === 'point' ? f.x * 0.65 + this.ref.x * 0.35 : f.x;
+        tx = fx; tw = 214; tr = 0.15 * Math.sign(f.x || 1); sp = 4.5;
+      }
+    }
+    if (this.map.id === 'ferry' && !title) tr += Math.sin(this.time * 0.8) * 0.05;   // the boat rocks the whole room
+    if (REDUCED) tr = 0;
+    const k = 1 - Math.exp(-dt * sp);
+    this.cam.w += (tw - this.cam.w) * k; this.cam.x += (tx - this.cam.x) * k; this.cam.r += (tr - this.cam.r) * k;
     this.shakeA *= Math.exp(-dt * 9);
   }
 }
@@ -1651,7 +1727,11 @@ function resize() {
   S = Math.max(0.5, Math.min((cv.width - 2 * gut) / ART_W, (cv.height - 2 * gut) / ART_H));
   OX = Math.round((cv.width - ART_W * S) / 2); OY = Math.round((cv.height - ART_H * S) / 2);
 }
-function setCam(G) { Z = ART_W / G.cam.w; K = S * Z; CX = clamp(STAGE_GX + G.cam.x * PPM, G.cam.w / 2, STAGE_W - G.cam.w / 2); }
+function setCam(G) {
+  // a tilted camera zooms in a touch, so its corners never show past the painted stage
+  const r = Math.abs(G.cam.r || 0), w = G.cam.w / (Math.cos(r) + ART_W / ART_H * Math.sin(r));
+  Z = ART_W / w; K = S * Z; CX = clamp(STAGE_GX + G.cam.x * PPM, w / 2, STAGE_W - w / 2);
+}
 const PX = sx => OX + (ART_W / 2 + (sx - CX) * Z) * S + SHX, PY = sy => OY + (SCREEN_GY + (sy - STAGE_GY) * Z) * S + SHY;
 const WX = x => PX(ax(x)), WY = y => PY(ay(y));
 const AX = a => OX + a * S, AY = a => OY + a * S;
@@ -1776,12 +1856,15 @@ function drawRef(G) {
 function drawBall(G) {
   const b = G.ball, spr = ballSpr(G.B);
   if (!b.held) {
-    const n = G.trail.length, col = b.spin > 0 ? ORANGE : b.spin < 0 ? '#86b2ff' : '#fff6e0';
-    for (let i = 0; i < n - 1; i++) {
-      const q = G.trail[i], s = Math.max(1, b.r * PPM * (0.3 + 0.7 * i / n)) * K;
-      ctx.globalAlpha = 0.08 + 0.3 * i / n; ctx.fillStyle = col; ctx.fillRect(Math.round(WX(q.x) - s / 2), Math.round(WY(q.y) - s / 2), Math.ceil(s), Math.ceil(s));
+    // a streak behind it that tapers off: long when it's flying, a stub when it's slow
+    const n = G.trail.length, col = b.spin > 0 ? ORANGE : b.spin < 0 ? '#86b2ff' : '#ffd6c4';
+    ctx.strokeStyle = col; ctx.lineCap = 'round';
+    for (let i = 1; i < n; i++) {
+      const a = G.trail[i - 1], q = G.trail[i], f = i / n;
+      ctx.globalAlpha = 0.12 + 0.5 * f; ctx.lineWidth = Math.max(1, b.r * PPM * 1.5 * f) * K;
+      ctx.beginPath(); ctx.moveTo(WX(a.x), WY(a.y)); ctx.lineTo(WX(q.x), WY(q.y)); ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1; ctx.lineCap = 'butt';
   }
   blit(spr, b.x, b.y, -b.rot);
   if (b.spin && !b.held) {   // the curly arrow round a spinning ball
@@ -1842,8 +1925,40 @@ function drawScoreboard(G) {
   artRect(154, 7, 12, 11, INK); artRect(155, 8, 10, 9, '#f4f4f4');
   txt(G.target ? String(G.target) : '-', AX(160), AY(12.5), 8, INK, { outline: '#f4f4f4', ow: 0.01 });
 }
+// the big call after a point, and the aim arrow when someone's lining up the finishing shot (both tilt with the camera)
+function drawBigCall(G) {
+  const c = G.call, F = G.fin;
+  if (G.state === 'point' && c && c.t > 0.3) {
+    const t = c.t - 0.3, T = TEAM[c.team], pop = t < 0.16 ? 1.8 - 0.8 * t / 0.16 : 1, x = AX(160), y = AY(58);
+    ctx.save(); ctx.translate(x, y); ctx.scale(pop, pop); ctx.translate(-x, -y);
+    txt('POINT', x, AY(60), 24, T.light, { bold: true, ow: 1.3 });
+    txt(G.teamName(c.team), x, AY(83), 24, T.light, { bold: true, ow: 1.3 });
+    ctx.restore();
+    if (t > 0.35) txt(c.why, x, AY(101), 8, CREAM, { ow: 0.8 });
+    if (c.gp !== undefined && t > 0.9) txt('GAME POINT ' + G.teamName(c.gp), x, AY(113), 8, TEAM[c.gp].light, { ow: 0.9 });
+  }
+  if (G.state === 'finish' && F && !F.fired) {
+    const b = G.ball, d = F.shooter.dir, len = 0.8 + F.pow * 1.6, col = F.pow > 0.66 ? '#ff5a3c' : F.pow > 0.33 ? ORANGE : '#ffd23f';
+    for (let s = 0.3; s < len; s += 0.2) {
+      const px = WX(b.x + d * Math.cos(F.ang) * s), py = WY(b.y + Math.sin(F.ang) * s), w = Math.max(2, K * (s + 0.2 > len ? 3 : 1.6));
+      artRect((px - OX) / S - w / S / 2 - 0.5, (py - OY) / S - w / S / 2 - 0.5, w / S + 1, w / S + 1, INK);
+      ctx.fillStyle = col; ctx.fillRect(px - w / 2, py - w / 2, w, w);
+    }
+  }
+}
+function drawFinish(G) {
+  const F = G.fin; if (!F) return;
+  if (F.hitT < 0) txt('FINISH HIM!', AX(160), AY(48), 16, ORANGE, { bold: true, ow: 1.1 });
+  if (F.fired) return;
+  const human = !F.shooter.cpu, lx = 120;
+  artRect(lx - 1, 141, 82, 8, INK); artRect(lx, 142, 80 * F.pow, 6, F.pow > 0.66 ? '#ff5a3c' : ORANGE);
+  txt('POWER', AX(lx - 6), AY(145), 8, CREAM, { align: 'right', ow: 0.6 });
+  if (human) txt('HOLD YOUR KEY TO POWER UP, LET GO TO SHOOT', AX(160), AY(162), 8, GREEN, { ow: 0.8 });
+  else if (G.players.some(p => !p.cpu && p.team !== F.team)) txt('LEAN AND JUMP TO DODGE IT!', AX(160), AY(162), 8, GREEN, { ow: 0.8 });
+}
 function drawHUD(G) {
   drawScoreboard(G);
+  if (G.state === 'finish') drawFinish(G);
   if (G.state === 'play' && G.rally >= 3) txt(`RALLY ${G.rally}`, AX(160), AY(40), 8, G.heat > 0 ? ORANGE : G.rally >= 8 ? '#ffd23f' : CREAM, { ow: 0.7 });
   if (G.banner) {
     ctx.globalAlpha = clamp(G.banner.t / 0.4, 0, 1);
@@ -1979,9 +2094,12 @@ function render(G) {
   const sa = G.shakeA * S * 0.6; SHX = sa > 0.3 ? rand(-sa, sa) : 0; SHY = sa > 0.3 ? rand(-sa, sa) : 0;
   setCam(G);
   ctx.save(); ctx.beginPath(); ctx.rect(OX, OY, ART_W * S, ART_H * S); ctx.clip();
+  const st = G.menu || G.state, ccx = OX + ART_W * S / 2, ccy = OY + ART_H * S / 2;
+  ctx.save(); ctx.translate(ccx, ccy); ctx.rotate(G.cam.r || 0); ctx.translate(-ccx, -ccy);
   drawWorld(G);
+  if (!G.menu) drawBigCall(G);   // POINT RED tilts with the camera
+  ctx.restore();
   SHX = SHY = 0;
-  const st = G.menu || G.state;
   if (st === 'title') drawTitle(G);
   else if (st === 'bracket') drawBracket(G);
   else if (st === 'champion') drawChampion(G);
@@ -2138,7 +2256,7 @@ function hold(id, tk, down) {
   if (![...held.values()].some(v => v[0] === was[0] && v[1] === was[1])) G.humanKey(was[0], was[1], false);
 }
 function letGo() { held.clear(); G.releaseAll(); }
-const inRally = () => !G.menu && !G.demo && (G.state === 'serve' || G.state === 'play' || G.state === 'point');
+const inRally = () => !G.menu && !G.demo && (G.state === 'serve' || G.state === 'play' || G.state === 'point' || G.state === 'finish');
 function togglePause() { if (!inRally() && !G.paused) return; G.paused = !G.paused; if (G.paused) letGo(); }
 function overMove(d) { if (G.overT >= 1.2) { G.overSel = (G.overSel + d + 2) % 2; G.sfx.click(); } }
 const GO_KEYS = new Set(['Enter', 'Space', 'KeyW', 'KeyE', 'KeyI', 'KeyO']);
