@@ -944,27 +944,27 @@ function ballSpr(B) {
   }
   return (BALL_SPR[B.id] = { c: outline(c), ox: r + 1, oy: r + 1 });
 }
-// the paddle: a round rubber face on a wooden handle (drawn pointing down, like an arm sprite)
-const PAD_SPR = {};
+// the paddle, seen edge-on: a thin red blade standing up out of the fist, a stub of wooden handle under it.
+// Anchored at the middle of the blade (that's the point that hits the ball).
+const PAD_SPR = {}, PAD_BLADE = 9, PAD_HANDLE = 2;
 function paddleSpr(T) {
   if (PAD_SPR[T.name]) return PAD_SPR[T.name];
-  const hd = Math.round(BODY.padR * 2 * PPM), hl = 4, w = hd, h = hd + hl;
-  const [c, g] = mk(w, h), P = painter(g), r = hd / 2;
-  for (let y = 0; y < hl; y++) { P(Math.floor(w / 2) - 1, y, '#b07a45'); P(Math.floor(w / 2), y, '#8a5a2e'); }
-  for (let y = 0; y < hd; y++) for (let x = 0; x < hd; x++) {
-    const dx = x + 0.5 - r, dy = y + 0.5 - r, rr = Math.hypot(dx, dy);
-    if (rr > r) continue;
-    P(x, hl + y, rr > r - 1.1 ? '#e8c89a' : dx + dy < -r * 0.6 ? T.light : T === TEAM[1] ? '#24242e' : T.jersey);
-  }
-  return (PAD_SPR[T.name] = { c: outline(c), ox: w / 2 + 1, oy: 1 });
+  const w = 2, h = PAD_BLADE + PAD_HANDLE;
+  const [c, g] = mk(w, h), P = painter(g);
+  // red rubber, but the red team shows the black side so it doesn't vanish against a red shirt
+  const [hi, mid, lo] = T === TEAM[0] ? ['#6b7180', '#2a2d36', '#15161c'] : ['#ff7a6e', '#e0333a', '#a8222b'];
+  for (let y = 0; y < PAD_BLADE; y++) { P(0, y, y < 2 ? hi : mid); P(1, y, lo); }
+  for (let y = PAD_BLADE; y < h; y++) { P(0, y, '#b07a45'); P(1, y, '#8a5a2e'); }
+  return (PAD_SPR[T.name] = { c: outline(c), ox: w / 2 + 1, oy: 1 + PAD_BLADE / 2 });
 }
 
 // ---------------------------------------------------------------- the plank people
 // A player is one stiff plank on one foot. Hold a key and it leans that way with the foot planted (it stops at ~53
 // degrees). Let go and it jumps along the lean: a tap is a tall hop straight up, a long hold a long flat one. There is no
-// jumping in the air. The paddle arm reaches for the ball by itself; nobody swings.
+// jumping in the air. The paddle is held up in front of the chest on a short arm and nudges toward the ball by itself;
+// nobody swings. The reach is small, so getting your body to the ball (lean, hop) is what makes the hit.
 const SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82, NECK_H = BODY.legLen + BODY.torsoH, COM_H = NECK_H * 0.55;
-const REACH = BODY.armLen + BODY.padR * 0.6, JUMP_XK = 0.8;
+const REACH = 0.42, PAD_REST = { x: 0.26, y: -0.1 }, JUMP_XK = 0.8;
 const leanAt = t => LEAN_MAX * (1 - Math.pow(1 - clamp(t / LEAN_T, 0, 1), LEAN_EXP));
 const leanTime = a => LEAN_T * (1 - Math.pow(1 - clamp(a / LEAN_MAX, 0, 1), 1 / LEAN_EXP));
 const groundAt = x => Math.abs(x) < TABLE_HALF ? TABLE_TOP : 0;
@@ -985,7 +985,7 @@ class Player {
   reset(x = this.home) {
     Object.assign(this, { fx: x, fy: 0, a: 0, w: 0, air: false, cx: 0, cy: 0, vx: 0, vy: 0, slide: 0, hold: 0, holdT: 0,
       down: 0, up: 0, fall: 0, lag: 0, lagV: 0, squash: 0, hitCd: 0, swing: 0, spinKey: [false, false] });
-    const s = this.shoulder(); this.pad = { x: s.x + this.dir * 0.3, y: s.y - 0.45 }; this.padV = { x: 0, y: 0 };
+    const s = this.shoulder(); this.pad = { x: s.x + this.dir * PAD_REST.x, y: s.y + PAD_REST.y }; this.padV = { x: 0, y: 0 };
   }
   foot() { return this.air ? { x: this.cx - Math.sin(this.a) * COM_H, y: this.cy - Math.cos(this.a) * COM_H } : { x: this.fx, y: this.fy }; }
   at(h) { const f = this.foot(); return { x: f.x + Math.sin(this.a) * h, y: f.y + Math.cos(this.a) * h }; }   // h metres up the plank
@@ -1099,12 +1099,12 @@ class Player {
       G.sfx.thud(0.6); G.tableTouch(this); return;
     }
   }
-  // the paddle chases `tgt` (the ball) as far as the arm goes, or rests out in front
+  // the paddle nudges toward `tgt` (the ball) as far as the short arm goes, or rests up in front of the chest
   arm(dt, tgt) {
     const s = this.shoulder();
     let tx, ty;
-    if (tgt) { const dx = tgt.x - s.x, dy = tgt.y - s.y, d = Math.hypot(dx, dy) || 1, r = clamp(d, 0.25, REACH); tx = s.x + dx / d * r; ty = s.y + dy / d * r; }
-    else { const r = rot({ x: this.dir * 0.3, y: -0.48 }, -this.a); tx = s.x + r.x; ty = s.y + r.y; }
+    if (tgt) { const dx = tgt.x - s.x, dy = tgt.y - s.y, d = Math.hypot(dx, dy) || 1, r = clamp(d, 0.2, REACH); tx = s.x + dx / d * r; ty = s.y + dy / d * r; }
+    else { const r = rot({ x: this.dir * PAD_REST.x, y: PAD_REST.y }, -this.a); tx = s.x + r.x; ty = s.y + r.y; }
     const ox = this.pad.x, oy = this.pad.y, dx = tx - ox, dy = ty - oy, d = Math.hypot(dx, dy), mx = ARM_SPEED * REACH * dt, k = d > mx ? mx / d : 1;
     this.pad.x += dx * k; this.pad.y += dy * k;
     const ex = this.pad.x - s.x, ey = this.pad.y - s.y, e = Math.hypot(ex, ey);
@@ -1744,18 +1744,20 @@ function drawPlayer(G, p) {
   const put = (s, lx, ly, r = 0) => { ctx.save(); ctx.translate(lx * K, -ly * K); if (r) ctx.rotate(r); if (flip) ctx.scale(-1, 1); ctx.drawImage(s.c, -s.ox * K, -s.oy * K, s.c.width * K, s.c.height * K); ctx.restore(); };
   // the arm on the far side, hanging
   const s = p.shoulder();
-  limb(sp.arm, { x: s.x - d * 0.04, y: s.y }, p.at(SHOULDER_H - 0.55), flip);
+  limb(sp.arm, { x: s.x - d * 0.04, y: s.y }, p.at(SHOULDER_H - 0.4), flip);
   ctx.save(); ctx.translate(WX(f.x), WY(f.y)); ctx.rotate(p.a); if (sq) ctx.scale(1 + sq * 0.08, 1 - sq * 0.1);
   const hip = BODY.legLen * PPM;
   put(sp.legB, -d, hip); put(sp.leg, d, hip);
   put(sp.torso, 0, hip + BODY.torsoH * PPM / 2);
   put(sp.head, 0, (NECK_H + BODY.headR * 0.8) * PPM, p.lag);
   ctx.restore();
-  // the paddle arm reaches out to the paddle
-  const pd = p.pad, dx = pd.x - s.x, dy = pd.y - s.y, L = Math.hypot(dx, dy) || 1, faceOff = (BODY.padR * PPM + 4) / PPM;
-  const hand = { x: pd.x - dx / L * faceOff * 0.6, y: pd.y - dy / L * faceOff * 0.6 };
+  // the short paddle arm: the blade stands up along the body, tipping toward the ball as the arm reaches, and flicks on a hit
+  const pd = p.pad, rest = rot({ x: d * PAD_REST.x, y: PAD_REST.y }, -p.a);
+  const tilt = Math.atan2(rest.x * (pd.y - s.y) - rest.y * (pd.x - s.x), rest.x * (pd.x - s.x) + rest.y * (pd.y - s.y));
+  const ang = p.a - tilt * 0.6 + d * p.swing * 0.5, down = (PAD_BLADE / 2 + 0.5) / PPM;
+  const hand = { x: pd.x - Math.sin(ang) * down, y: pd.y - Math.cos(ang) * down };
   limb(sp.arm, s, hand, flip);
-  blit(sp.pad, hand.x, hand.y, Math.atan2(-dx, -dy) - d * p.swing * 0.5, flip);
+  blit(sp.pad, pd.x, pd.y, ang);
 }
 function drawRef(G) {
   const R = G.ref, sp = refSprites(R), hp = R.mode === 'fly' || R.mode === 'fall' ? 1.0 : 0;
