@@ -620,6 +620,7 @@ function makeLook(used) {
     style: pick(['short', 'short', 'short', 'bald', 'afro', 'mohawk', 'curly']), num };
 }
 const shortName = s => String(s || '').toUpperCase().replace(/[^A-Z0-9 !-]/g, '').trim().slice(0, 8) || 'PLAYER';
+
 // ================================================================ FLOPPY GETAWAY
 // Four floppy guys race across a level to the getaway ride. Nobody can walk: hold a lean key and you tip over that
 // way, let go and you hop. A quick tap hops straight up; a longer lean makes a flatter, longer hop and a harder,
@@ -637,7 +638,7 @@ const BH = BODY_H;
 const HOP_V = 4.3 * BH, GRAV = 6 * BH, HOP_MAX = 52 * D2R, HOP_RATE = 140 * D2R, HOP_DEAD = 0.055, CROUCH_T = 0.085;
 const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.35;
 // standing: a loose spring keeps you upright (it wobbles); in the air you pitch toward the hop; landing tips you over
-const UP_W = 4.5, UP_Z = 0.25, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.2, TIP_K = 1.4;
+const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.2, TIP_K = 1.4;
 const TUMBLE_A = 100 * D2R, DOWN_T = 1.1, GETUP_T = 0.6, RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
 const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3;
 
@@ -659,6 +660,7 @@ const ITEMS = [
   { id: 'bomb', name: 'BOMB', ammo: 1, dmg: 100, kb: 15, cd: 0.4, splash: 3.2, proj: 'bomb', w: 1.5 },
   { id: 'shield', name: 'SHIELD', ammo: 1, dur: 5, w: 1.5 },
   { id: 'medkit', name: 'MEDKIT', ammo: 1, w: 1 },
+  { id: 'swap', name: 'SWAP', ammo: 1, w: 1.2 },   // trade places with the racer just ahead of you
 ];
 const ITEM = Object.fromEntries(ITEMS.map(d => [d.id, d]));
 
@@ -727,13 +729,14 @@ const DEFAULTS = { target: 3, level: 'normal', memes: 'on', itemRate: 1, muted: 
 // noise: how far off a bot's lean time is; settle: how wobbly it'll hop from; react: seconds to notice a shot
 const CPU_LEVELS = {
   easy: { noise: 0.35, settle: 6 * D2R, react: 0.3, cone: 14 * D2R, wait: [0.25, 0.7], dumb: 0.25 },
-  normal: { noise: 0.2, settle: 10 * D2R, react: 0.16, cone: 9 * D2R, wait: [0.08, 0.3], dumb: 0.08 },
-  hard: { noise: 0.08, settle: 14 * D2R, react: 0.08, cone: 5 * D2R, wait: [0, 0.1], dumb: 0 },
+  normal: { noise: 0.2, settle: 14 * D2R, react: 0.12, cone: 9 * D2R, wait: [0.05, 0.2], dumb: 0.08 },
+  hard: { noise: 0.08, settle: 18 * D2R, react: 0.06, cone: 5 * D2R, wait: [0, 0.08], dumb: 0 },
 };
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { s = {}; }
   const out = { ...DEFAULTS, ...s, pools: { ...DEFAULTS.pools, ...(s.pools || {}) } };
+  if (!s.v2) { if (s.pools && s.pools.items && !s.pools.items.includes('swap')) out.pools.items = [...s.pools.items, 'swap']; out.v2 = 1; }
   for (const k of Object.keys(POOLS)) {
     out.pools[k] = (out.pools[k] || []).filter(id => POOLS[k].some(q => q.id === id));
     if (!out.pools[k].length) out.pools[k] = [POOLS[k][0].id];
@@ -749,6 +752,7 @@ const SET = loadSettings();
 const VOL = 0.8;
 const SPLIT_Z = 0.72;   // split-screen zoom: each half sees a bit more
 const FLAT_A = 1.56;   // lying flat on the ground (rad)
+const DEPART_T = 2.4;   // once someone climbs in, the ride waits this long for anyone else (they all score)
 
 
 // ---------------------------------------------------------------- geometry
@@ -1032,7 +1036,7 @@ class Bot {
       if (p.holdT >= this.plan.H) { p.press(G, this.plan.dir, false); this.plan = null; this.wait = rand(L.wait[0], L.wait[1]) + L.react; }
       return;
     }
-    const settled = Math.abs(p.a) < L.settle && Math.abs(p.av) < 1.2;
+    const settled = Math.abs(p.a) < L.settle && Math.abs(p.av) < 1.6;
     if (!settled) return;
     if ((this.wait -= dt) > 0) return;
     const goal = G.M.goal, gy = goal.y0, gx = (goal.x0 + goal.x1) / 2;
@@ -1069,6 +1073,7 @@ class Bot {
     const d = ITEM[p.item];
     if (d.id === 'medkit') { if (p.hp < 60) G.useItem(p); return; }
     const foes = G.P.filter(o => o !== p && o.alive && !o.gone && o.imm <= 0);
+    if (d.id === 'swap') { if (G.P.some(o => o !== p && o.alive && !o.gone && o.x - p.x > 6)) G.useItem(p); return; }
     if (d.id === 'shield') { if (foes.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 14)) G.useItem(p); return; }
     const g = p.aimAng(), h = p.hand();
     let want = false;
@@ -1111,7 +1116,7 @@ class Game {
     const M = this.M = MAP[id];
     this.S = M.solids.map(s => ({ ...s, x0b: s.x0, x1b: s.x1, topb: s.top, botb: s.bot, dx: 0, dy: 0, vx: 0, vy: 0, squish: 0 }));
     this.rt = 0; this.moveSolids(0);
-    this.state = 'ready'; this.stateT = 0; this.winner = null; this.rideT = 0; this.timeScale = 1; this.slowT = 0;
+    this.state = 'ready'; this.stateT = 0; this.winner = null; this.boarded = []; this.winners = []; this.departT = 0; this.rideT = 0; this.timeScale = 1; this.slowT = 0;
     this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
     // item spots: one every ~12 m on solid ground
     this.spots = [];
@@ -1183,13 +1188,21 @@ class Game {
       for (const p of this.P) {
         if (!p.alive || p.gone) continue;
         const h = p.head(), m = p.mid();
-        if ([p, h, m].some(q => q.x > g.x0 && q.x < g.x1 && q.y > g.y0 - 0.1 && q.y < g.y1)) { this.getaway(p); break; }
+        if (p.chute) continue;
+        if ([p, h, m].some(q => q.x > g.x0 && q.x < g.x1 && q.y > g.y0 - 0.1 && q.y < g.y1)) this.getaway(p);
+      }
+      // the ride waits a moment for stragglers, then leaves with whoever made it
+      if (this.boarded.length) {
+        this.departT -= sdt;
+        const waiting = this.P.some(p => !p.gone && !p.chute);
+        if (this.departT <= 0 || !waiting) this.leave();
       }
     }
     if (this.state === 'away') {
       this.rideT += sdt;
-      if (this.stateT >= AWAY_T + (this.slowT > -1 && this.winner && this.winner.score >= SET.target ? 0.8 : 0)) {
-        if (this.winner.score >= this.target()) { this.state = 'over'; this.stateT = 0; this.champ = this.winner; this.sfx.fanfare(); this.confetti(); }
+      const champ = this.champion();
+      if (this.stateT >= AWAY_T + (champ ? 0.8 : 0)) {
+        if (champ) { this.state = 'over'; this.stateT = 0; this.champ = champ; this.sfx.fanfare(); this.confetti(); }
         else { this.round++; this.newRound(); }
       }
     }
@@ -1208,13 +1221,28 @@ class Game {
     if (r === 'rocket' || r === 'pod') return { dx: 0, dy: go * go * 5 };
     return { dx: 0, dy: 0 };
   }
+  // someone climbed in: they score now, and the ride waits DEPART_T for anyone else
   getaway(p) {
-    p.gone = true; p.score++; this.winner = p; this.state = 'away'; this.stateT = 0; this.rideT = 0;
+    p.gone = true; p.score++; p.aways = (p.aways || 0) + 1; p.trig = false; p.item = null;
     if (this.M.ride === 'chute') { p.gone = false; p.chute = 1; }
+    if (!this.boarded.length) { this.departT = DEPART_T; this.winner = p; this.sfx.creak(); }
+    this.boarded.push(p);
+    this.popup(this.boarded.length > 1 ? 'MADE IT TOO!' : 'GOT IN!', p.x, p.y + 2.2, p.C.col, 1.1, 1.2);
+    this.sfx.jingle(p.i % 2);
+  }
+  // the ride leaves with everyone who made it
+  leave() {
+    this.winners = this.boarded.slice(); this.state = 'away'; this.stateT = 0; this.rideT = 0;
     for (const q of this.P) { q.trig = false; if (q.bot) q.bot.plan = null; }
-    const final = p.score >= this.target();
-    if (final) this.slowT = SLOWMO_T;
-    this.sfx.jingle(p.i % 2); this.sfx.creak();
+    if (this.champion()) this.slowT = SLOWMO_T;
+    this.sfx.boom && this.sfx.thud && this.sfx.thud();
+  }
+  // the match winner: the one runner on top with enough getaways (a tie at the top plays on)
+  champion() {
+    const top = Math.max(...this.P.map(p => p.score));
+    if (top < this.target()) return null;
+    const lead = this.P.filter(p => p.score === top);
+    return lead.length === 1 ? lead[0] : null;
   }
   // bodies are solid: guys standing on the same floor nudge apart
   crowd(dt) {
@@ -1233,7 +1261,7 @@ class Game {
     for (const sp of this.spots) {
       if (!sp.item) { if ((sp.t -= dt) <= 0) { const pool = SET.pools.items; sp.item = pickW(pool.map(id => [id, ITEM[id].w])); sp.born = this.t; } continue; }
       for (const p of this.P) {
-        if (!p.alive || p.gone) continue;
+        if (!p.alive || p.gone || p.shield > 0) continue;   // (a shield bubble can't pick anything up)
         const m = p.mid();
         if (Math.hypot(m.x - sp.x, m.y - sp.y) < 1.0) {
           p.item = sp.item; p.ammo = ITEM[sp.item].ammo; p.cd = 0.15; sp.item = null; sp.t = 9;
@@ -1256,6 +1284,20 @@ class Game {
     const g = p.aimAng(), h = p.hand(), dx = Math.cos(g), dy = Math.sin(g);
     if (d.id === 'medkit') { p.hp = 100; p.heal = 1; this.spark(p.mid().x, p.mid().y, '#ff7a7a', 10); this.sfx.grab(); }
     else if (d.id === 'shield') { p.shield = d.dur; this.sfx.spin(1); }
+    else if (d.id === 'swap') {   // trade places with the closest racer ahead (or behind, if you're leading)
+      const rest = this.P.filter(o => o !== p && o.alive && !o.gone && !o.chute);
+      const ahead = rest.filter(o => o.x > p.x), pool = ahead.length ? ahead : rest;
+      if (!pool.length) { p.cd = 0.2; return; }
+      const o = pool.reduce((a, b) => (Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a));
+      const A = p.mid(), B = o.mid();
+      this.spark(A.x, A.y, '#c58bff', 12); this.spark(B.x, B.y, '#c58bff', 12);
+      for (const [q, r] of [[p, { x: o.x, y: o.y, cp: o.cp }], [o, { x: p.x, y: p.y, cp: p.cp }]]) {
+        const keep = { cp: Math.max(q.cp, r.cp), hp: q.hp, item: q.item, ammo: q.ammo, shield: q.shield, best: q.best, cd: q.cd };
+        q.reset(r.x, r.y + 0.15); Object.assign(q, keep); q.grounded = false; q.imm = 0.6; q.vy = 1.5;
+      }
+      this.addShake(1.2); this.sfx.spin(1.4); this.sfx.boing && this.sfx.boing();
+      this.popup('SWAP!', o.x, o.y + BH + 0.9, '#c58bff', 0.9, 0.9);
+    }
     else if (d.melee) {
       p.swing = 1; this.sfx.swish();
       let best = null, bd = 1e9;
@@ -1441,11 +1483,12 @@ function itemSprite(id) {
     rocket: [16, 6, R => { R(0, 1, 14, 4, '#3f6b3a'); R(0, 1, 14, 1, '#5d8f52'); R(14, 0, 2, 6, '#2b4a28'); R(4, 5, 2, 1, '#2a2d35'); R(7, 2, 3, 2, '#e8d33a'); }],
     bomb: [7, 8, R => { R(1, 2, 5, 5, '#2a2d35'); R(0, 3, 7, 3, '#2a2d35'); R(2, 3, 1, 1, '#6a7080'); R(3, 1, 1, 1, '#8a6a40'); R(4, 0, 1, 1, '#ffb43a'); }],
     shield: [8, 9, R => { R(1, 0, 6, 7, '#3f8fe0'); R(0, 1, 8, 4, '#3f8fe0'); R(2, 7, 4, 1, '#3f8fe0'); R(3, 8, 2, 1, '#3f8fe0'); R(3, 1, 2, 6, '#bfe6ff'); R(1, 3, 6, 2, '#bfe6ff'); }],
+    swap: [9, 8, R => { R(0, 1, 6, 2, '#c58bff'); R(5, 0, 1, 4, '#c58bff'); R(6, 1, 1, 2, '#c58bff'); R(3, 5, 6, 2, '#ffd23a'); R(3, 4, 1, 4, '#ffd23a'); R(2, 5, 1, 2, '#ffd23a'); }],
     medkit: [9, 7, R => { R(0, 1, 9, 6, '#f4f1ea'); R(3, 0, 3, 1, '#c9c2b6'); R(3, 2, 3, 4, '#e8423a'); R(2, 3, 5, 2, '#e8423a'); }],
   }[id];
   const [w, h, f] = D, [c, g] = mk(w, h);
   f((x, y, ww, hh, col) => { g.fillStyle = col; g.fillRect(x, y, ww, hh); });
-  return (ITEM_SPR[id] = { c: outline(c), ox: id === 'bomb' || id === 'shield' || id === 'medkit' ? Math.floor(w / 2) + 1 : 2, oy: Math.floor(h / 2) + 1 });
+  return (ITEM_SPR[id] = { c: outline(c), ox: id === 'bomb' || id === 'shield' || id === 'medkit' || id === 'swap' ? Math.floor(w / 2) + 1 : 2, oy: Math.floor(h / 2) + 1 });
 }
 function drawSpr(s, x, y, a = 0, flipX = false, flipY = false, sx = 1, sy = 1) {
   ctx.save(); ctx.translate(x, y); if (a) ctx.rotate(a); if (sx !== 1 || sy !== 1) ctx.scale(sx, sy); if (flipX || flipY) ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
@@ -1707,9 +1750,9 @@ function drawWater(G) {
 // ---- the getaway ride (what you're racing to) and the goal marker
 function drawRide(G, front) {
   const M = G.M, g = M.goal, fx = G.rideFx(), t = G.t, gx = (g.x0 + g.x1) / 2, away = G.state === 'away' || G.state === 'over';
-  const W = G.winner || G.champ, inside = away && W && !W.chute;
+  const B = (G.boarded || []).filter(p => !p.chute), inside = B.length > 0, W = B[0];
   ctx.save(); ctx.translate(fx.dx * PPM, -fx.dy * PPM);
-  const face = () => { if (inside) drawMiniDude(W, AX(gx) , AY(g.y0 + 1.2)); };
+  const face = () => { if (inside) drawCrew(B, AX(gx), AY(g.y0 + 1.2)); };
   switch (M.ride) {
     case 'van': {
       if (front) break;
@@ -1744,7 +1787,7 @@ function drawRide(G, front) {
       ctx.fillStyle = M.ride === 'heli' ? '#3a5a3a' : '#e8423a'; ctx.beginPath(); ctx.roundRect(AX(cx - 2), AY(cy + 2.2), 4 * PPM, 2.2 * PPM, 12); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke();
       wb(cx + 1.8, cy + 1.3, cx + 5.2, cy + 1.75, M.ride === 'heli' ? '#3a5a3a' : '#e8423a'); wb(cx + 4.9, cy + 1.1, cx + 5.3, cy + 2.4, '#2a2834');
       ctx.fillStyle = '#9fd0f0'; ctx.beginPath(); ctx.roundRect(AX(cx - 1.8), AY(cy + 2), 1.6 * PPM, 1.1 * PPM, [10, 2, 2, 2]); ctx.fill();
-      if (inside) drawMiniDude(W, AX(cx - 0.3), AY(cy + 0.8));
+      if (inside) drawCrew(B, AX(cx - 0.3), AY(cy + 0.8));
       wb(cx - 0.1, cy + 2.2, cx + 0.1, cy + 2.5, '#2a2834'); const r = Math.abs(Math.sin(t * 30)) * 3.2 + 0.4; wb(cx - r, cy + 2.5, cx + r, cy + 2.62, '#2a2834');
       if (M.ride === 'chopper') { wb(cx - 1.6, cy - 0.05, cx + 1.6, cy + 0.08, '#2a2834'); wb(cx - 1.2, cy, cx - 1.1, cy + 0.35, '#2a2834'); wb(cx + 1.1, cy, cx + 1.2, cy + 0.35, '#2a2834'); }
       break;
@@ -1774,7 +1817,7 @@ function drawRide(G, front) {
       wb(x0, 0.5, x1, 19, '#f4f6fa'); wb(x0, 4, x1, 5, '#e8423a'); wb(x0, 14, x1, 14.6, '#2f6bd8'); txt('FLOPPY', AX(cx), AY(10.8), 7, '#2a2834', { outline: false });
       ctx.fillStyle = '#e8423a'; ctx.beginPath(); ctx.moveTo(AX(x0), AY(19)); ctx.lineTo(AX(cx), AY(23)); ctx.lineTo(AX(x1), AY(19)); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(AX(x0), AY(4)); ctx.lineTo(AX(x0 - 1.5), AY(0.3)); ctx.lineTo(AX(x0), AY(1.4)); ctx.fill(); ctx.beginPath(); ctx.moveTo(AX(x1), AY(4)); ctx.lineTo(AX(x1 + 1.5), AY(0.3)); ctx.lineTo(AX(x1), AY(1.4)); ctx.fill();
-      outlineBox(x0, 0.5, x1, 19); wb(x0, g.y0, x0 + 0.8, g.y1, '#2a2834'); if (inside) drawMiniDude(W, AX(x0 + 0.4), AY(g.y0 + 1.2));
+      outlineBox(x0, 0.5, x1, 19); wb(x0, g.y0, x0 + 0.8, g.y1, '#2a2834'); if (inside) drawCrew(B, AX(x0 + 0.4), AY(g.y0 + 1.2));
       if (away) flame(cx, 0.5, 1.6, t);
       break;
     }
@@ -1790,6 +1833,7 @@ function drawRide(G, front) {
   ctx.restore();
 }
 function flame(x, y, w, t) { for (let i = 0; i < 6; i++) { const k = Math.random(); wb(x - w * (0.5 - i * 0.08), y - 0.2 - k * 2.5 * (1 - i * 0.12), x + w * (0.5 - i * 0.08), y, ['#fff6e0', '#ffd23a', '#ff8a2a', '#ff4a2a', '#ff8a2a', '#ffd23a'][i]); } }
+function drawCrew(B, x, y) { B.forEach((p, i) => drawMiniDude(p, x + (i - (B.length - 1) / 2) * 7, y - (i % 2) * 2)); }
 function drawMiniDude(p, x, y) { const sp = dudeSprites(p); drawSpr(sp.head, x, y - 2, Math.sin(G.t * 8) * 0.2); }
 // a bouncing arrow over the getaway, so you always know where to go
 function drawGoalMark(G) {
@@ -1838,7 +1882,7 @@ function drawDude(G, p) {
     let g = p.aimAng(); if (p.swing > 0) g += d * (p.swing - 0.5) * -2.4;
     const hd = { x: sh.x + Math.cos(g) * BODY.armLen, y: sh.y + Math.sin(g) * BODY.armLen };
     limb(sp.arm, AX(sh.x), AY(sh.y), AX(hd.x), AY(hd.y));
-    const spr = itemSprite(p.item), held = !['bomb', 'shield', 'medkit'].includes(p.item);
+    const spr = itemSprite(p.item), held = !['bomb', 'shield', 'medkit', 'swap'].includes(p.item);
     drawSpr(spr, AX(hd.x), AY(hd.y), held ? -g : 0, false, held && Math.cos(g) < 0);
     if (p.muzzle > 0) { p.muzzle -= G.dt; const m = { x: hd.x + Math.cos(g) * 0.75, y: hd.y + Math.sin(g) * 0.75 }; rr(AX(m.x) - 3, AY(m.y) - 3, 6, 6, '#fff6c0'); rr(AX(m.x) - 2, AY(m.y) - 2, 4, 4, '#ffd23a'); }
   } else {
@@ -1866,7 +1910,7 @@ function drawSpots(G) {
     const b = Math.sin(G.t * 3 + sp.x) * 0.15, x = AX(sp.x), y = AY(sp.y + b), age = G.t - (sp.born || 0), k = Math.min(1, age * 3);
     ctx.fillStyle = `rgba(255,236,150,${0.22 + 0.1 * Math.sin(G.t * 5 + sp.x)})`; ctx.beginPath(); ctx.arc(x, y, 9 * k, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = `rgba(255,246,224,${0.7 * k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 8 * k, G.t * 2, G.t * 2 + 4); ctx.stroke();
-    drawSpr(itemSprite(sp.item), x - (['bomb', 'shield', 'medkit'].includes(sp.item) ? 0 : 6), y, 0, false, false, k, k);
+    drawSpr(itemSprite(sp.item), x - (['bomb', 'shield', 'medkit', 'swap'].includes(sp.item) ? 0 : 6), y, 0, false, false, k, k);
   }
 }
 function drawFx(G) {
@@ -1914,6 +1958,17 @@ function drawView(G, cam, vp, zoom) {
 
 
 // ================================================================= HUD + screens
+// you got hit: the edges of your view flash red (there's no health bar, so this is how you know)
+function drawHurt(p, vp) {
+  if (!p || !p.human) return;
+  const k = p.alive ? clamp(p.hurt / 0.6, 0, 1) : clamp((p.deadT - (RESPAWN_T - 0.5)) / 0.5, 0, 1);
+  if (k <= 0.02) return;
+  ctx.save(); ctx.beginPath(); ctx.rect(vp.x, vp.y, vp.w, vp.h); ctx.clip();
+  const cx = vp.x + vp.w / 2, cy = vp.y + vp.h / 2, R = Math.hypot(vp.w, vp.h) / 2;
+  const gr = ctx.createRadialGradient(cx, cy, R * 0.32, cx, cy, R);
+  gr.addColorStop(0, 'rgba(230,30,40,0)'); gr.addColorStop(1, `rgba(235,20,35,${(0.8 * k).toFixed(3)})`);
+  ctx.fillStyle = gr; ctx.fillRect(vp.x, vp.y, vp.w, vp.h); ctx.restore();
+}
 function panel(x, y, w, h, a = 0.82) { rr(x - 1, y - 1, w + 2, h + 2, INK); ctx.fillStyle = `rgba(20,16,25,${a})`; ctx.fillRect(x, y, w, h); rr(x, y, w, 1, '#3a3446'); }
 const crewName = (G, p) => p.human ? (G.mode === '2p' ? `P${p.i + 1}` : 'YOU') : p.C.name;
 function headIcon(p, x, y, k = 1) { const sp = dudeSprites(p); drawSpr(sp.head, x, y, 0, false, false, k * 0.8, k * 0.8); }
@@ -1952,24 +2007,49 @@ function drawGoalArrow(G, cam, vp, zoom) {
 // what a human is carrying, and the respawn countdown
 function drawMine(G, p, x, y) {
   if (p.item) {
-    panel(x, y, 34, 14, 0.75); drawSpr(itemSprite(p.item), x + (['bomb', 'shield', 'medkit'].includes(p.item) ? 8 : 3), y + 7);
-    const d = ITEM[p.item]; txt(d.ammo > 1 ? `x${p.ammo}` : 'x1', x + 27, y + 7.5, 5, CREAM);
+    const d = ITEM[p.item], n = d.ammo, few = n <= 8;
+    panel(x, y, 34, 18, 0.75); { const sp = itemSprite(p.item); drawSpr(sp, Math.round(x + 17 - sp.c.width / 2 + sp.ox), Math.round(y + 7 - sp.c.height / 2 + sp.oy)); }
+    if (few) { const w = Math.min(3, Math.floor(30 / n) - 1), x0 = x + 17 - (n * (w + 1) - 1) / 2;
+      for (let i = 0; i < n; i++) rr(x0 + i * (w + 1), y + 14, w, 2, i < p.ammo ? '#ffd23a' : '#4a4256'); }
+    else { rr(x + 2, y + 14, 30, 2, '#4a4256'); rr(x + 2, y + 14, 30 * p.ammo / n, 2, '#ffd23a'); }
   }
-  if (!p.alive && !p.gone) { const s = Math.ceil(p.deadT); if (s > 0) txt(`BACK IN ${s}`, x + 17 + (p.item ? 30 : 0), y + 7, 6, '#ff8a7a'); }
+  if (!p.alive && !p.gone) { const s = Math.ceil(p.deadT); if (s > 0) txt(`BACK IN ${s}`, x + 17 + (p.item ? 30 : 0), y + 9, 6, '#ff8a7a'); }
 }
 const MAP_TAG = { van: 'GET IN THE VAN', train: 'CATCH THE TRAIN', heli: 'GRAB THE LADDER', chopper: 'REACH THE CHOPPER', jet: 'BOARD THE JET', chute: 'JUMP OUT THE DOOR', rocket: 'GET ON THE ROCKET', pod: 'GET TO THE POD' };
 function drawBanner(G) {
   const st = G.state, t = G.stateT;
   if (st === 'ready') {
-    const k = clamp(t * 4, 0, 1);
-    panel(70, 26 - (1 - k) * 30, 180, 34, 0.85);
-    txt(G.M.name, 160, 37 - (1 - k) * 30, fitSize(G.M.name, 11, 170), '#ffd23a');
-    txt(MAP_TAG[G.M.ride] || 'GET AWAY', 160, 50 - (1 - k) * 30, 6, CREAM);
-    if (!G.demo) { const n = 3 - Math.floor(t / (READY_T / 3.2)); if (n >= 1) { const f = (t / (READY_T / 3.2)) % 1; txt(String(n), 160, 92, Math.round(26 - f * 8), CREAM); } }
-  } else if (st === 'run' && t < 0.6 && !G.demo) { txt('GO!', 160, 92, Math.round(30 + t * 20), '#7fe39a'); }
-  else if (st === 'away' && G.winner) {
-    const w = G.winner, k = clamp(t * 5, 0, 1), name = crewName(G, w);
-    panel(60, 34 - (1 - k) * 20, 200, 26, 0.85); txt(`${name} GOT AWAY!`, 160, 47 - (1 - k) * 20, fitSize(`${name} GOT AWAY!`, 12, 190), w.C.col);
+    // a slanted strip slides in from the left: the leader's face, then GET TO THE / <RIDE>!!!
+    const k = 1 - Math.pow(1 - clamp(t * 3.2, 0, 1), 3), ox = (k - 1) * 200;
+    const full = MAP_TAG[G.M.ride] || 'GET TO THE GETAWAY', cut = full.indexOf(' THE ');
+    const verb = cut > 0 ? full.slice(0, cut + 4) : 'GET TO THE', tag = cut > 0 ? full.slice(cut + 5) : full;
+    const lead = [...G.P].sort((a, b) => b.score - a.score)[0], two = true, Y = 3;
+    // (mirrored into the top-right corner: clear of the scoreboard and of every racer's name tag)
+    ctx.save(); if (two) { ctx.translate(320 - ox, 0); ctx.scale(-1, 1); } else ctx.translate(ox, 0);
+    ctx.fillStyle = INK; ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(156, Y); ctx.lineTo(142, Y + 38); ctx.lineTo(0, Y + 38); ctx.fill();
+    ctx.fillStyle = 'rgba(28,22,34,0.94)'; ctx.beginPath(); ctx.moveTo(0, Y + 1); ctx.lineTo(154, Y + 1); ctx.lineTo(141, Y + 37); ctx.lineTo(0, Y + 37); ctx.fill();
+    ctx.fillStyle = '#7fe39a'; ctx.fillRect(0, Y + 1, 3, 36);
+    if (two) { ctx.restore(); ctx.save(); ctx.translate(320 - ox - 156, 0); }   // (text reads the right way round)
+    const bx = two ? 120 : 8, tx = two ? 6 : 42;
+    if (lead) { rr(bx, Y + 5, 28, 28, '#3a3044'); headIcon(lead, bx + 14, Y + 20, 1.6); }
+    txt(G.M.name, tx + (two ? 10 : 0), Y + 8, fitSize(G.M.name, 6, 104), '#ffd23a', { align: 'left' });
+    txt(verb, tx + (two ? 10 : 0), Y + 18, fitSize(verb, 8, 100), '#7fe39a', { align: 'left' });
+    txt(tag + '!!!', tx + (two ? 10 : 0), Y + 29, fitSize(tag + '!!!', 10, 100), '#ff4d4d', { align: 'left' });
+    ctx.restore();
+    const mids = G.cams.length > 1 ? [80, 240] : [160], cy = 52;
+    if (!G.demo) { const n = 3 - Math.floor(t / (READY_T / 3.2)); if (n >= 1) { const f = (t / (READY_T / 3.2)) % 1; for (const x of mids) txt(String(n), x, cy, Math.round((mids.length > 1 ? 20 : 26) - f * 8), CREAM); } }
+  } else if (st === 'run' && t < 0.6 && !G.demo) { const two = G.cams.length > 1; for (const x of two ? [80, 240] : [160]) txt('GO!', x, 52, Math.round((two ? 22 : 30) + t * 20), '#7fe39a'); }
+  else if (st === 'run' && G.boarded.length && !G.demo) {   // the ride is waiting: hurry!
+    const w = G.boarded[0], n = Math.max(1, Math.ceil(G.departT)), s = `${crewName(G, w)} GOT IN!`;
+    panel(96, 26, 128, 23, 0.8); txt(s, 160, 33, fitSize(s, 7, 120), w.C.col);
+    txt(`LEAVING IN ${n}`, 160, 43, 6, Math.floor(G.t * 6) % 2 ? '#ffd23a' : CREAM);
+  }
+  else if (st === 'away' && G.winners.length) {
+    const W = G.winners, k = clamp(t * 5, 0, 1), names = W.map(w => crewName(G, w)).join(' + ');
+    const s = `${names} GOT AWAY!`, col = W.length > 1 ? '#ffd23a' : W[0].C.col;
+    panel(50, 34 - (1 - k) * 20, 220, 26, 0.85); txt(s, 160, 47 - (1 - k) * 20, fitSize(s, 12, 210), col);
+    const tie = !G.champion() && Math.max(...G.P.map(p => p.score)) >= G.target();
+    if (tie && t > 0.5) txt('TIED AT THE TOP - NO WINNER YET!', 160, 66, 6, '#ff8a7a');
   }
 }
 function drawHUD(G) {
@@ -1978,8 +2058,8 @@ function drawHUD(G) {
   drawScores(G, 3, 3, G.P);
   drawProgress(G, 70, 172, 180);
   if (!split) {
-    if (humans[0]) drawMine(G, humans[0], 3, 152);
-  } else { drawMine(G, G.P[0], 3, 152); drawMine(G, G.P[1], 283 - (G.P[1].item ? 0 : 30), 152); }
+    if (humans[0]) drawMine(G, humans[0], 3, 148);
+  } else { drawMine(G, G.P[0], 3, 148); drawMine(G, G.P[1], 283 - (G.P[1].item ? 0 : 30), 148); }
   // first-round reminder of the controls
   if (!G.demo && G.round === 0 && (G.state === 'ready' || (G.state === 'run' && G.stateT < 4))) {
     const a = G.state === 'ready' ? 1 : clamp(4 - G.stateT, 0, 1); ctx.globalAlpha = a;
@@ -2035,13 +2115,17 @@ function drawOver(G) {
   const c = G.champ; if (!c) return;
   const k = clamp(G.overT * 3, 0, 1);
   ctx.fillStyle = `rgba(10,8,16,${0.55 * k})`; ctx.fillRect(0, 0, ART_W, ART_H);
-  panel(70, 40, 180, 116, 0.92);
+  panel(66, 22, 188, 136, 0.92);
   const name = crewName(G, c), line = c.human ? (G.mode === '2p' ? `${name} WINS!` : 'YOU WIN!') : `${name} WINS`;
-  headIcon(c, 160, 62, 2.2);
-  txt(line, 160, 84, fitSize(line, 14, 170), c.C.col);
-  txt(c.human || G.mode === 'cvc' ? 'THE GREATEST GETAWAY ARTIST' : 'BETTER LUCK NEXT TIME', 160, 98, 5, '#c9bfd6');
-  const ranked = G.P.slice().sort((a, b) => b.score - a.score);
-  ranked.forEach((p, i) => { const x = 104 + i * 37; headIcon(p, x, 114); txt(String(p.score), x + 10, 114, 7, p.C.col); });
+  headIcon(c, 160, 40, 2);
+  txt(line, 160, 59, fitSize(line, 14, 176), c.C.col);
+  txt(c.human || G.mode === 'cvc' ? 'THE GREATEST GETAWAY ARTIST' : 'BETTER LUCK NEXT TIME', 160, 71, 5, '#c9bfd6');
+  txt('GETAWAYS', 196, 81, 4, '#8f86a0'); txt('KOS', 232, 81, 4, '#8f86a0');
+  const ranked = G.P.slice().sort((a, b) => b.score - a.score || (b.kos || 0) - (a.kos || 0));
+  ranked.forEach((p, i) => { const y = 90 + i * 10;
+    if (p === c) rr(72, y - 5, 176, 10, 'rgba(255,210,58,0.13)');
+    headIcon(p, 82, y, 0.9); txt(crewName(G, p), 92, y + 0.5, fitSize(crewName(G, p), 6, 76), p.C.col, { align: 'left' });
+    txt(String(p.score), 196, y + 0.5, 7, CREAM); txt(String(p.kos || 0), 232, y + 0.5, 7, CREAM); });
   OVER_BTN.forEach((b, i) => {
     const sel = G.overSel === i, ok = G.overT > OVER_HOLD;
     rr(b.x - 1, 131, 58, 22, INK); rr(b.x, 132, 56, 20, sel && ok ? '#2f6bd8' : '#2a2534');
@@ -2059,9 +2143,9 @@ function render(G) {
   ctx.setTransform(S, 0, 0, S, OX, OY); ctx.imageSmoothingEnabled = false;
   if (G.cams.length > 1) {
     const vps = [{ x: 0, y: 0, w: ART_W / 2 - 1, h: ART_H }, { x: ART_W / 2 + 1, y: 0, w: ART_W / 2 - 1, h: ART_H }];
-    G.cams.forEach((c, i) => { drawView(G, c, vps[i], SPLIT_Z); drawGoalArrow(G, c, vps[i], SPLIT_Z); });
+    G.cams.forEach((c, i) => { drawView(G, c, vps[i], SPLIT_Z); drawHurt(c.p, vps[i]); drawGoalArrow(G, c, vps[i], SPLIT_Z); });
     rr(ART_W / 2 - 1, 0, 2, ART_H, INK);
-  } else { const vp = { x: 0, y: 0, w: ART_W, h: ART_H }; drawView(G, G.cams[0], vp, 1); drawGoalArrow(G, G.cams[0], vp, 1); }
+  } else { const vp = { x: 0, y: 0, w: ART_W, h: ART_H }; drawView(G, G.cams[0], vp, 1); drawHurt(G.cams[0].p, vp); drawGoalArrow(G, G.cams[0], vp, 1); }
   ctx.setTransform(S, 0, 0, S, OX, OY);
   if (G.screen === 'title') drawTitle(G);
   else if (G.screen === 'how') drawHelp();
