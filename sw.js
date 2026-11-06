@@ -1,11 +1,11 @@
-// Offline support: after the first visit, the picker and all five games load from the Chromebook's cache, so they
+// Offline support: after the first visit, the picker and all six games load from the Chromebook's cache, so they
 // start with no internet. Pages and their scripts are fetched fresh when online (skipping the browser's own
 // cache, so an upload shows up on the next load), with the saved copy as backup; the big unchanging files
 // (sounds, physics) come straight from the cache. build.sh stamps VERSION with a
 // hash of the site files, so every upload replaces the old cache.
-const VERSION = 'caff59a187';
+const VERSION = '4ecd5daec1';
 const CACHE = 'floppy-' + VERSION, FONTS = 'floppy-fonts';
-const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'clips.js', 'net.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'snipers.html', 'clips.js', 'net.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));

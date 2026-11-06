@@ -21,12 +21,12 @@
 </head>
 <body>
 <canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley or Boxing. Arrows to choose, Enter to play."></canvas>
-<nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a></nav>
+<nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a> <a href="snipers.html">Play Floppy Snipers</a></nav>
 <script src="net.js"></script>
 <script>
 (() => {
 'use strict';
-// The game picker: five cards (three on top, two below), each with a little looping scene. Arrows (or A/D, W/E, I/O) choose, Enter plays.
+// The game picker: six cards (three on top, three below), each with a little looping scene. Arrows (or A/D, W/E, I/O) choose, Enter plays.
 const cv = document.getElementById('pick'), ctx = cv.getContext('2d');
 const ART_W = 440, ART_H = 290, INK = '#141019', CREAM = '#fff6e0', ORANGE = '#ff8a2a';
 const GAMES = [
@@ -35,8 +35,9 @@ const GAMES = [
   { id: 'soccer', name: 'FLOPPY SOCCER', tag: 'RAGDOLL FOOTBALL', href: 'soccer.html', col: '#2f9a4a' },
   { id: 'volley', name: 'FLOPPY VOLLEY', tag: 'RAGDOLL VOLLEYBALL', href: 'volley.html', col: '#e0a32a' },
   { id: 'boxing', name: 'FLOPPY BOXING', tag: 'RAGDOLL BOXING', href: 'boxing.html', col: '#b8323a' },
+  { id: 'snipers', name: 'FLOPPY SNIPERS', tag: 'ROOFTOP SHOOTOUT', href: 'snipers.html', col: '#ff8a2a' },
 ];
-const CARD = { w: 128, h: 104, x: [16, 156, 296, 86, 226], y: [52, 52, 52, 170, 170] };
+const CARD = { w: 128, h: 104, x: [16, 156, 296, 16, 156, 296], y: [52, 52, 52, 170, 170, 170] };
 let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null, online = 0, frame = null;
 try { sel = Math.max(0, GAMES.findIndex(g => g.id === localStorage.getItem('floppy-last-game'))); } catch (e) { /* storage unavailable */ }
 function resize() {
@@ -166,6 +167,34 @@ function boxingScene(x0, y0, k) {
   for (let i = 0; i < 3; i++) R(x0 + 7, y0 + 20 + i * 7, 106, 2, '#d93a3f');
   if (hit) { const sx = redTurn ? x0 + 80 : x0 + 40, sy = y0 + 12; R(sx - 3, sy, 7, 1, '#ffdd00'); R(sx, sy - 3, 1, 7, '#ffdd00'); R(sx - 2, sy - 2, 1, 1, '#fff6a0'); R(sx + 2, sy + 2, 1, 1, '#fff6a0'); }
 }
+// a sniper: the dude with a little rifle on the end of the arm
+function sniper(x, y, lean, col, arm) {
+  dude(x, y, lean, col, arm, null);
+  ctx.save(); ctx.translate(OX + x * S, OY + y * S); ctx.rotate(lean); ctx.translate(0, -34 * S); ctx.rotate(-arm);
+  const P = (px, py, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(px * S), Math.round(py * S), Math.ceil(w * S), Math.ceil(h * S)); };
+  P(-2, 12, 4, 15, INK); P(-1, 13, 2, 13, '#3a3f4c'); P(-1, 13, 2, 3, '#7a4a26');
+  ctx.restore();
+}
+function snipersScene(x0, y0, k) {
+  R(x0, y0, CARD.w - 8, 60, '#2a2347');
+  R(x0 + 92, y0 + 6, 10, 10, '#ffe7a8');
+  for (let i = 0; i < 7; i++) R(x0 + i * 18, y0 + 22 - (i * 7) % 12, 14, 28, '#3a3160');
+  for (let i = 0; i < 10; i++) R(x0 + 3 + (i * 29) % 110, y0 + 26 + (i * 5) % 14, 1, 1, '#ffd36a');
+  R(x0 + 6, y0 + 50, CARD.w - 20, 2, '#d8cbb8'); R(x0 + 8, y0 + 52, CARD.w - 24, 8, '#8a3b2a');
+  for (let i = 0; i < 6; i++) R(x0 + 12 + i * 17, y0 + 55, 4, 3, i % 3 ? '#ffd36a' : '#3b2018');
+  // a duel on a loop: one aims up and fires, the other gets knocked back and wobbles; then it swaps
+  const p = (t * 0.8) % 2, redTurn = p < 1, h = redTurn ? p : p - 1;
+  const aim = h < 0.45 ? 0.2 + (h / 0.45) * 1.45 : Math.max(0.2, 1.65 - (h - 0.45) * 5);
+  const hit = h > 0.45 && h < 0.85, push = hit ? Math.sin((h - 0.45) / 0.4 * Math.PI) * 6 * k : 0;
+  const fire = h > 0.45 && h < 0.55;
+  const rx = x0 + 24 - (redTurn ? 0 : push), bx = x0 + 96 + (redTurn ? push : 0);
+  sniper(rx, y0 + 50, (redTurn ? -0.05 : -push * 0.06) + Math.sin(t * 3) * 0.05 * k, '#d93a3f', redTurn ? aim : 0.2);
+  ctx.save(); ctx.translate(OX + bx * S, 0); ctx.scale(-1, 1); ctx.translate(-(OX + bx * S), 0);
+  sniper(bx, y0 + 50, (redTurn ? -push * 0.06 : -0.05) + Math.sin(t * 3 + 1) * 0.05 * k, '#2f6bd8', redTurn ? 0.2 : aim);
+  ctx.restore();
+  if (fire) { const ya = y0 + 30; R(rx + 8, ya, bx - rx - 16, 1, '#fff2b0'); R(redTurn ? rx + 6 : bx - 9, ya - 1, 3, 3, '#ffb347'); }
+  if (hit) { const sx = redTurn ? bx : rx, sy = y0 + 4; R(sx - 3, sy, 7, 1, '#ffdd00'); R(sx, sy - 3, 1, 7, '#ffdd00'); }
+}
 function draw() {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -179,7 +208,7 @@ function draw() {
     const on = i === sel, bob = on ? Math.round(Math.sin(t * 5) * 1.5) - 2 : 0, x = CARD.x[i], y = CARD.y[i] + bob;
     R(x - 2, y - 2, CARD.w + 4, CARD.h + 4, on ? ORANGE : INK); R(x, y, CARD.w, CARD.h, '#1b2031'); R(x, y + CARD.h - 3, CARD.w, 3, on ? '#c4621a' : '#12151f');
     R(x + 3, y + 3, CARD.w - 6, 62, INK);
-    [hoopsScene, pongScene, soccerScene, volleyScene, boxingScene][i](x + 4, y + 4, on ? 1.4 : 0.6);
+    [hoopsScene, pongScene, soccerScene, volleyScene, boxingScene, snipersScene][i](x + 4, y + 4, on ? 1.4 : 0.6);
     txt(gm.name, x + CARD.w / 2, y + 78, 8, on ? CREAM : '#b9c3dd', true);
     txt(gm.tag, x + CARD.w / 2, y + 92, 8, on ? ORANGE : '#59627d');
   });
@@ -235,11 +264,11 @@ window.addEventListener('resize', resize);
 window.addEventListener('keydown', e => {
   if (frame) return;
   const c = e.code;
-  // left/right step through the cards; up/down hop between the rows (top 0-2, bottom 3-4)
+  // left/right step through the cards; up/down hop between the rows (top 0-2, bottom 3-5)
   if (['ArrowLeft', 'KeyA', 'KeyW', 'KeyI'].includes(c)) { sel = (sel + GAMES.length - 1) % GAMES.length; e.preventDefault(); }
   else if (['ArrowRight', 'KeyD', 'KeyE', 'KeyO'].includes(c)) { sel = (sel + 1) % GAMES.length; e.preventDefault(); }
-  else if (c === 'ArrowDown' || c === 'KeyS') { sel = [3, 3, 4, 3, 4][sel]; e.preventDefault(); }
-  else if (c === 'ArrowUp') { sel = [0, 1, 2, 0, 2][sel]; e.preventDefault(); }
+  else if (c === 'ArrowDown' || c === 'KeyS') { sel = sel < 3 ? sel + 3 : sel; e.preventDefault(); }
+  else if (c === 'ArrowUp') { sel = sel >= 3 ? sel - 3 : sel; e.preventDefault(); }
   else if (c === 'Enter' || c === 'Space') { e.preventDefault(); go(sel); }
 });
 function cardAt(e) {
