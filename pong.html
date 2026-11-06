@@ -526,13 +526,16 @@ const MODE_P = 0.5, MODE_EXTRA = 1 / 6;   // chance a point gets a mode, and of 
 const TRAMPS = [-(TABLE_HALF + 3.7), TABLE_HALF + 3.7], TRAMP_W = 0.55;   // (same spot on the floor as before the table shrank: behind the singles home now, and a bounce throws you
 // toward the table, so this keeps ~3 m of floor between)
 // r: radius (m, drawn a bit bigger than real so you can see it), e: table bounce, gs: gravity scale, dens: how hard it hits people
+// every ball flies, bounces, spins and speeds up the same (like a ping pong ball): only its size and its weight (dens) differ,
+// and weight only changes how hard it shoves you back when you hit it (a bowling ball sends you flying, a ping pong ball doesn't)
 const BALLS = [
-  { id: 'pingpong', name: 'PING PONG', r: 0.12, e: 0.98, gs: 1, dens: 2, spin: 1 },
-  { id: 'tennis', name: 'TENNIS', r: 0.14, e: 0.91, gs: 1.05, dens: 4, spin: 0.9 },
-  { id: 'basket', name: 'BASKETBALL', r: 0.22, e: 0.89, gs: 1.09, dens: 6, spin: 0.7 },
-  { id: 'bowling', name: 'BOWLING', r: 0.2, e: 0.51, gs: 1.23, dens: 60, spin: 0.4 },
-  { id: 'beach', name: 'BEACH BALL', r: 0.3, e: 0.97, gs: 0.45, dens: 0.5, spin: 1.2 },
+  { id: 'pingpong', name: 'PING PONG', r: 0.12, dens: 2 },
+  { id: 'tennis', name: 'TENNIS', r: 0.14, dens: 4 },
+  { id: 'basket', name: 'BASKETBALL', r: 0.22, dens: 6 },
+  { id: 'bowling', name: 'BOWLING', r: 0.2, dens: 60 },
+  { id: 'beach', name: 'BEACH BALL', r: 0.3, dens: 0.5 },
 ];
+const BALL_E = 0.98, RECOIL_K = 0.65;   // (bounce kept off the table; recoil off the paddle per m/s of the ball's speed, times weight/(weight+20))
 const SPINS = [
   { id: 'normal', name: 'NORMAL SPIN', k: 1 },
   { id: 'extreme', name: 'EXTREME SPIN', k: 2.4 },
@@ -1010,13 +1013,12 @@ function circRect(x, y, r, R) {
   const d = Math.sqrt(d2); return { nx: dx / d, ny: dy / d, pen: r - d };
 }
 function newBall(B) { return { x: 0, y: 2.6, vx: 0, vy: 0, r: B.r, rot: 0, w: 0, spin: 0, spinDir: 1, held: true }; }
-// W: { g, e, magnus, spinKick, drag }. ev(type, a, b) hears 'table' (side, speed), 'edge', 'net', 'floor' (x, speed), 'wall'.
+// W: { g, e, magnus, spinKick }. ev(type, a, b) hears 'table' (side, speed), 'edge', 'net', 'floor' (x, speed), 'wall'.
 function stepBall(b, dt, W, ev) {
   const n = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy) * dt / (b.r * 0.6)));
   const h = dt / n;
   for (let i = 0; i < n; i++) {
     b.vy -= (W.g + b.spin * W.magnus) * h;
-    if (W.drag) { const k = 1 - W.drag * h; b.vx *= k; b.vy *= k; }
     if (W.wind) b.vx += W.wind * h;
     b.x += b.vx * h; b.y += b.vy * h; b.rot += b.w * h;
     let c = circRect(b.x, b.y, b.r, TABLE_RECT);
@@ -1038,10 +1040,13 @@ function stepBall(b, dt, W, ev) {
     c = circRect(b.x, b.y, b.r, NET_RECT);
     if (c) {
       b.x += c.nx * c.pen; b.y += c.ny * c.pen;
-      if (c.ny > 0.6) { b.vy = Math.abs(b.vy) * 0.35 + 0.4; b.vx *= 0.55; }   // clipped the tape: it trickles over
-      else { b.vx = -b.vx * 0.15; b.vy *= 0.5; }
-      b.spin = 0;
-      if (ev) ev('net', 0, Math.abs(b.vx));
+      // (only when it's moving into the net: a ball resting against its side just drops, it doesn't get stuck there sliding down)
+      if (b.vx * c.nx + b.vy * c.ny < 0) {
+        if (c.ny > 0.6) { b.vy = Math.abs(b.vy) * 0.35 + 0.4; b.vx *= 0.55; }   // clipped the tape: it trickles over
+        else { b.vx = -b.vx * 0.15; b.vy *= 0.5; }
+        b.spin = 0;
+        if (ev) ev('net', 0, Math.abs(b.vx));
+      }
     }
     if (b.y - b.r < 0) {
       b.y = b.r;
@@ -1241,14 +1246,16 @@ class Player {
   }
   land(f, gr) {
     const G = this.G, hard = -this.vy;
-    // a trampoline, or the springy bouncy-house floor, throws you back up instead
-    if (gr === 0 && !this.ghost && ((G.W.tramp && onTramp(f.x) && hard > PSCALE) || (G.map.bouncy && hard > 2.5 * PSCALE))) {
+    // a trampoline, or the springy bouncy-house floor, throws you back up instead (two in a row at most, so a trampoline
+    // and the bouncy floor can't bat you back and forth for ever)
+    if (gr === 0 && !this.ghost && (this.rebounds || 0) < 2 && ((G.W.tramp && onTramp(f.x) && hard > PSCALE) || (G.map.bouncy && hard > 2.5 * PSCALE))) {
+      this.rebounds = (this.rebounds || 0) + 1;
       const tramp = G.W.tramp && onTramp(f.x);
       this.vy = tramp ? Math.max(6.5 * PSCALE, hard * 1.05) : hard * 0.6; this.cy += 0.02; if (tramp) this.vx = this.vx * 0.7 - Math.sign(f.x) * 1.2; this.squash = 1;
       G.sfx.tone && G.sfx.tone('sine', 180, 520, 0.15, 0.06); G.dust(f.x, 0, 3);
       return;
     }
-    this.air = false; this.fx = f.x; this.fy = gr;
+    this.air = false; this.fx = f.x; this.fy = gr; this.rebounds = 0;
     this.slide = this.vx * ((1 - Math.min(1, G.fric)) * 0.9 + 0.12);
     this.w = this.w * 0.35 + this.vx * Math.cos(this.a) * 0.5; this.squash = 1;
     if (Math.abs(this.a) > 1.05) this.topple();
@@ -1404,8 +1411,7 @@ class CPU {
     const G = this.G, p = this.p, L = this.L;
     const mate = G.doubles ? G.players.find(q => q !== p && q.team === p.team) : null;
     if (!G.incoming(p) || (mate && this.yields(mate))) {   // nothing coming (or our CPU partner is better placed): drift back home while the ball is on the other side
-      const live = clamp((G.W.e - 0.4) / 0.5 - G.W.drag * 2, 0.25, 1);   // (a dead ball, bowling, or a draggy beach ball dies off the end: wait close in for it)
-      let depth = Math.min(TABLE_HALF + (Math.abs(p.home) - TABLE_HALF) * live + Math.min(Math.floor((G.rally + 2) / 3), RALLY_MAXK) * RALLY_BACK * live, WALL_X - 0.9);   // (further back as the rally steps up)
+      let depth = Math.min(Math.abs(p.home) + Math.min(Math.floor((G.rally + 2) / 3), RALLY_MAXK) * RALLY_BACK, WALL_X - 0.9);   // (further back as the rally steps up)
       if (mate && Math.abs(p.home) < Math.abs(mate.home)) depth = Math.max(TABLE_HALF + 0.6, Math.min(depth, Math.abs(mate.fx) - 1.3));   // doubles: the front player stays in front of the back one, not stacked on him
       if (G.W.tramp) for (const t of TRAMPS) if (Math.abs(depth - Math.abs(t)) < TRAMP_W + 0.3) depth = Math.abs(t) + (depth < Math.abs(t) ? -1 : 1) * (TRAMP_W + 0.3);   // (wait beside a trampoline, not on it)
       const dx = p.os * depth - p.fx;
@@ -1576,7 +1582,7 @@ class Game {
     const B = this.B, E = this.env, S = this.spinMode;
     this.rollModes();
     const M = this.map, mod = this.modeK(), grav = Math.max(0.3, E.grav * (M.grav || 1));
-    this.W = { g: GRAVITY * PSCALE * B.gs * grav * mod.ballG, e: B.e, magnus: 0.35 * PSCALE * S.k * B.spin, spinKick: 1.08 * S.k * B.spin, drag: B.id === 'beach' ? 0.12 : 0,
+    this.W = { g: GRAVITY * PSCALE * grav * mod.ballG, e: BALL_E, magnus: 0.35 * PSCALE * S.k, spinKick: 1.08 * S.k,
       wind: mod.wind ? (Math.random() < 0.5 ? -1 : 1) * rand(0.6, 1.1) : 0, tramp: mod.tramp, floorE: M.bouncy ? 1.05 : 0, wallE: M.bouncy ? 0.95 : 0 };
     // the players' own fall and hop height scale with their size (same hang time, same look); sideways hop speed stays in metres
     this.pg = GRAVITY * grav * PSCALE * PG_K; this.jumpK = Math.pow(grav, 0.25) * (M.jump || 1) * mod.jump * PSCALE * PG_K; this.fric = M.fric * E.fric;
@@ -1676,8 +1682,8 @@ class Game {
       const cost = 3 * clash + 0.5 * dm + Math.abs(tm - 0.98) + 2.5 * Math.abs(xb - 0.2 * TL) + 1.2 * Math.abs(pk - TABLE_TOP - 0.36 * TL) + 0.6 * Math.abs(0.91 * Math.abs(vx) - 0.92 * TL);
       if (cost < best) { best = cost; v = { vx, vy }; }
     }
-    if (!v || best > 1.2) {   // a dead ball (bowling) or a weird mix: lob it straight to them like before
-      const a = solveArc(h.x, h.y, s.home + s.dir * 0.2, SHOULDER_H + 0.05, Math.max(h.y, SHOULDER_H) + 0.9 * PSCALE, W.g); v = { vx: a.vx * (1 + W.drag * a.T * 0.5), vy: a.vy };
+    if (!v || best > 1.2) {   // a weird mix: lob it straight to them like before
+      const a = solveArc(h.x, h.y, s.home + s.dir * 0.2, SHOULDER_H + 0.05, Math.max(h.y, SHOULDER_H) + 0.9 * PSCALE, W.g); v = { vx: a.vx, vy: a.vy };
     }
     Object.assign(b, { x: h.x, y: h.y, vx: v.vx, vy: v.vy, held: false, spin: 0 });
     this.toss = true; this.state = 'play'; this.playT = 0; this.touches++;
@@ -1802,8 +1808,8 @@ class Game {
     // off the rim of the paddle it goes wild, and so does a fast one (a top-step ball is hard to get back); the CPU's level adds its own wobble
     const wild = Math.max(0, off - 0.6) * 2.5 + Math.max(0, inSpd - FAST_IN) * 0.35 + (L ? L.mis * 1.3 * (1 - lazy) : 0);
     if (W.wind && v.T) v.vx -= 0.5 * W.wind * v.T;   // aim into the wind so it curves back onto the spot (it still drifts, but lands in)
-    v.vx *= 1 + gauss() * (0.02 + wild * 0.06) + W.drag * v.T * 0.5; v.vy += gauss() * (0.05 + wild * 0.3);   // (halved: the arcs fly twice as far)
-    // a dead ball (bowling, or a short soft one) can bounce twice without ever leaving the table, and nobody can reach
+    v.vx *= 1 + gauss() * (0.02 + wild * 0.06); v.vy += gauss() * (0.05 + wild * 0.3);   // (halved: the arcs fly twice as far)
+    // a short soft one can bounce twice without ever leaving the table, and nobody can reach
     // that without touching it: push it a bit longer until it gets off the end
     for (let k = 0; k < 12; k++) {
       const far = predictBall({ ...b, vx: v.vx, vy: v.vy, spin: 0 }, W, 3).evs.filter(e => e.type === 'table' && e.a === d);
@@ -1815,6 +1821,9 @@ class Game {
     if (Math.random() < lazy * clamp((inSpd - FAST_IN) / 2.3, 0, 1)) v = { vx: d * rand(0.4, 1.2), vy: rand(2, 3.5) };
     Object.assign(b, { vx: v.vx, vy: v.vy, spin: 0, spinDir: d, w: -d * 30 });
     Object.assign(this, { toss: false, lastTeam: p.team, oppBounces: 0, lastNet: false, spinTeam: p.team });
+    // the heavier the ball, the harder it shoves you back (and the faster the rally gets, the further: a bowling ball deep in a rally sends you flying)
+    const kick = RECOIL_K * Math.hypot(b.vx, b.vy) * this.B.dens / (this.B.dens + 20);
+    p.knock(-d * kick, kick * 0.2, COM_H);   // (pushed at the middle of the body: shoved back, not spun over)
     this.rally++; this.touches++; this.playT = 0; p.hitCd = 0.3; p.swing = 1;
     this.sfx.tock(Math.hypot(b.vx, b.vy) / 6);
     if (SET.grunts && Math.random() < 0.2) this.sfx.grunt();
