@@ -481,7 +481,7 @@ const LAZY_POP = 0.7, FAST_IN = 7.3, CONTACT_TL = 0.17;
 // RALLY_UX ~1.2 table lengths/s; the top step is ~1.6x that (~1.9 TL/s, like PPC); each step pushes the CPU RALLY_BACK m further back
 const RALLY_UX = 4.63, RALLY_STEP = 1.12, RALLY_MAXK = 4, RALLY_BACK = 0.85, RALLY_CAP = RALLY_UX * RALLY_STEP ** RALLY_MAXK * 1.04;
 const AIR_RIGHT = 5, AIR_DAMP = 1.8;
-const JUMP_V = 7.55, ARM_SPEED = 12, POINT_T = 3.5, SERVE_T = 1.05, WALL_X = 10.6;
+const JUMP_V = 7.55, ARM_SPEED = 12, POINT_T = 3.5, SERVE_T = 1.05, WALL_X = 19.5;   // (the far end of the painted scenery: far past anywhere a rally goes, so nothing stops a long one)
 const CAT_WORLD = 1, CAT_TABLE = 2, CAT_PLAYER = 4, CAT_BALL = 8, CAT_PADDLE = 16, CAT_REF = 32;
 
 // ---------------------------------------------------------------- what can change every point
@@ -520,7 +520,17 @@ const MODES = [
   { id: 'tallnet', cat: 'TABLE', slot: 'net', name: 'TALL NET', sub: 'LOB IT OVER', net: 3 },
   { id: 'lownet', cat: 'TABLE', slot: 'net', name: 'LOW NET', sub: 'SMASH CITY', net: 0.35 },
   { id: 'tramp', cat: 'OBSTACLES', slot: 'tramp', name: 'TRAMPOLINES', sub: 'BOUNCE PADS BEHIND YOU' },
+  // the ping pong ones
+  { id: 'bigpad', cat: 'PLAYERS', slot: 'paddle', name: 'BIG PADDLES', sub: 'FRYING PANS', body: { padR: 1.9 } },
+  { id: 'tinypad', cat: 'PLAYERS', slot: 'paddle', name: 'TINY PADDLES', sub: 'HIT IT WITH A SPOON', body: { padR: 0.6 } },
+  { id: 'hotball', cat: 'BALL', slot: 'speed', name: 'HOT BALL', sub: 'FASTER EVERY HIT', heat: 1 },
+  { id: 'ghostball', cat: 'BALL', slot: 'look', name: 'GHOST BALL', sub: 'GONE OVER THE NET', ghost: 1 },
+  { id: 'bouncytable', cat: 'TABLE', slot: 'bounce', name: 'BOUNCY TABLE', sub: 'IT FLIES OFF THE TOP', tableE: 1.14 },
+  { id: 'deadtable', cat: 'TABLE', slot: 'bounce', name: 'DEAD TABLE', sub: 'IT BARELY BOUNCES', tableE: 0.62 },
+  { id: 'bumpers', cat: 'OBSTACLES', slot: 'bumper', name: 'BUMPERS', sub: 'PINBALL OVER THE TABLE', bump: 1 },
 ];
+// BUMPERS: one hanging over the middle of each half; whatever hits one gets kicked off it, harder than it came in
+const BUMPERS = [{ x: -1.05, y: TABLE_TOP + 1.05 }, { x: 1.05, y: TABLE_TOP + 1.05 }], BUMP_R = 0.15;
 const MODE_CATS = ['PLAYERS', 'BALL', 'PHYSICS', 'TABLE', 'OBSTACLES'];
 const MODE_P = 0.5, MODE_EXTRA = 1 / 6;   // chance a point gets a mode, and of each further slot stacking on
 const TRAMPS = [-(TABLE_HALF + 3.7), TABLE_HALF + 3.7], TRAMP_W = 0.55;   // (same spot on the floor as before the table shrank: behind the singles home now, and a bounce throws you
@@ -559,7 +569,7 @@ const CPU_LEVELS = {
 };
 
 // ---------------------------------------------------------------- sounds
-// Meme clips (mp3s, base64 in clips.js). The same green sounds as Floppy Hoops; here they go off on game point.
+// Meme clips (mp3s, base64 in clips.js). The same green sounds as Floppy Hoops; here one goes off when FINISH HIM lands.
 const CLIP_SRC = window.FLOPPY_CLIPS || {};
 const SOUND_REEL = [
   { id: 'greengiant', name: 'HO HO HO GREEN GIANT', clip: 'greengiant', trim: [0.1, 2.6], gain: 0.86 },
@@ -575,9 +585,9 @@ const SOUND_REEL = [
   { id: 'bigsplash', name: 'ROCKET LEAGUE BIG SPLASH', clip: 'bigsplash', trim: [0, 3.3], gain: 1 },
   { id: 'ding', name: 'CORRECT ANSWER DING', clip: 'ding', trim: [0.06, 1.0], gain: 1 },
   // cut at 7.2s: after that it's the TikTok end card
-  { id: 'greenfn', name: 'GREEN FN', when: 'MATCH WIN', clip: 'greenfn', trim: [0, 7.19], gain: 0.94, winner: true },
+  { id: 'greenfn', name: 'GREEN FN', clip: 'greenfn', trim: [0, 7.19], gain: 0.94 },
 ];
-SOUND_REEL.forEach(e => { if (!e.when) e.when = 'GAME POINT'; });
+SOUND_REEL.forEach(e => { if (!e.when) e.when = 'FINISH HIM'; });
 const SOUND_LIST = SOUND_REEL.filter(e => !e.clip || CLIP_SRC[e.clip]);
 const SOUND_BY_ID = Object.fromEntries(SOUND_REEL.map(e => [e.id, e]));
 
@@ -586,8 +596,8 @@ const SOUND_BY_ID = Object.fromEntries(SOUND_REEL.map(e => [e.id, e]));
 // ---------------------------------------------------------------- settings
 const SETTINGS_KEY = 'floppy-pong-settings-v3';
 const DEFAULTS = {
-  target: 5, winBy2: 0, serves: 1, tableTouch: 1, shuffle: 'point', level: 'normal', muted: 0, grunts: 1, memes: 'off',
-  pools: { maps: MAPS.map(m => m.id), balls: BALLS.map(b => b.id), spins: ['normal', 'extreme'], envs: ENVS.map(e => e.id), players: PLAYER_AMTS.map(q => q.id) },
+  target: 11, winBy2: 0, serves: 1, tableTouch: 0, shuffle: 'point', level: 'normal', muted: 0, grunts: 1, memes: 'on',
+  pools: { maps: MAPS.map(m => m.id), balls: BALLS.map(b => b.id), spins: ['normal', 'extreme'], envs: ENVS.map(e => e.id), players: ['doubles'] },
   sounds: {}, tour: { size: 8, names: ['YOU', 'CPU 1', 'CPU 2', 'CPU 3', 'CPU 4', 'CPU 5', 'CPU 6', 'CPU 7'], cpu: [0, 1, 1, 1, 1, 1, 1, 1] },
   modes: Object.fromEntries(MODES.map(m => [m.id, 1])),   // 0 off, 1 on, 2 always
 };
@@ -607,6 +617,10 @@ function loadSettings() {
     out.flow2 = 1;
   }
   delete out.doubles;
+  // Nov 2026: doubles, first to 11, touching the table allowed and the meme characters became the defaults (once, for old saves)
+  if (!s.flow3) {
+    out.pools.players = ['doubles']; out.target = 11; out.tableTouch = 0; out.memes = 'on'; out.flow3 = 1;
+  }
   if (![1, 2, 3, 5].includes(+out.serves)) out.serves = 1;
   if (!CPU_LEVELS[out.level]) out.level = 'normal';
   out.memes = out.memes === 'on' ? 'on' : 'off';
@@ -750,14 +764,531 @@ class Sfx {
 // drawn on top every frame. crowd: rows of fans { yb: feet, x0, x1 }.
 const MAP_ART = {};
 const CROWD_ROWS = {
-  gym:   [100, 112, 124, 136].map(yb => ({ yb, x0: 4, x1: 396 })),
-  beach: [{ yb: 150, x0: 4, x1: 150 }, { yb: 150, x0: 250, x1: 396 }, { yb: 163, x0: 4, x1: 396 }],
+  gym:   [109, 121, 133, 145].map(yb => ({ yb, x0: 4, x1: 396 })),   // (the rows of Hoops' bleachers, set into the stage)
+  ice:   [109, 121, 133, 145].map(yb => ({ yb, x0: 4, x1: 396 })),
   lodge: [112, 124, 136].map(yb => ({ yb, x0: 30, x1: 370 })),
   ferry: [{ yb: 112, x0: 40, x1: 360 }, { yb: 160, x0: 4, x1: 396 }],
   diner: [{ yb: 138, x0: 16, x1: 120 }, { yb: 138, x0: 140, x1: 260 }, { yb: 138, x0: 280, x1: 384 }, { yb: 163, x0: 4, x1: 396 }],
 };
+// ==== PORTED FROM FLOPPY HOOPS (compare/port_hoops_maps.py): the painted courts and the dragon ====
+const TOKYO_SIGNS = [];
+const DRG = { ol: '#0e0d12', dk: '#1c1b21', body: '#2b2a31', mid: '#35343d', hi: '#4a4954', belly: '#57504a', belly2: '#463f3a', bone: '#9a9184', bone2: '#5e5850', mem: '#232229', vein: '#1a1920' };
+const P1 = (g, x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+let dragonCache = null;
+function dragonArt() {
+  if (dragonCache) return dragonCache;
+  const D = DRG;
+  const sprite = draw => { const [c, g] = mk(ART_W, ART_H); draw((x, y, col) => P1(g, Math.round(x), Math.round(y), col)); return c; };
+  const ln = (P, x0, y0, x1, y1, col, w = 1) => { const n = Math.max(1, Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) for (let k = 0; k < w; k++) P(lerp(x0, x1, i / n), lerp(y0, y1, i / n) + k, col); };
+  // a union of ovals with an ink outline, a lit top edge and (on the belly ovals) striped plates
+  const shape = (P, blobs) => {
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const b of blobs) { x0 = Math.min(x0, b[0] - b[2] - 1); x1 = Math.max(x1, b[0] + b[2] + 1); y0 = Math.min(y0, b[1] - b[3] - 1); y1 = Math.max(y1, b[1] + b[3] + 1); }
+    const hit = (x, y) => { let best = null, bd = 1; for (const b of blobs) { const d = ((x - b[0]) / b[2]) ** 2 + ((y - b[1]) / b[3]) ** 2; if (d <= bd) { bd = d; best = b; } } return best; };
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const b = hit(x, y); if (!b) continue;
+      if (!hit(x - 1, y) || !hit(x + 1, y) || !hit(x, y - 1) || !hit(x, y + 1)) { P(x, y, D.ol); continue; }
+      const ly = (y - b[1]) / b[3];
+      let col = (x * 3 + y * 5) % 7 === 0 ? D.mid : D.body;
+      if (b[4] && ly > 0.3) col = y % 3 === 0 ? D.belly2 : D.belly;
+      else if (!hit(x, y - 2) || !hit(x, y - 3)) col = D.hi;
+      else if (ly > 0.55) col = D.dk;
+      P(x, y, col);
+    }
+    return hit;
+  };
+  const poly = (P, pts) => {
+    const inside = (x, y) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, yi] = pts[i], [xj, yj] = pts[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    for (let y = Math.min(...ys); y <= Math.max(...ys); y++) for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
+      if (!inside(x + 0.5, y + 0.5)) continue;
+      const edge = !inside(x - 0.5, y + 0.5) || !inside(x + 1.5, y + 0.5) || !inside(x + 0.5, y - 0.5) || !inside(x + 0.5, y + 1.5);
+      P(x, y, edge ? D.ol : (x * 2 + y) % 9 === 0 ? D.vein : D.mem);
+    }
+  };
+  const wing = (pts, elbow, tips) => sprite(P => {
+    poly(P, pts);
+    ln(P, pts[0][0], pts[0][1], elbow[0], elbow[1], D.mid, 2);
+    for (const q of tips) ln(P, elbow[0], elbow[1], q[0], q[1], D.mid);
+    P(elbow[0], elbow[1] - 1, D.bone); P(elbow[0] - 1, elbow[1] - 2, D.bone);
+  });
+  const horn = (P, x0, y0, x1, y1, w) => { for (let i = 0; i <= 16; i++) { const u = i / 16, x = lerp(x0, x1, u), y = lerp(y0, y1, u) - Math.sin(u * Math.PI) * 2; P(x, y, D.bone); if (u < 0.6 && w > 1) P(x, y + 1, D.bone2); } };
+  const discs = {};
+  for (const [k, col] of [['ol', D.ol], ['body', D.body], ['hi', D.hi]]) discs[k] = [];
+  for (let r = 0; r <= 10; r++) for (const k of ['ol', 'body', 'hi']) {
+    const [c, g] = mk(2 * r + 1, 2 * r + 1); g.fillStyle = DRG[k];
+    for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r + r * 0.8) g.fillRect(x + r, y + r, 1, 1);
+    discs[k][r] = c;
+  }
+  dragonCache = {
+    discs,
+    body: sprite(P => {
+      const hit = shape(P, [[140, 96, 19, 12, 1], [167, 94, 30, 14, 1], [197, 90, 22, 15], [200, 100, 13, 10], [134, 105, 6, 8], [129, 112, 8, 3], [187, 111, 10, 3]]);
+      for (let x = 150; x <= 216; x += 5) { let y = 60; while (y < 120 && !hit(x, y)) y++; if (y < 120) { P(x, y - 1, D.dk); P(x + 1, y - 1, D.dk); P(x, y - 2, D.dk); P(x, y - 3, D.bone2); } }
+      for (const [cx, cy] of [[121, 114], [124, 114], [127, 114], [177, 113], [180, 113]]) { P(cx, cy, D.bone); P(cx + 1, cy, D.bone2); }   // claws
+    }),
+    wingF: wing([[140, 86], [156, 66], [172, 57], [192, 63], [222, 80], [208, 84], [198, 78], [186, 85], [174, 79], [162, 86], [150, 89]], [172, 57], [[222, 80], [198, 78], [174, 79]]),
+    wingR: wing([[140, 86], [150, 60], [164, 40], [192, 44], [230, 56], [214, 70], [202, 66], [190, 73], [178, 68], [164, 76], [152, 86]], [164, 40], [[230, 56], [202, 66], [178, 68]]),
+    jaw: sprite(P => shape(P, [[92, 109, 11, 2]])),
+    head: sprite(P => {
+      shape(P, [[103, 101, 10, 6], [88, 104, 12, 4], [97, 98, 6, 3]]);
+      horn(P, 107, 97, 123, 89, 2); horn(P, 103, 96, 114, 87, 1);
+      P(78, 103, D.ol); P(79, 103, D.ol);   // nostril
+      for (let x = 98; x <= 102; x++) P(x, 100, D.ol);   // the eye, shut
+      for (const tx of [80, 84, 89]) P(tx, 108, '#d8d0c0');
+      for (const [sx, sy] of [[96, 108], [100, 108], [104, 107]]) P(sx, sy, D.dk);
+    }),
+  };
+  return dragonCache;
+}
+// a run of shaded discs along a path (the neck, the tail): outlines first, then fill, then a lit top
+function dragonChain(g, A, pts) {
+  for (const k of ['ol', 'body', 'hi']) for (const q of pts) {
+    const r = k === 'ol' ? q.r + 1 : k === 'body' ? q.r : Math.max(0, Math.round(q.r * 0.4));
+    const oy = k === 'hi' ? -Math.round(q.r * 0.45) : 0;
+    g.drawImage(A.discs[k][Math.min(10, r)], Math.round(q.x) - r, Math.round(q.y) - r + oy);
+  }
+}
+function drawDragon(g, G) {
+  const A = dragonArt(), t = G.realTime, ex = G.excite;
+  // a big play wakes it: it lifts its head and breathes fire (no more than once every ten seconds)
+  if (ex > 0.8 && !(t - (G.dragonFire ?? -99) < 10)) G.dragonFire = t;
+  const fa = t - (G.dragonFire ?? -99), fire = fa >= 0 && fa < 1.7 ? Math.sin(fa / 1.7 * Math.PI) : 0;
+  const sp = t % 46, stir = sp > 30 && sp < 35 ? Math.sin((sp - 30) / 5 * Math.PI) : 0;   // turning over in its sleep
+  const sn = t % 19, snort = sn > 12 && sn < 13.4 ? (sn - 12) / 1.4 : -1;
+  const hy = -Math.round(Math.max(stir * 7, fire * 7)), hx = -Math.round(fire * 2), jo = Math.round(fire * 3) + (snort >= 0 && snort < 0.4 ? 1 : 0);
+  const br = Math.sin(t * 1.1) > 0.3 ? -1 : 0;
+  // the tail, behind the body where it leaves the haunch and curling round in front of the hoard
+  const s1 = Math.sin(t * 0.6) * 5, s2 = Math.sin(t * 0.45 + 1) * 10 + stir * 14 * Math.sin(t * 6);
+  const tail = [];
+  for (let i = 0; i <= 40; i++) {
+    const u = i / 40, v = 1 - u;
+    tail.push({ x: v ** 3 * 214 + 3 * v * v * u * 262 + 3 * v * u * u * 278 + u ** 3 * (228 + s2), y: v ** 3 * 92 + 3 * v * v * u * (80 + s1) + 3 * v * u * u * 121 + u ** 3 * 122, r: Math.max(1, Math.round(7 * (1 - u * 0.9))) });
+  }
+  g.drawImage(A.body, 0, 0);
+  g.drawImage(stir > 0.45 ? A.wingR : A.wingF, 0, br);
+  // the neck runs from the shoulders down to wherever the head is
+  const neck = [];
+  for (let i = 0; i <= 14; i++) { const u = i / 14, v = 1 - u; neck.push({ x: v * v * 136 + 2 * v * u * 122 + u * u * (110 + hx), y: v * v * 90 + 2 * v * u * (88 + hy * 0.6) + u * u * (100 + hy), r: Math.round(8 - u * 2.5) }); }
+  dragonChain(g, A, neck);
+  if (jo > 0) { g.fillStyle = '#5a1414'; g.fillRect(79 + hx, 107 + hy, 22, jo + 1); }
+  g.drawImage(A.jaw, hx, hy + jo);
+  g.drawImage(A.head, hx, hy);
+  if (ex > 0.4 || fire > 0 || stir > 0.6) {   // one eye cracks open
+    g.fillStyle = 'rgba(255,170,40,0.25)'; g.fillRect(96 + hx, 97 + hy, 9, 6);
+    g.fillStyle = '#ffb02e'; g.fillRect(98 + hx, 99 + hy, 5, 2); g.fillStyle = '#3a1a00'; g.fillRect(100 + hx, 99 + hy, 1, 2);
+  }
+  dragonChain(g, A, tail);
+  for (let i = 4; i < 36; i += 4) {   // spines down the tail
+    const a = tail[i], b = tail[i + 1]; let nx = b.y - a.y, ny = -(b.x - a.x); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    P1(g, Math.round(a.x + nx * (a.r + 1)), Math.round(a.y + ny * (a.r + 1)), DRG.dk); P1(g, Math.round(a.x + nx * (a.r + 2)), Math.round(a.y + ny * (a.r + 2)), DRG.bone2);
+  }
+  const tp = tail[40], tq = tail[37], dx = tp.x - tq.x, dy = tp.y - tq.y, dl = Math.hypot(dx, dy) || 1;
+  for (let k = 0; k < 4; k++) for (let w = -k; w <= k; w++) P1(g, Math.round(tp.x + dx / dl * (4 - k) - dy / dl * w), Math.round(tp.y + dy / dl * (4 - k) + dx / dl * w), k === 3 && Math.abs(w) === 3 ? DRG.ol : DRG.body);   // the spade at its tip
+  const nx = 77 + hx, ny = 103 + hy;
+  if (snort >= 0) for (let k = 0; k < 3; k++) {   // a snort of smoke (and a spark)
+    const p = snort + k * 0.15; if (p > 1) continue;
+    g.fillStyle = `rgba(150,150,160,${(0.5 * (1 - p)).toFixed(2)})`; g.fillRect(Math.round(nx - 3 - p * 14), Math.round(ny - 1 - p * 8 - k), 2 + Math.round(p * 3), 2);
+    if (k === 0 && p < 0.3) P1(g, nx - 2, ny + 1, '#ff8a2a');
+  }
+  if (fire > 0) {   // the fire: a roar up at the rafters (steep, so it never crosses the hoop) that lights up the hall
+    g.fillStyle = `rgba(255,120,40,${(0.09 * fire).toFixed(3)})`; g.fillRect(0, 0, ART_W, 132);
+    const len = 58 * Math.min(1, fa / 0.35);
+    for (let d = 0; d < len; d += 2) {
+      const u = d / 58, r = 1 + u * 7, wob = Math.sin(t * 40 + d) * u * 2;
+      const col = u < 0.15 ? '#fff0a0' : u < 0.45 ? '#ffb02e' : u < 0.8 ? '#ff5a1f' : '#a8330d';
+      g.fillStyle = col; g.fillRect(Math.round(nx - d * 0.5 + wob - r / 2), Math.round(ny - d * 0.85 - r / 2), Math.ceil(r), Math.ceil(r));
+    }
+  }
+}
+function paintCourt(key, noLines) {
+  const [c, g] = mk(ART_W, ART_H), rnd = rng(key.length * 9973 + key.charCodeAt(0) * 31);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const P = (x, y, col) => R(x, y, 1, 1, col);
+  const bands = (y0, y1, cols) => { const h = (y1 - y0) / cols.length; cols.forEach((col, i) => R(0, Math.round(y0 + i * h), ART_W, Math.ceil(h) + 1, col)); };
+  const ell = (cx, cy, rx, ry, col, half = 0) => { for (let i = 0; i < 360; i++) { const a = i / 360 * Math.PI * 2, x = Math.cos(a); if (half && Math.sign(x) === half) continue; P(Math.round(cx + x * rx), Math.round(cy + Math.sin(a) * ry), col); } };
+  const line = (x0, y0, x1, y1, col) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) P(Math.round(lerp(x0, x1, i / n)), Math.round(lerp(y0, y1, i / n)), col); };
+  const dX = (dx, y) => 160 + dx * (1 + (y - 150) * 0.004);
+  const lines = noLines ? () => {} : (col, paint, col2) => {
+    const top = 134, bot = 177;
+    R(0, top, ART_W, 1, col); R(0, bot, ART_W, 1, col);
+    for (let y = top; y <= bot; y++) P(160, y, col2 || col);
+    ell(160, 155.5, 30, 8, col2 || col);
+    for (const s of [-1, 1]) {
+      if (paint) for (let y = 142; y <= 169; y++) { const a = dX(s * 82, y), b = dX(s * 152, y); R(Math.round(Math.min(a, b)), y, Math.round(Math.abs(b - a)), 1, paint); }
+      line(dX(s * 152, top), top, dX(s * 152, bot), bot, col);
+      line(dX(s * 82, 142), 142, dX(s * 82, 169), 169, col);
+      R(Math.round(Math.min(dX(s * 82, 142), dX(s * 152, 142))), 142, Math.round(Math.abs(dX(s * 152, 142) - dX(s * 82, 142))), 1, col);
+      R(Math.round(Math.min(dX(s * 82, 169), dX(s * 152, 169))), 169, Math.round(Math.abs(dX(s * 152, 169) - dX(s * 82, 169))), 1, col);
+    }
+  };
+  const tree = (x, y, r, col, dark) => { for (let yy = -r; yy <= r; yy++) for (let xx = -r; xx <= r; xx++) if (xx * xx + yy * yy <= r * r) P(x + xx, y + yy, xx + yy > r * 0.5 ? dark : col); R(x - 1, y + r - 1, 2, 132 - (y + r - 1), '#6d4a2e'); };
+  const pine = (x, h, col, snow) => { for (let k = 0; k < h; k++) { const w = Math.round((k / h) * 4) + 1; R(x - w, 132 - h + k, w * 2 + 1, 1, col); if (snow && k % 4 === 1) { P(x - w, 132 - h + k, snow); P(x + w, 132 - h + k, snow); } } };
+
+  if (key === 'gym') {
+    R(0, 0, ART_W, 132, '#a4aab5'); R(0, 0, ART_W, 5, '#8b919c'); R(0, 5, ART_W, 1, '#7c828d');
+    for (const x of [30, 100, 190, 260]) { R(x, 12, 30, 18, '#747f93'); R(x + 2, 14, 26, 14, '#c3d9ea'); R(x + 14, 14, 2, 14, '#747f93'); R(x + 2, 20, 26, 1, '#747f93'); }
+    R(136, 12, 48, 18, '#3a3f4f'); R(138, 14, 44, 14, '#262a36'); tiny(g, 'HOME', 141, 16, '#ff8173'); tiny(g, 'AWAY', 164, 16, '#86b2ff');
+    R(0, 58, ART_W, 48, '#8f95a0');
+    for (let i = 0; i < 4; i++) R(0, 58 + i * 12 + 11, ART_W, 1, '#7d838e');
+    R(0, 106, ART_W, 26, '#96623a'); R(0, 106, ART_W, 2, '#6f4629');
+    for (let x = 8; x < ART_W; x += 16) R(x, 108, 1, 24, '#84552f');
+    R(0, 132, ART_W, 48, '#dcb57d');
+    for (let y = 136; y < 180; y += 4) R(0, y, ART_W, 1, '#d3ab72');
+    for (let row = 0; row < 11; row++) { const y = 132 + row * 4; for (let x = (rnd() * 40) | 0; x < ART_W; x += 34 + ((rnd() * 30) | 0)) R(x, y, 1, 4, '#c79f67'); }
+    lines('#f5ead3', '#cf9b66');
+    R(0, 132, ART_W, 1, '#a57a47');
+  } else if (key === 'beach') {
+    bands(0, 106, ['#86cdf1', '#96d4f3', '#a8dcf5', '#bbe4f7']);
+    for (let y = -10; y <= 10; y++) for (let x = -10; x <= 10; x++) if (x * x + y * y <= 100) P(250 + x, 30 + y, '#ffe58a');
+    R(0, 106, ART_W, 22, '#3a9bd8'); R(0, 112, ART_W, 1, '#5cb1e3'); R(0, 120, ART_W, 1, '#5cb1e3'); R(0, 128, ART_W, 4, '#d7f0fb');
+    for (let i = 0; i < 44; i++) { const x = 92 + i * i / 140; R(Math.round(x) - 1, 132 - i, 3, 1, '#8a5a2e'); }
+    for (const a of [-2.6, -2.1, -0.5, -1.0, -1.6, 0.3]) for (let k = 0; k < 15; k++) R(Math.round(106 + Math.cos(a) * k), Math.round(88 + Math.sin(a) * k + k * k * 0.03), 2, 1, '#2f9a4a');
+    R(0, 132, ART_W, 48, '#edd39b');
+    for (let i = 0; i < 160; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#dcc083');
+    lines('#fff7e4', null);
+  } else if (key === 'snow') {
+    bands(0, 132, ['#bccde2', '#c8d7ea', '#d4e0f0', '#dfe8f4']);
+    for (let x = 0; x < ART_W; x++) { const h = 30 + Math.sin(x / 38) * 12 + Math.sin(x / 13 + 1) * 3; R(x, 132 - h, 1, h, '#f2f6fb'); P(x, Math.round(132 - h), '#aebfd6'); }
+    for (const x of [40, 58, 150, 236, 262, 290]) pine(x, 22 + ((x * 7) % 9), '#3f6b5f', '#f2f6fb');
+    R(0, 132, ART_W, 48, '#f4f7fb');
+    for (let y = 138; y < 180; y += 6) R(0, y, ART_W, 1, '#e5ecf5');
+    lines('#9fb4cf', null);
+  } else if (key === 'park') {
+    bands(0, 132, ['#8dcbf0', '#9bd2f2', '#abd9f4', '#bce1f6']);
+    for (let x = 0; x < ART_W;) { const w = 16 + ((rnd() * 18) | 0), h = 24 + ((rnd() * 44) | 0); R(x, 118 - h, w, h, rnd() < 0.5 ? '#aab7ca' : '#b6c2d3'); for (let wy = 122 - h; wy < 112; wy += 7) for (let wx = x + 3; wx < x + w - 3; wx += 5) R(wx, wy, 2, 3, '#d1dae8'); x += w + 2; }
+    for (const [x, r] of [[26, 11], [70, 9], [130, 12], [206, 10], [252, 12], [300, 9]]) tree(x, 104, r, '#5ea55a', '#4d8d4b');
+    R(0, 118, ART_W, 14, '#77b85a');
+    R(0, 132, ART_W, 48, '#70747d');
+    for (let i = 0; i < 180; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#7c808a');
+    lines('#f1f1ea', '#4f76a6');
+  } else if (key === 'ice') {
+    // a hockey arena: dark rafters with lights and title banners, an upper deck, the LED ribbon (scrolls in drawLow),
+    // the lower bowl the animated crowd sits in, then the glass (drawn over the crowd in drawLow) and the boards
+    R(0, 0, ART_W, 132, '#1b2133'); R(0, 0, ART_W, 3, '#121725');
+    for (let x = -10; x < ART_W; x += 20) { line(x, 3, x + 10, 12, '#2a3249'); line(x + 10, 12, x + 20, 3, '#2a3249'); }
+    R(0, 12, ART_W, 1, '#2a3249'); R(0, 3, ART_W, 1, '#2a3249');
+    for (const x of [44, 116, 204, 276]) { R(x - 5, 13, 10, 2, '#3a4157'); R(x - 4, 15, 8, 1, '#fffbe0'); R(x - 6, 16, 12, 1, 'rgba(255,251,224,0.18)'); }
+    const ban = [['#d9434a', '#ffffff', '23'], ['#2f6bd8', '#ffd23f', '24'], ['#ffffff', '#d9434a', '25']];
+    [40, 64, 256, 280].forEach((x, i) => {
+      const [bg, fg, yr] = ban[i % 3]; R(x, 6, 1, 3, '#5a627a');
+      R(x - 7, 9, 15, 17, bg); for (let k = 0; k < 4; k++) P(x - 7 + k * 4 + 2, 26, bg);
+      R(x - 7, 9, 15, 1, 'rgba(0,0,0,0.25)'); R(x - 5, 12, 11, 1, fg); tiny(g, yr, x - 3, 15, fg); R(x - 5, 22, 11, 1, fg);
+    });
+    // upper deck: dark seats and a dotty far-away crowd
+    R(0, 28, ART_W, 18, '#252c42'); R(0, 28, ART_W, 1, '#323a55');
+    const far = ['#d9434a', '#2f6bd8', '#e8e0d0', '#8a93ab', '#ffd23f'];
+    for (const y of [32, 37, 42]) { R(0, y + 2, ART_W, 1, '#1d2336'); for (let x = 1; x < ART_W; x += 3) if (rnd() < 0.7) { R(x, y, 2, 2, far[(rnd() * 5) | 0]); P(x, y - 1, '#c99a74'); } }
+    for (const x of [80, 160, 240]) { R(x - 2, 28, 4, 18, '#30384f'); for (let y = 30; y < 46; y += 3) R(x - 2, y, 4, 1, '#3c4560'); }
+    // the LED ribbon board's frame (the lit text is animated)
+    R(0, 46, ART_W, 9, '#0a0c12'); R(0, 46, ART_W, 1, '#4a5270'); R(0, 54, ART_W, 1, '#4a5270');
+    // lower bowl: rows of seats, stair aisles, section numbers
+    R(0, 55, ART_W, 53, '#33405e');
+    for (let i = 0; i < 5; i++) { const y = 57 + i * 12; R(0, y + 8, ART_W, 3, '#2a3550'); R(0, y + 11, ART_W, 1, '#222b42'); for (let x = 2; x < ART_W; x += 7) R(x, y + 6, 5, 2, '#3e4c70'); }
+    [[40, '101'], [120, '102'], [200, '103'], [280, '104']].forEach(([x, n]) => { R(x - 7, 56, 13, 7, '#e8eefc'); tiny(g, n, x - 6, 57, '#1b2133'); });
+    for (const x of [80, 160, 240]) { R(x - 3, 55, 6, 53, '#27304a'); for (let y = 57; y < 108; y += 4) R(x - 3, y, 6, 1, '#3b4563'); R(x - 4, 55, 1, 53, '#8f98b0'); }
+    // the boards: white, an ad in each panel, a yellow kickplate along the ice
+    R(0, 108, ART_W, 24, '#f2f5fa'); R(0, 108, ART_W, 3, '#c7ceda'); R(0, 111, ART_W, 1, '#e0e5ee');
+    const ads = [['FLOPPY', '#d9434a', '#ffffff'], ['ICE', '#2f6bd8', '#ffffff'], ['DUNK', '#ffffff', '#d9434a'], ['ZAMBO', '#1b2133', '#ffd23f'], ['HOOPS', '#ffffff', '#2f6bd8']];
+    for (let x = 0, i = 0; x < ART_W; x += 40, i++) {
+      R(x, 112, 1, 16, '#d4d9e2');
+      const [t, bg, fg] = ads[i % ads.length], w = t.length * 4 + 3;
+      R(x + 20 - (w >> 1), 114, w, 9, bg); if (bg === '#ffffff') R(x + 20 - (w >> 1), 114, w, 1, '#d4d9e2'); tiny(g, t, x + 22 - (w >> 1), 116, fg);
+    }
+    R(0, 125, ART_W, 1, '#d9434a'); R(0, 128, ART_W, 4, '#f2c230'); R(0, 128, ART_W, 1, '#c99a1a');
+    // the ice: hockey markings under the hoops court (center red line + dots, blue lines, faceoff circles), then scratches
+    R(0, 132, ART_W, 48, '#d9f0fb'); R(0, 132, ART_W, 2, '#c6e4f2');
+    for (let y = 134; y < 180; y++) { R(Math.round(dX(-3, y)), y, 6, 1, '#f0b7bb'); for (const s2 of [-1, 1]) R(Math.round(dX(s2 * 60, y)) - 2, y, 5, 1, '#b8cdf2'); }
+    for (let y = 134; y < 180; y += 3) R(Math.round(dX(-1, y)), y, 2, 1, '#e6a3a8');
+    for (const s2 of [-1, 1]) { ell(Math.round(dX(s2 * 112, 165)), 165, 22, 7, '#f0b7bb'); R(Math.round(dX(s2 * 112, 165)) - 1, 164, 3, 2, '#e8878e'); R(Math.round(dX(s2 * 100, 145)) - 1, 144, 3, 2, '#e8878e'); }
+    for (let i = 0; i < 18; i++) { const x = rnd() * ART_W, y = 138 + rnd() * 36, l = 8 + rnd() * 14; line(x, y, x + l, y - l * 0.15, '#eefaff'); }
+    lines('#d9434a', null, '#2f6bd8');
+  } else if (key === 'moon') {
+    R(0, 0, ART_W, 132, '#05060c');
+    for (let i = 0; i < 90; i++) P((rnd() * ART_W) | 0, (rnd() * 118) | 0, rnd() < 0.3 ? '#9aa6ff' : '#e8e8ff');
+    for (let y = -12; y <= 12; y++) for (let x = -12; x <= 12; x++) { if (x * x + y * y > 144) continue; const land = Math.sin(x * 0.5 + y * 0.3) + Math.cos(y * 0.45 - x * 0.2) > 0.9; P(70 + x, 34 + y, land ? '#3fae5a' : '#2f6fd6'); }
+    for (let x = 0, h = 8; x < ART_W; x++) { h = clamp(h + (rnd() - 0.5) * 2, 4, 14); R(x, 132 - h, 1, h, '#62626d'); }
+    R(0, 132, ART_W, 48, '#9d9da7');
+    for (let i = 0; i < 9; i++) { const cx = rnd() * ART_W, cy = 140 + rnd() * 34, rx = 4 + rnd() * 8, ry = rx * 0.3; for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) if ((x / rx) ** 2 + (y / ry) ** 2 <= 1) P(Math.round(cx + x), Math.round(cy + y), y < 0 ? '#84848e' : '#b3b3bd'); }
+    R(112, 98, 1, 34, '#d8d8e0'); R(113, 98, 12, 3, '#d93a3f'); R(113, 101, 12, 3, '#ffffff'); R(113, 104, 12, 3, '#2f6bd8');
+    lines('#cfcfd9', null);
+  } else if (key === 'rome') {
+    bands(0, 60, ['#8fc3e6', '#a7d0ea', '#c6dce6', '#e6dcc0']);
+    // the arena wraps around the court: the far side (middle of the screen) is small and low, the sides are
+    // closer so they tower up off the top of the screen, with bigger arches and bigger spectators
+    const people = ['#e8e0d0', '#b8433a', '#d9b44a', '#6a7fa6', '#8a6a4a', '#ece6d8'];
+    const hash = (a, b) => { const v = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return v - Math.floor(v); };
+    let u = 0;
+    for (let x = 0; x < ART_W; x++) {
+      const k = 1 + 1.2 * ((x - 160) / 160) ** 2, H = 84 * k;
+      const ruin = x > 168 && x < 262 ? Math.max(0, 5 + Math.sin(x * 0.23) * 4 + Math.sin(x * 0.61) * 2) : 0;
+      for (let y = 0; y < 118; y++) {
+        const v = (118 - y) / H;
+        if (v > 1 || (ruin && y < 118 - H + ruin)) continue;
+        let col;
+        if (v < 0.3) {
+          const rowF = v / 0.3 * 6, row = Math.floor(rowF), rv = rowF - row, pid = Math.floor(u / 2.2);
+          col = rv < 0.2 ? '#a88a60' : '#c9ab7c';
+          if (rv > 0.3 && hash(pid, row) < 0.62) col = rv > 0.78 ? '#d9b89a' : people[Math.floor(hash(row, pid) * people.length)];
+        } else if (v < 0.35) col = v < 0.315 ? '#b8966a' : '#e6cc9a';
+        else if (v < 0.95) {
+          const upper = v >= 0.66;
+          if (!upper && v >= 0.63) col = '#e6cc9a';
+          else {
+            const t0 = upper ? 0.66 : 0.35, t1 = upper ? 0.95 : 0.63, per = upper ? 9 : 12, a = (u / per) % 1, lv = (v - t0) / (t1 - t0);
+            const archTop = 0.6 + 0.25 * Math.sqrt(Math.max(0, 1 - ((a - 0.5) / 0.3) ** 2));
+            const open = a > 0.2 && a < 0.8 && lv > 0.06 && lv < archTop;
+            col = open ? (a < 0.27 ? '#452f1c' : '#5c4128') : a < 0.1 ? '#e2c796' : '#cfae7e';
+          }
+        } else col = v < 0.97 ? '#e6cc9a' : '#b8966a';
+        P(x, y, col);
+      }
+      u += 1 / k;
+    }
+    R(0, 118, ART_W, 14, '#ece3cf'); R(0, 118, ART_W, 2, '#d9ccb0'); R(0, 126, ART_W, 2, '#a33a2e');
+    for (let i = 0; i < 60; i++) P((rnd() * ART_W) | 0, (120 + rnd() * 11) | 0, '#d8ccb4');
+    for (let x = 30; x < ART_W; x += 96) { R(x, 119, 17, 11, '#9b1f2a'); R(x, 119, 17, 1, '#6e1520'); tiny(g, 'SPQR', x + 1, 122, '#e8c35a'); }
+    for (const bx of [58, 262]) { R(bx - 1, 106, 3, 12, '#5b4630'); R(bx - 4, 103, 9, 3, '#6b4a2a'); R(bx - 3, 106, 7, 1, '#4a3520'); }
+    R(0, 132, ART_W, 48, '#dcc08c');
+    for (let y = 136; y < 180; y += 5) R(0, y, ART_W, 1, '#d2b27c');
+    for (let i = 0; i < 140; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, '#c9a86f');
+    lines('#f4e6c4', null);
+  } else if (key === 'tokyo') {
+    bands(0, 104, ['#110f2b', '#18163c', '#211d50', '#2c2562', '#3a2c6c']);
+    for (let i = 0; i < 25; i++) P((rnd() * ART_W) | 0, (rnd() * 30) | 0, '#c9c3ff');
+    for (let x = -4; x < ART_W;) {
+      const w = 18 + ((rnd() * 22) | 0), tp = 10 + ((rnd() * 48) | 0);
+      R(x, tp, w, 118 - tp, rnd() < 0.5 ? '#1b1e37' : '#232748'); R(x, tp, w, 1, '#343a68');
+      for (let wy = tp + 4; wy < 110; wy += 5) for (let wx = x + 2; wx < x + w - 2; wx += 4) if (rnd() < 0.42) R(wx, wy, 2, 2, rnd() < 0.7 ? '#ffd98a' : '#8ad1ff');
+      x += w + 1;
+    }
+    R(200, 16, 66, 32, INK); R(201, 17, 64, 30, '#1a1036'); R(201, 17, 64, 1, '#ff4fa3'); R(201, 46, 64, 1, '#ff4fa3');
+    tiny(g, 'FLOPPY HOOPS', 210, 24, '#ff4fa3'); tiny(g, 'TOKYO', 223, 35, '#39e6ff');
+    const neon = ['#ff4fa3', '#39e6ff', '#ffe14f', '#7dff6a', '#ff7a3d'];
+    TOKYO_SIGNS.length = 0;
+    for (let i = 0; i < 7; i++) {
+      const sx = 10 + i * 46 + ((rnd() * 10) | 0), sy = 44 + ((rnd() * 26) | 0), h = 24 + ((rnd() * 14) | 0), cn = neon[i % neon.length];
+      if (sx > 192 && sx < 268) continue;
+      R(sx - 1, sy - 1, 9, h + 2, INK); R(sx, sy, 7, h, '#12122a');
+      for (let gy = sy + 2; gy < sy + h - 4; gy += 6) { R(sx + 2, gy, 3, 1, cn); R(sx + 3, gy + 1, 1, 3, cn); R(sx + 1, gy + 3, 5, 1, cn); }
+      R(sx, sy, 7, 1, cn); R(sx, sy + h - 1, 7, 1, cn);
+      TOKYO_SIGNS.push([sx, sy, 7, h, cn]);
+    }
+    for (let x = 0; x < ART_W; x++) P(x, Math.round(94 + Math.sin(x / 26) * 3), '#3a2a2a');
+    for (let lx = 8; lx < ART_W; lx += 22) { const ly = Math.round(95 + Math.sin(lx / 26) * 3); R(lx - 3, ly, 7, 6, 'rgba(255,110,80,0.25)'); R(lx - 2, ly + 1, 5, 5, '#e0393e'); R(lx - 2, ly + 1, 5, 1, '#ffd23f'); R(lx - 2, ly + 5, 5, 1, '#ffd23f'); }
+    R(0, 112, ART_W, 18, '#262839');
+    for (let x = 60; x < ART_W; x += 34) { const cn = pick(neon); R(x - 1, 113, 18, 2, cn); R(x, 116, 16, 10, '#ffcf7a'); R(x + 7, 116, 1, 10, '#b78c4a'); }
+    R(0, 130, ART_W, 2, '#51546e');
+    R(0, 132, ART_W, 48, '#2b2d3b');
+    for (let y = 136; y < 180; y += 6) R(0, y, ART_W, 1, '#30323f');
+    for (const [sx, , , , cn] of TOKYO_SIGNS) for (let y = 134; y < 172; y += 2) R(sx, y, 7, 1, cn + '22');
+    lines('#39e6ff', '#3b2a5a');
+  } else if (key === 'castle') {
+    // the great hall: it runs a long way back, columns marching off into the dark, moonlight through the far
+    // window, and in the middle of it all a black dragon asleep on its hoard (drawLow poses the dragon itself)
+    bands(0, 96, ['#16141b', '#1a1820', '#1e1b24', '#211e28']);
+    R(70, 12, 180, 85, '#2f2b37');   // the far wall
+    for (let y = 12; y < 97; y += 5) { R(70, y, 180, 1, '#28252f'); for (let x = 70 + ((y / 5) % 2) * 5; x < 250; x += 10) R(x, y, 1, 5, '#28252f'); }
+    for (let y = 18; y < 64; y++) {   // the far window, with the moon in it
+      const half = y < 32 ? Math.round(12 * Math.sqrt(Math.max(0, 1 - ((32 - y) / 13) ** 2))) : 12;
+      R(160 - half - 2, y, half * 2 + 4, 1, '#4a4552'); R(160 - half, y, half * 2, 1, y < 44 ? '#16204a' : '#1d2a5c');
+    }
+    for (let i = 0; i < 10; i++) P(150 + ((rnd() * 20) | 0), 24 + ((rnd() * 38) | 0), '#c9d2ff');
+    for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (x * x + y * y <= 16 && (x + 1.5) ** 2 + y * y > 9) P(166 + x, 32 + y, '#f3ecc4');
+    R(160, 20, 1, 44, '#4a4552'); R(148, 44, 24, 1, '#4a4552'); R(144, 64, 32, 3, '#5a5563');
+    g.fillStyle = 'rgba(160,180,255,0.06)'; g.beginPath(); g.moveTo(148, 66); g.lineTo(172, 66); g.lineTo(200, 114); g.lineTo(128, 114); g.closePath(); g.fill();   // moonlight
+    bands(96, 132, ['#29262f', '#2f2c35', '#36323b', '#3e3a42', '#47424a', '#504b52']);   // the long floor, laid in flagstones
+    for (const y of [98, 101, 105, 110, 116, 123]) R(0, y, ART_W, 1, 'rgba(0,0,0,0.22)');
+    for (let k = -9; k <= 9; k++) line(160 + k * 24 * 0.647, 96, 160 + k * 24, 132, 'rgba(0,0,0,0.2)');
+    for (let x = 0; x < 70; x++) { const bot = Math.round(132 - 36 * x / 70); R(x, 0, 1, bot, '#24212b'); R(ART_W - 1 - x, 0, 1, bot, '#24212b'); }   // the side walls
+    for (const d of [0.84, 0.62, 0.38, 0.1]) {   // columns down both sides, far ones first and darker
+      const x = Math.round(70 * d), w = Math.max(3, Math.round(15 * (1 - d * 0.75))), top = Math.round(14 * d), bot = Math.round(132 - 36 * d);
+      for (const cx of [x, ART_W - x - w]) {
+        R(cx, top, w, bot - top, '#3e3946'); R(cx, top, 1, bot - top, '#55505e'); R(cx + w - 1, top, 1, bot - top, '#2a2630');
+        R(cx - 1, bot - 4, w + 2, 4, '#4a4552'); R(cx - 1, top, w + 2, 3, '#4a4552');
+        R(cx - 1, top, w + 2, bot - top, `rgba(10,8,16,${(d * 0.55).toFixed(2)})`);
+      }
+    }
+    for (const [bx, col, dark] of [[17, '#a8282e', '#6e1a1f'], [296, '#22509e', '#163670']]) {   // team banners between the near columns
+      R(bx - 1, 5, 9, 1, '#6b4a2e');
+      for (let y = 6; y < 48; y++) { const cut = y > 41 ? y - 41 : 0; R(bx, y, 7, 1, col); if (cut) R(bx + 3 - (cut >> 1), y, cut, 1, '#24212b'); }
+      R(bx, 6, 7, 2, dark); R(bx + 2, 18, 3, 5, '#e8c35a'); R(bx + 3, 19, 1, 3, dark);
+    }
+    for (const [tx, ty] of [[32, 58], [47, 55], [287, 58], [273, 55]]) { R(tx - 1, ty, 3, 5, '#1a1418'); R(tx - 2, ty - 1, 5, 1, '#6b4a2e'); }   // torch brackets (lit in drawLow)
+    for (let y = -22; y <= 22; y++) { const half = Math.round(110 * Math.sqrt(1 - (y / 22.5) ** 2)); R(167 - half, 104 + y, half * 2, 1, 'rgba(255,180,60,0.05)'); }   // the gold lights the floor
+    for (let x = 72; x < 263; x++) {   // the hoard
+      const q = (x - 167) / 95, top = Math.round(117 - 24 * Math.pow(Math.max(0, 1 - q * q), 0.8) + Math.sin(x * 0.7) * 1.2);
+      for (let y = top; y < 118; y++) P(x, y, (x * 7 + y * 13) % 11 === 0 ? '#fff0a0' : (x + y) % 3 === 0 ? '#a8761a' : y > 112 ? '#c48a1c' : '#e0ae34');
+      P(x, top, '#fff0a0');
+    }
+    for (let i = 0; i < 46; i++) P(56 + ((rnd() * 232) | 0), 114 + ((rnd() * 15) | 0), rnd() < 0.5 ? '#e8b83a' : '#a8761a');   // coins strewn across the floor
+    for (let i = 0; i < 18; i++) P(80 + ((rnd() * 170) | 0), 104 + ((rnd() * 12) | 0), ['#ff4a5a', '#4ab0ff', '#5aff7a', '#ffffff'][i % 4]);
+    R(230, 104, 15, 10, INK); R(231, 105, 13, 8, '#6a3e20'); R(231, 108, 13, 1, '#e8c35a'); R(236, 105, 3, 8, '#e8c35a'); R(230, 99, 15, 5, '#4f2f18'); R(231, 100, 13, 1, '#e8c35a');   // a chest
+    R(252, 85, 1, 4, '#6b4a2e'); P(252, 84, '#e8c35a'); R(249, 89, 7, 1, '#e8c35a'); R(252, 90, 1, 14, '#c9ced8');   // a sword stuck in the gold
+    for (let y = -5; y <= 5; y++) for (let x = -5; x <= 5; x++) { const d = x * x + y * y; if (d <= 25) P(82 + x, 108 + y, d > 18 ? '#e8c35a' : d < 3 ? '#e8c35a' : '#7a2a2a'); }   // a shield
+    R(98, 108, 5, 1, '#e8c35a'); R(99, 109, 3, 2, '#e8c35a'); R(100, 111, 1, 3, '#e8c35a'); R(98, 114, 5, 1, '#e8c35a');   // a goblet
+    R(0, 132, ART_W, 48, '#7d776c');
+    for (const y of [137, 143, 150, 158, 167]) R(0, y, ART_W, 1, '#6b665c');
+    for (let row = 0, ys = [132, 137, 143, 150, 158, 167, 180]; row < 6; row++) for (let x = (row % 2) * 13; x < ART_W; x += 26) R(x, ys[row], 1, ys[row + 1] - ys[row], '#6b665c');
+    for (let i = 0; i < 150; i++) P((rnd() * ART_W) | 0, (134 + rnd() * 46) | 0, rnd() < 0.5 ? '#8a8478' : '#726d62');
+    lines('#e9dcb8', '#6e3236');
+  } else if (key === 'bouncehouse') {
+    // inside a giant inflatable: puffy striped tubes all round, net windows onto a sunny back yard, a quilted floor
+    R(0, 0, ART_W, 132, '#c8303a');
+    const tubes = ['#e8343f', '#ffd23a', '#2f7bf0', '#ffd23a'];
+    for (let i = 0, x = 0; x < ART_W; i++, x += 20) {
+      const col = tubes[i % 4];
+      R(x, 10, 20, 122, col);
+      R(x + 3, 10, 3, 122, 'rgba(255,255,255,0.28)'); R(x + 16, 10, 4, 122, 'rgba(0,0,0,0.18)');
+      for (let y = 30; y < 132; y += 26) R(x, y, 20, 1, 'rgba(0,0,0,0.16)');   // the stitched seams
+    }
+    for (let x = 0; x < ART_W; x += 16) for (let y = -8; y <= 8; y++) {   // the puffy row along the top
+      const half = Math.round(8 * Math.sqrt(1 - (y / 8.5) ** 2)); R(x + 8 - half, 10 + y, half * 2, 1, ((x / 16) | 0) % 2 ? '#e8343f' : '#2f7bf0');
+      if (y === -4) R(x + 8 - half + 2, 10 + y, 3, 2, 'rgba(255,255,255,0.4)');
+    }
+    for (const wx of [72, 204]) {   // net windows: blue sky, a fence and a tree outside
+      R(wx - 2, 34, 48, 44, INK); R(wx - 1, 35, 46, 42, '#ffd23a');
+      R(wx, 36, 44, 40, '#8fd3ff'); R(wx, 62, 44, 14, '#5cc85a'); R(wx, 60, 44, 2, '#e8e0c8');
+      for (let k = 0; k < 44; k += 6) R(wx + k, 56, 2, 6, '#e8e0c8');
+      R(wx + 30, 44, 8, 8, '#3f9a48'); R(wx + 33, 52, 2, 8, '#6d4a2e');
+      if (wx < 100) { R(wx + 6, 40, 6, 6, '#ffe680'); R(wx + 7, 41, 4, 4, '#fff6c0'); }
+      for (let k = 0; k <= 44; k += 4) R(wx + k, 36, 1, 40, 'rgba(20,16,25,0.35)');
+      for (let k = 0; k <= 40; k += 4) R(wx, 36 + k, 44, 1, 'rgba(20,16,25,0.35)');
+    }
+    R(0, 112, ART_W, 20, '#e8343f');   // the puffy kick wall at the back of the floor
+    for (let x = 0; x < ART_W; x += 20) { R(x, 112, 20, 3, 'rgba(255,255,255,0.3)'); R(x + 18, 112, 2, 20, 'rgba(0,0,0,0.18)'); }
+    R(0, 130, ART_W, 2, '#8a1f28');
+    R(0, 132, ART_W, 48, '#2f7bf0');
+    for (let y = 132; y < 180; y += 8) R(0, y, ART_W, 1, '#2a6ad0');
+    for (let x = 0; x < ART_W; x += 16) R(x, 132, 1, 48, '#2a6ad0');
+    for (let y = 136; y < 180; y += 8) for (let x = 6; x < ART_W; x += 16) R(x, y, 3, 1, '#5d9bff');   // the quilting puffs catch the light
+    lines('#ffffff', '#2766c8');
+  }
+  // the little extras each court keeps in the background
+  if (key === 'gym') {
+    for (const [px, col] of [[68, '#d93a3f'], [80, '#2f6bd8'], [230, '#d93a3f'], [242, '#2f6bd8']]) {   // championship pennants
+      R(px, 7, 8, 1, '#5a606b');
+      for (let k = 0; k < 14; k++) R(px + (k >> 2), 8 + k, 8 - (k >> 1), 1, col);
+      tiny(g, '1', px + 1, 10, '#ffffff');
+    }
+  } else if (key === 'beach') {
+    for (const lx of [252, 270]) R(lx, 96, 2, 36, '#efe6d2');   // a lifeguard tower
+    R(250, 84, 24, 12, INK); R(251, 85, 22, 10, '#d9434a'); R(253, 87, 18, 5, '#fff3e0'); R(249, 82, 26, 2, '#ffffff');
+    line(252, 100, 270, 116, '#d9cfb8'); line(270, 100, 252, 116, '#d9cfb8');
+    R(262, 72, 1, 10, '#efe6d2'); R(263, 72, 6, 4, '#ffd23f');
+    R(40, 100, 1, 32, '#efe6d2');   // a beach umbrella
+    for (let k = -12; k <= 12; k++) { const h = Math.round(5 * Math.sqrt(1 - (k / 12.5) ** 2)); R(40 + k, 100 - h, 1, h + 1, ((k + 12) / 4 | 0) % 2 ? '#ffffff' : '#ff5a4a'); }
+    R(30, 128, 16, 3, '#ff8a2a'); R(30, 128, 16, 1, '#ffd23f');
+  } else if (key === 'snow') {
+    R(110, 112, 26, 16, INK); R(111, 113, 24, 14, '#7a4a2e'); for (let y = 115; y < 127; y += 3) R(111, y, 24, 1, '#5e3820');   // a log cabin
+    R(118, 117, 7, 6, '#ffd98a'); R(121, 117, 1, 6, '#5e3820'); R(127, 119, 5, 8, '#4a2a18');
+    for (let k = 0; k < 10; k++) R(108 + k, 112 - k, 30 - k * 2, 1, k < 3 ? '#7a5a42' : '#f2f6fb');
+    R(129, 100, 4, 8, INK); R(130, 101, 2, 7, '#8a5a42');
+    const sm = (cx, cy, r) => { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) P(cx + x, cy + y, x * x + y * y > (r - 1) * (r - 1) ? '#aebfd6' : '#ffffff'); };
+    sm(206, 126, 5); sm(206, 117, 4); sm(206, 110, 3);   // a snowman
+    P(205, 109, INK); P(207, 109, INK); R(208, 110, 2, 1, '#ff8a2a'); P(206, 116, INK); P(206, 118, INK);
+    R(203, 106, 7, 1, INK); R(204, 102, 5, 4, INK); line(202, 116, 196, 112, '#6d4a2e'); line(210, 116, 216, 111, '#6d4a2e');
+  } else if (key === 'park') {
+    for (const lx of [44, 276]) { R(lx, 94, 2, 24, '#2f3a3a'); R(lx - 2, 90, 6, 4, '#2f3a3a'); R(lx - 1, 91, 4, 2, '#fff3b0'); }   // lamp posts
+    for (const bx of [96, 202]) { R(bx, 120, 22, 2, '#8a5a2e'); R(bx, 116, 22, 2, '#8a5a2e'); R(bx + 2, 122, 1, 4, '#3a3a3a'); R(bx + 19, 122, 1, 4, '#3a3a3a'); }   // benches
+    R(150, 112, 18, 10, INK); R(151, 113, 16, 8, '#e8e0d0'); R(151, 113, 16, 2, '#d9434a'); R(154, 108, 10, 5, '#d9434a'); R(152, 122, 3, 3, INK); R(163, 122, 3, 3, INK); tiny(g, 'HOT', 153, 116, '#d9434a');   // a hot dog cart
+  } else if (key === 'moon') {
+    R(232, 112, 16, 10, INK); R(233, 113, 14, 8, '#d9a93a'); for (let x = 234; x < 247; x += 3) R(x, 114, 1, 6, '#b8862a');   // a lunar lander
+    R(236, 104, 8, 8, INK); R(237, 105, 6, 6, '#c9ced8'); R(239, 106, 2, 2, '#1d2547');
+    line(233, 121, 228, 130, '#c9ced8'); line(246, 121, 251, 130, '#c9ced8'); R(226, 130, 4, 1, '#c9ced8'); R(250, 130, 4, 1, '#c9ced8');
+  } else if (key === 'rome') {
+    R(148, 95, 24, 10, INK); R(149, 96, 22, 8, '#e6cc9a'); R(147, 92, 26, 4, '#6a2a7a');   // the emperor's box
+    for (let x = 148; x < 172; x += 4) R(x, 96, 2, 1, '#e8c35a');
+  } else if (key === 'tokyo') {
+    R(0, 86, ART_W, 3, '#3a3f5a'); R(0, 86, ART_W, 1, '#565c80');   // an elevated railway (the train runs in drawLow)
+    for (let x = 14; x < ART_W; x += 48) R(x, 89, 4, 23, '#2c3048');
+  }
+  return c;
+}
+// ==== END PORTED ====
+// Pong's maps that are Floppy Hoops courts: painted by Hoops' own painter at its size (320x180, 20 px a metre like here) and set into the
+// stage so the floor line lands on Pong's (the court's markings are left off the floor), with the edges mirrored to fill the stage
+const HOOPS_COURT = { gym: 'gym', beach: 'beach', snow: 'snow', park: 'park', ice: 'ice', moon: 'moon', tokyo: 'tokyo', rome: 'rome', castle: 'castle', bounce: 'bouncehouse' };
+const COURT_DX = (STAGE_W - ART_W) / 2, COURT_DY = STAGE_GY - 150;   // (Hoops' floor line is 150 px down its art)
+function paintFromHoops(key) {
+  const art = paintCourt(HOOPS_COURT[key], true), [c, g] = mk(STAGE_W, STAGE_H), X = COURT_DX, Y = COURT_DY;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(art, X, Y);
+  g.save(); g.translate(X, 0); g.scale(-1, 1); g.drawImage(art, 0, 0, X, ART_H, 0, Y, X, ART_H); g.restore();
+  g.save(); g.translate(STAGE_W, 0); g.scale(-1, 1); g.drawImage(art, ART_W - X, 0, X, ART_H, 0, Y, X, ART_H); g.restore();
+  g.drawImage(c, 0, Y, STAGE_W, 1, 0, 0, STAGE_W, Y);
+  g.drawImage(c, 0, Y + ART_H - 1, STAGE_W, 1, 0, Y + ART_H, STAGE_W, STAGE_H - Y - ART_H);
+  return c;
+}
+// what moves in those courts (the same things as in Hoops, drawn over the painted stage): clouds, a sailboat, gulls, snowfall, a train,
+// flickering neon, torches and the dragon, the arena's LED ribbon and glass, the Colosseum's fire and gladiators, stars and aliens
+function drawStageExtras(g, G, ox = COURT_DX, oy = COURT_DY, only = null) {   // (only 'dragon' draws just the dragon, straight onto the extended stage, so the mirrored edges don't repeat it)
+  const key = HOOPS_COURT[G.map.id]; if (!key || (only && key !== 'castle')) return;
+  const t = G.time, R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+  g.save(); g.translate(ox, oy);
+  if (only) { drawDragon(g, G); g.restore(); return; }
+  const clouds = () => { for (let i = 0; i < 4; i++) { const x = Math.round(((i * 90 + 20 + t * (1.5 + i * 0.6)) % 380) - 30), y = 16 + ((i * 23) % 34), w = 22 + ((i * 9) % 14); R(x, y, w, 5, '#ffffff'); R(x + 4, y - 3, w * 0.5, 3, '#ffffff'); R(x + w * 0.45, y - 5, w * 0.35, 5, '#ffffff'); } };
+  if (key === 'park') clouds();
+  else if (key === 'beach') {
+    clouds();
+    const sx = Math.round((t * 3) % 380) - 30;
+    R(sx, 112, 10, 2, '#ffffff'); R(sx + 1, 114, 8, 1, '#8a5a2e'); for (let k = 0; k < 7; k++) R(sx + 5 - (k >> 1), 105 + k, (k >> 1) + 1, 1, '#ffffff'); R(sx + 5, 104, 1, 8, '#6b4a2e');
+    for (let i = 0; i < 2; i++) {
+      const gx = Math.round((t * 14 + i * 170) % 360) - 20, gy = Math.round(46 + i * 14 + Math.sin(t * 1.5 + i) * 4), f = Math.sin(t * 9 + i) > 0 ? 1 : 0;
+      R(gx - 2, gy - f, 1, 1, '#ffffff'); R(gx - 1, gy + 1 - f, 1, 1, '#ffffff'); R(gx, gy + 1, 1, 1, '#ffffff'); R(gx + 1, gy + 1 - f, 1, 1, '#ffffff'); R(gx + 2, gy - f, 1, 1, '#ffffff');
+    }
+  } else if (key === 'snow') {
+    for (let i = 0; i < 70; i++) { const sp = 6 + ((i * 7) % 10), x = (((i * 47) % 320) + Math.sin(t + i) * 6 + 320) % 320, y = (((i * 29) % 180) + t * sp) % 180; R(x, y, 1, 1, '#ffffff'); }
+    for (let i = 0; i < 4; i++) { const p = (t * 0.25 + i / 4) % 1; R(131 + p * 8 + Math.sin(p * 6 + i) * 2, 98 - p * 26, 2 + Math.round(p * 2), 2, `rgba(220,228,240,${(0.7 * (1 - p)).toFixed(2)})`); }
+  } else if (key === 'tokyo') {
+    const p = (t % 16) / 5;
+    if (p < 1) { const x0 = Math.round(-90 + p * 500); for (let k = 0; k < 3; k++) { const cx = x0 + k * 28; R(cx, 77, 27, 9, INK); R(cx + 1, 78, 25, 7, '#e8eef7'); R(cx + 1, 83, 25, 1, '#39e6ff'); for (let w = cx + 3; w < cx + 24; w += 5) R(w, 79, 3, 3, '#ffd98a'); } }
+    TOKYO_SIGNS.forEach(([sx, sy, w, h], i) => { if (Math.sin(t * 7 + i * 3.1) > 0.93) R(sx, sy, w, h, 'rgba(10,8,30,0.65)'); });
+  } else if (key === 'moon') {
+    const r = rng(99);
+    for (let i = 0; i < 24; i++) { const x = (r() * ART_W) | 0, y = (r() * 90) | 0; if (Math.sin(t * 3 + i * 2.1) > 0.7) R(x, y, 1, 1, '#ffffff'); }
+    const ux = Math.round(160 + Math.sin(t * 0.11) * 150), uy = Math.round(24 + Math.sin(t * 0.9) * 3);
+    R(ux - 9, uy - 1, 19, 4, INK); R(ux - 8, uy, 17, 2, '#b9c0cc'); R(ux - 6, uy + 2, 13, 1, '#7d8494'); R(ux - 3, uy - 4, 7, 3, 'rgba(120,230,255,0.85)'); R(ux, uy - 3, 1, 1, '#5aff7a');
+    for (let k = 0; k < 3; k++) R(ux - 6 + k * 6, uy + 1, 1, 1, Math.sin(t * 6 + k * 2) > 0 ? '#ffd23f' : '#ff4fa3');
+    for (const [i, rx] of [[0, 46], [1, 186], [2, 290]]) {
+      const pop = Math.max(0, Math.sin(t * 0.55 + i * 2.3)) * 7 + ((G.excite || 0) > 0.3 ? 3 : 0), ax0 = rx + 2, top = 117 - Math.round(pop);
+      if (pop > 0.5) { R(ax0, top, 5, 5, '#7ad95a'); R(ax0 + 1, top + 1, 1, 2, INK); R(ax0 + 3, top + 1, 1, 2, INK); R(ax0 + 2, top - 3, 1, 3, '#7ad95a'); R(ax0 + 2, top - 4, 1, 1, '#ffd23f'); }
+      R(rx - 1, 119, 11, 12, INK); R(rx, 120, 9, 11, '#7a7a85'); R(rx + 1, 120, 7, 2, '#8c8c97'); R(rx + 6, 123, 2, 2, '#686872');
+    }
+  } else if (key === 'rome') {
+    for (const bx of [58, 262]) for (let k = 0; k < 7; k++) R(bx - 2 + Math.floor((Math.sin(t * 17 + k * 5 + bx) * 0.5 + 0.5) * 5), 102 - Math.floor((Math.sin(t * 13 + k * 3) * 0.5 + 0.5) * 6), 1 + (k % 2), 1 + (k % 2), ['#ffd23f', '#ff8a2a', '#ff5a1f'][k % 3]);
+    R(158, 98, 4, 4, '#e2ad84'); R(157, 97, 6, 1, '#4f9a3a'); R(157, 102, 6, 2, '#ece6d8');
+    if ((G.excite || 0) > 0.3) { R(163, 96, 1, 4, '#e2ad84'); R(163, 95, 2, 1, '#e2ad84'); }
+    const cyc = (t * 0.7) % 2, who = cyc < 1 ? 0 : 1, ph = cyc % 1, lunge = ph < 0.4 ? ph / 0.4 : ph < 0.55 ? 1 : Math.max(0, 1 - (ph - 0.55) / 0.45);
+    const glad = (x, dir, atk, col) => {
+      const lx = x + Math.round(dir * atk * 3), arm = atk > 0.8 ? 0 : -2;
+      R(lx, 114, 1, 4, '#c9946a'); R(lx + 2, 114, 1, 4, '#c9946a'); R(lx, 110, 3, 4, col); R(lx, 108, 3, 2, '#e2ad84'); R(lx, 107, 3, 1, '#b8b8c4'); R(lx + 1, 105, 1, 2, '#d93a3f');
+      R(dir > 0 ? lx - 2 : lx + 3, 109, 2, 4, '#9b6a2a');
+      if (atk > 0.8) R(dir > 0 ? lx + 3 : lx - 4, 110, 4, 1, '#e8eef7'); else R(dir > 0 ? lx + 3 : lx - 1, 106 + arm + 2, 1, 4, '#e8eef7');
+    };
+    glad(148, 1, who === 0 ? lunge : 0, '#9b1f2a'); glad(170, -1, who === 1 ? lunge : 0, '#2f4f8a');
+    if (lunge === 1 && Math.sin(t * 40) > 0) R(158, 108, 2, 2, '#ffd23f');
+  } else if (key === 'castle') {
+    for (const [tx, ty] of [[32, 58], [47, 55], [287, 58], [273, 55]]) {
+      const f = (Math.sin(t * 17 + tx) + Math.sin(t * 23 + ty) > 0.6 ? 1 : 0) + (Math.sin(t * 11 + tx * 3) > 0.5 ? 1 : 0);
+      R(tx - 7, ty - 12, 15, 16, 'rgba(255,160,70,0.07)'); R(tx - 4, ty - 8, 9, 10, 'rgba(255,160,70,0.07)');
+      R(tx - 1, ty - 4 - f, 3, 4 + f, '#ff8a2a'); R(tx, ty - 3 - f, 1, 3, '#ffe07a'); if (f > 1) P1(g, tx + (tx & 1 ? 1 : -1), ty - 7, '#ffd23f');
+    }
+  } else if (key === 'ice') {
+    const msg = (G.excite || 0) > 0.3 && G.scorer >= 0 ? (G.scorer ? '  BLUE SCORES!  ' : '  RED SCORES!  ') : '  WELCOME TO THE ICE    MAKE SOME NOISE    FLOPPY PONG    ',
+      col = (G.excite || 0) > 0.3 && G.scorer >= 0 ? TEAM[G.scorer].light : '#ffb347', tw = msg.length * 4, off = Math.floor(t * 18) % tw;
+    for (let x = -off; x < ART_W; x += tw) tiny(g, msg, x, 48, col);
+    R(0, 84, ART_W, 24, 'rgba(205,232,255,0.16)'); R(0, 84, ART_W, 1, 'rgba(235,246,255,0.55)');
+    for (let x = 0; x < ART_W; x += 40) { R(x, 84, 2, 24, '#9fb2cc'); R(x, 84, 1, 24, '#d6e2f2'); }
+    g.fillStyle = 'rgba(255,255,255,0.22)';
+    for (let x = 10; x < ART_W; x += 40) for (let k = 0; k < 14; k++) { g.fillRect(x + 6 + k, 104 - k, 1, 2); if (k < 8) g.fillRect(x + 14 + k, 100 - k, 1, 1); }
+  }
+  g.restore();
+}
 function paintStage(key) {
   if (MAP_ART[key]) return MAP_ART[key];
+  if (HOOPS_COURT[key]) return (MAP_ART[key] = paintFromHoops(key));
   const [c, g] = mk(STAGE_W, STAGE_H), rnd = rng(key.length * 7919 + key.charCodeAt(0) * 37);
   const W = STAGE_W, H = STAGE_H;
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
@@ -1021,13 +1552,20 @@ function stepBall(b, dt, W, ev) {
     b.vy -= (W.g + b.spin * W.magnus) * h;
     if (W.wind) b.vx += W.wind * h;
     b.x += b.vx * h; b.y += b.vy * h; b.rot += b.w * h;
+    if (W.bump) for (let k = 0; k < 2; k++) {
+      const q = BUMPERS[k], dx = b.x - q.x, dy = b.y - q.y, d = Math.hypot(dx, dy), rr = BUMP_R + b.r;
+      if (d >= rr || d < 1e-6) continue;
+      const nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny;
+      b.x = q.x + nx * rr; b.y = q.y + ny * rr;
+      if (vn < 0) { const out = Math.max(-vn, 2.5); b.vx += (out - vn) * nx; b.vy += (out - vn) * ny; b.spin = 0; if (ev) ev('bumper', k, -vn); }
+    }
     let c = circRect(b.x, b.y, b.r, TABLE_RECT);
     if (c) {
       b.x += c.nx * c.pen; b.y += c.ny * c.pen;
       const vn = b.vx * c.nx + b.vy * c.ny;
       if (vn < 0) {
         if (c.ny > 0.7) {
-          b.vy = -vn * W.e;
+          b.vy = -vn * W.e * (W.te || 1);
           if (b.spin) { b.vx += b.spinDir * b.spin * W.spinKick; b.vy *= 1 - b.spin * 0.12; b.spin *= 0.45; }
           b.vx *= 0.91; b.w = -b.vx / b.r * 0.6;
           if (ev) ev('table', b.x < 0 ? -1 : 1, -vn);
@@ -1141,11 +1679,12 @@ function setBody(mods, reach) {
   return true;
 }
 const PAD_REST = { x: 0.12 * PSCALE, y: -0.38 * PSCALE }, JUMP_XK = PSCALE;   // sideways hop speed shrinks with the body too
-// a hop goes the way the key points more than the way the plank leans: a 10 degree lean already launches ~33 degrees off
-// vertical, and the full lean gives a long flat one (HOP_TH at most); takeoff speed is JUMP_V * sqrt-ish of the tilt
-const HOP_TH = 1.05, HOP_A0 = 0.18;
-const hopAng = a => Math.sign(a) * HOP_TH * (1 - Math.exp(-Math.abs(a) / HOP_A0));
-const hopLean = th => -Math.sign(th) * HOP_A0 * Math.log(1 - Math.min(Math.abs(th), HOP_TH * 0.999) / HOP_TH);
+// a hop goes the way the plank leans, but the legs keep nearly the whole upward kick until the lean gets big: the usual
+// quarter-second hold (~27 degrees of lean) floats off ~31 degrees from vertical, nearly as high and long in the air as a
+// tap, at ~1.8 players a second sideways (like the real thing); the full lean gives a long flat low one (HOP_TH at most)
+const HOP_K = 1.6, HOP_TH = 1.45, HOP_VY = 0.231, HOP_VX = 0.868;
+const hopAng = a => Math.sign(a) * Math.min(HOP_TH, HOP_K * Math.abs(a));
+const hopLean = th => Math.sign(th) * Math.min(Math.abs(th), HOP_TH) / HOP_K;
 const leanAt = t => LEAN_MAX * (1 - Math.pow(1 - clamp(t / LEAN_T, 0, 1), LEAN_EXP));
 const leanTime = a => LEAN_T * (1 - Math.pow(1 - clamp(a / LEAN_MAX, 0, 1), 1 / LEAN_EXP));
 const groundAt = x => Math.abs(x) < TABLE_HALF ? TABLE_TOP : 0;
@@ -1188,7 +1727,7 @@ class Player {
   jump() {
     const a = this.a, G = this.G, slide = this.slide;
     this.takeoff();
-    const th = hopAng(a); this.vx = Math.sin(th) * JUMP_V * JUMP_XK + slide; this.vy = Math.pow(Math.cos(th), 0.71) * JUMP_V * G.jumpK;
+    const th = hopAng(a); this.vx = Math.sin(th) * JUMP_V * JUMP_XK * HOP_VX + slide; this.vy = Math.pow(Math.cos(th), HOP_VY) * JUMP_V * G.jumpK;
     this.w *= 0.25; this.slide = 0;
     if (G.map.id === 'tokyo' && !this.ghost && this.fy === 0 && onPad(this.fx)) {   // a boost pad: the hop goes way further
       this.vx *= PAD_BOOST; this.vy *= 1.15;
@@ -1375,7 +1914,7 @@ class CPU {
       // coming back from a lean in over the table, let go at the tilt whose hop drifts it home (but never onto the table)
       let upright = Math.abs(p.a) < 0.1;
       if (this.k === 1 - this.fwdKey()) {
-        const os = p.os, air = 2 * JUMP_V * G.jumpK / G.pg * JUMP_V * JUMP_XK;
+        const os = p.os, air = 2 * JUMP_V * G.jumpK / G.pg * JUMP_V * JUMP_XK * HOP_VX;
         const dx = clamp((p.home - p.fx) * os, TABLE_HALF + 0.35 - p.fx * os, 0.3);
         upright = p.a * os >= hopLean(Math.asin(clamp(dx / air, -0.45, 0.45)));
       }
@@ -1536,7 +2075,7 @@ const REF_LEAP_T = 0.15, CALL_T = 1.7, CALL_DUR = 1.4, BANNER_T = 1.5;
 const READY_GO = 0.9, FIRST_TO_T = 4, TIP_T = 0.5;   // ready screen: pause after the last side is ready; how long FIRST TO N shows; table tip-over time
 // a long rally pushes everyone back, so the camera can open up past the painted stage: the scenery carries on with mirrored
 // side strips and stretched top/bottom rows (EXT_* stage px), up to CAM_MAX wide (table ~18% of the screen, PPC is ~16%)
-const EXT_X = 80, EXT_T = 80, EXT_B = 16, CAM_MAX = STAGE_W + 2 * EXT_X;
+const EXT_X = 220, EXT_T = 220, EXT_B = 16, CAM_MAX = STAGE_W + 2 * EXT_X;
 
 class Game {
   constructor() {
@@ -1583,7 +2122,9 @@ class Game {
     this.rollModes();
     const M = this.map, mod = this.modeK(), grav = Math.max(0.3, E.grav * (M.grav || 1));
     this.W = { g: GRAVITY * PSCALE * grav * mod.ballG, e: BALL_E, magnus: 0.35 * PSCALE * S.k, spinKick: 1.08 * S.k,
-      wind: mod.wind ? (Math.random() < 0.5 ? -1 : 1) * rand(0.6, 1.1) : 0, tramp: mod.tramp, floorE: M.bouncy ? 1.05 : 0, wallE: M.bouncy ? 0.95 : 0 };
+      wind: mod.wind ? (Math.random() < 0.5 ? -1 : 1) * rand(0.6, 1.1) : 0, tramp: mod.tramp, floorE: M.bouncy ? 1.05 : 0, wallE: M.bouncy ? 0.95 : 0,
+      te: mod.tableE, heat: mod.heat, ghost: mod.ghost, bump: mod.bump };
+    this.W.g0 = this.W.g; this.W.m0 = this.W.magnus; this.heat = 1;
     // the players' own fall and hop height scale with their size (same hang time, same look); sideways hop speed stays in metres
     this.pg = GRAVITY * grav * PSCALE * PG_K; this.jumpK = Math.pow(grav, 0.25) * (M.jump || 1) * mod.jump * PSCALE * PG_K; this.fric = M.fric * E.fric;
     this.massK = mod.mass; this.ballK = mod.ballR;
@@ -1611,11 +2152,12 @@ class Game {
   }
   hasMode(id) { return this.modes.some(m => m.id === id); }
   modeK() {
-    const k = { body: {}, reach: 1, jump: 1, mass: 1, ballR: 1, ballG: 1, wind: 0, net: 1, tramp: false };
+    const k = { body: {}, reach: 1, jump: 1, mass: 1, ballR: 1, ballG: 1, wind: 0, net: 1, tramp: false, tableE: 1, heat: false, ghost: false, bump: false };
     for (const m of this.modes) {
       Object.assign(k.body, m.body || {});
-      for (const f of ['reach', 'jump', 'mass', 'ballR', 'ballG', 'net']) if (m[f]) k[f] *= m[f];
+      for (const f of ['reach', 'jump', 'mass', 'ballR', 'ballG', 'net', 'tableE']) if (m[f]) k[f] *= m[f];
       if (m.wind) k.wind = 1; if (m.id === 'tramp') k.tramp = true;
+      if (m.heat) k.heat = true; if (m.ghost) k.ghost = true; if (m.bump) k.bump = true;
     }
     return k;
   }
@@ -1639,7 +2181,8 @@ class Game {
       else for (let k = 0; k < 2; k++) if (this.kd[p.seat][k]) p.press(k ? 1 : -1);
     }
     this.ball = newBall({ r: this.B.r * this.ballK }); this.ref.reset(); this.trail = [];
-    if (!this.demo) this.banner = { text: this.mixLabel(), sub: this.modes.map(m => m.name).join(' + '), t: BANNER_T };
+    this.heat = 1; this.W.g = this.W.g0; this.W.magnus = this.W.m0;   // (a HOT BALL cools off between points)
+    if (!this.demo) this.banner ={ text: this.mixLabel(), sub: this.modes.map(m => m.name).join(' + '), t: BANNER_T };
   }
   // ------------------------------------------------ READY UP: before a match every side hops once to say it's ready
   startReady() {
@@ -1759,6 +2302,7 @@ class Game {
   }
   ballEvent(type, a, sp) {
     const b = this.ball;
+    if (type === 'bumper') { this.sfx.boing(); this.addShake(0.6); (this.bumpAt ||= [-9, -9])[a] = this.time; return; }   // (part of the rally: play on)
     if (type === 'table') { this.sfx.tick(sp / 5); this.dot(b.x, TABLE_TOP); }
     else if (type === 'edge') this.sfx.tick(sp / 8);
     else if (type === 'net') { this.sfx.net(); this.lastNet = true; }
@@ -1780,6 +2324,13 @@ class Game {
     const inSpd = Math.hypot(b.vx, b.vy);
     let v = null;
     this.hits[p.team]++;
+    // HOT BALL: every return comes back faster. Gravity and the spin's curl go up with it, so every shot keeps its shape and just
+    // gets there sooner (the shots below are aimed with the hotter gravity, so they still land)
+    if (W.heat && !this.toss) {
+      const h0 = this.heat; this.heat = Math.min(2.4, this.heat * 1.08); W.g = W.g0 * this.heat; W.magnus = W.m0 * this.heat;
+      if (h0 < 1.5 && this.heat >= 1.5) this.popup('HEATING UP!', b.x, b.y + 0.6, ORANGE, 0.9, 0.9);
+      else if (h0 < 2 && this.heat >= 2) { this.popup('ON FIRE!', b.x, b.y + 0.6, '#ff4a2a', 1.1, 1); this.sfx.boom(); }
+    }
     // standing still, the paddle just bats it back in a high, slow lob that lands mid-table and rises to the other paddle (easy to
     // smash); lean or move into it, or jump, to drive it
     const lazy = this.lastLazy = clamp(1 - Math.abs(fwd) / 1.2 - (p.air ? 1 : 0), 0, 1) * (this.toss ? 0 : 1);
@@ -1806,6 +2357,15 @@ class Game {
       for (let k = 0; k < 6 && (arcYAt(b.x, b.y, v, W.g, 0) ?? 9) < TABLE_TOP + NET_H + b.r + 0.25; k++) v = solveArc(b.x, b.y, xl, TABLE_TOP + b.r, apex += 0.3 * PSCALE, W.g);
     }
     // off the rim of the paddle it goes wild, and so does a fast one (a top-step ball is hard to get back); the CPU's level adds its own wobble
+    // up on the table (or flying in over it at table height), with the ball over the net: SLAM it, a fast one driven down onto their side
+    const pf = p.foot();
+    if (!this.toss && Math.abs(pf.x) < TABLE_HALF + 0.3 && (p.fy > 0 || (p.air && pf.y > TABLE_TOP)) && b.y > TABLE_TOP + NET_H + b.r + 0.55 * PSCALE) {
+      for (let ux = RALLY_CAP * 1.6; ux > RALLY_UX * 0.8; ux *= 0.9) {
+        const f = solveFlat(b.x, b.y, d * TABLE_HALF * rand(0.5, 0.85), TABLE_TOP + b.r, ux, W.g);
+        if ((arcYAt(b.x, b.y, f, W.g, 0) ?? 0) > TABLE_TOP + NET_H + b.r + 0.08) { v = f; v.slam = true; break; }
+      }
+      if (v.slam) { this.popup('SLAM!', b.x, b.y + 0.6, ORANGE, 1.1, 0.9); this.sfx.smash(); this.addShake(2.5); }
+    }
     const wild = Math.max(0, off - 0.6) * 2.5 + Math.max(0, inSpd - FAST_IN) * 0.35 + (L ? L.mis * 1.3 * (1 - lazy) : 0);
     if (W.wind && v.T) v.vx -= 0.5 * W.wind * v.T;   // aim into the wind so it curves back onto the spot (it still drifts, but lands in)
     v.vx *= 1 + gauss() * (0.02 + wild * 0.06); v.vy += gauss() * (0.05 + wild * 0.3);   // (halved: the arcs fly twice as far)
@@ -1818,7 +2378,7 @@ class Game {
     }
     // a fast one beats a paddle that's just held there: the ball pops straight up off it (two still paddles can't bat it forever:
     // the rally's steps speed it up past FAST_IN)
-    if (Math.random() < lazy * clamp((inSpd - FAST_IN) / 2.3, 0, 1)) v = { vx: d * rand(0.4, 1.2), vy: rand(2, 3.5) };
+    if (!v.slam && Math.random() < lazy * clamp((inSpd - FAST_IN) / 2.3, 0, 1)) v ={ vx: d * rand(0.4, 1.2), vy: rand(2, 3.5) };
     Object.assign(b, { vx: v.vx, vy: v.vy, spin: 0, spinDir: d, w: -d * 30 });
     Object.assign(this, { toss: false, lastTeam: p.team, oppBounces: 0, lastNet: false, spinTeam: p.team });
     // the heavier the ball, the harder it shoves you back (and the faster the rally gets, the further: a bowling ball deep in a rally sends you flying)
@@ -1884,8 +2444,6 @@ class Game {
     const gp = this.winner < 0 ? [0, 1].find(t => this.wouldWin(t)) : undefined;
     if (gp !== undefined && gp !== this.gamePt && !this.demo) {
       this.call.gp = gp;   // GAME POINT goes under the big call so the two don't pile up
-      const ids = SOUND_LIST.filter(e => !e.winner && this.soundOn(e.id)).map(e => e.id);
-      if (ids.length) setTimeout(() => this.sfx.cue(pick(ids)), 500);
     }
     this.gamePt = gp === undefined ? -1 : gp;
   }
@@ -1946,6 +2504,8 @@ class Game {
         this.sfx.smash(); this.sfx.thud(1); if (SET.grunts) this.sfx.oof();
         this.addShake(5); this.slowmo(0.3, 0.7); this.excite = 1;
         this.popup('FINISHED!', f.x * 0.7, TABLE_TOP + 2.8, ORANGE, 1.6, 2.2);
+        const ids = SOUND_LIST.filter(e => this.soundOn(e.id)).map(e => e.id);   // and a green sound on it
+        if (ids.length) this.sfx.cue(pick(ids));
         for (let i = 0; i < 16; i++) this.addPart(b.x, b.y, rand(-3, 3), rand(-1, 4), 9, 0.5, pick([ORANGE, '#ffd23a', CREAM]), 1);
         b.vx *= -0.3; b.vy = Math.abs(b.vy) * 0.3 + 2;
       }
@@ -1978,8 +2538,6 @@ class Game {
     this.state = 'over'; this.overT = again ? 0.6 : 0; this.overSel = 0; this.winner = team; this.excite = 1; this.call = null;
     if (again) return;   // coming back from FINISH HIM: the result is already in
     this.sfx.fanfare();
-    const win = SOUND_LIST.find(e => e.winner);
-    if (win && this.soundOn(win.id)) setTimeout(() => this.sfx.cue(win.id), 700);
     for (let i = 0; i < 80; i++) this.addPart(rand(-6, 6), rand(6, 9), rand(-1, 1), rand(-1, 0.5), 1.5, rand(2, 4), pick([TEAM[team].jersey, TEAM[team].light, '#ffd23a', CREAM]), 1, 'confetti');
     const T = this.tourney;
     if (T && T.cur) { T.cur.w = T.cur[team ? 'b' : 'a']; T.cur.score = this.score.slice(); this.advanceByes(); }
@@ -2121,7 +2679,7 @@ class Game {
       const top = Math.max(b.held ? 0 : b.y + 0.4, ...this.players.map(p => p.headPos().y + 0.3), this.ref.y + 2.4);
       const spread = CAM_SPREAD * (Math.max(...ps) - Math.min(...ps)) * PPM;
       tw = clamp(Math.max(spread, (hi - lo) * PPM, top * PPM * ART_W / 122), CAM_MIN, CAM_MAX);
-      tx = clamp((lo + hi) / 2, -3, 3);
+      tx = clamp((lo + hi) / 2, -WALL_X, WALL_X);
       const close = this.state === 'point' && this.refTarget && this.pointT > REF_LEAP_T ? this.refTarget
         : this.state === 'finish' && F && F.hitT >= 0 ? F.target : null;
       if (close) {
@@ -2148,9 +2706,11 @@ const ext = mk(STAGE_W + 2 * EXT_X, STAGE_H + EXT_T + EXT_B), extC = ext[0], eg 
 function extendStage() {
   const W = STAGE_W, H = STAGE_H, FW = extC.width;
   eg.imageSmoothingEnabled = false;
-  eg.drawImage(lowC, EXT_X, EXT_T);
-  eg.save(); eg.translate(EXT_X, 0); eg.scale(-1, 1); eg.drawImage(lowC, 0, 0, EXT_X, H, 0, EXT_T, EXT_X, H); eg.restore();
-  eg.save(); eg.translate(2 * EXT_X + W, 0); eg.scale(-1, 1); eg.drawImage(lowC, W - EXT_X, 0, EXT_X, H, 0, EXT_T, EXT_X, H); eg.restore();
+  if (HOOPS_COURT[G.map.id]) {   // the Hoops courts aren't painted to tile: the scenery carries on as mirror images of the edges
+    eg.drawImage(lowC, EXT_X, EXT_T);
+    eg.save(); eg.translate(EXT_X, 0); eg.scale(-1, 1); eg.drawImage(lowC, 0, 0, EXT_X, H, 0, EXT_T, EXT_X, H); eg.restore();
+    eg.save(); eg.translate(2 * EXT_X + W, 0); eg.scale(-1, 1); eg.drawImage(lowC, W - EXT_X, 0, EXT_X, H, 0, EXT_T, EXT_X, H); eg.restore();
+  } else for (let x = EXT_X - Math.ceil(EXT_X / W) * W; x < FW; x += W) eg.drawImage(lowC, x, EXT_T);   // (every other map is painted to tile)
   eg.drawImage(extC, 0, EXT_T, FW, 1, 0, 0, FW, EXT_T);
   eg.drawImage(extC, 0, EXT_T + H - 1, FW, 1, 0, EXT_T + H, FW, EXT_B);
 }
@@ -2275,10 +2835,11 @@ function drawPlayer(G, p) {
   // the short paddle arm: the blade stands up along the body, tipping toward the ball as the arm reaches, and flicks on a hit
   const pd = p.pad, rest = rot({ x: d * PAD_REST.x, y: PAD_REST.y }, -p.a);
   const tilt = Math.atan2(rest.x * (pd.y - s.y) - rest.y * (pd.x - s.x), rest.x * (pd.x - s.x) + rest.y * (pd.y - s.y));
-  const ang = p.a - tilt * 0.6 + d * p.swing * 0.5, down = (PAD_BLADE / 2 + 0.5) / PPM;
+  const pk = BODY.padR / BODY0.padR;   // (BIG / TINY PADDLES)
+  const ang = p.a - tilt * 0.6 + d * p.swing * 0.5, down = (PAD_BLADE / 2 + 0.5) * pk / PPM;
   const hand = { x: pd.x - Math.sin(ang) * down, y: pd.y - Math.cos(ang) * down };
   limb(sp.arm, s, hand, flip);
-  blit(sp.pad, pd.x, pd.y, ang);
+  blit(sp.pad, pd.x, pd.y, ang, false, 1, pk);   // (longer blade, same edge-on thickness)
 }
 // a draw-only pose on top of the physics: the side that just won hops and wiggles, the side that lost sags forward
 function moodOf(G, p) {
@@ -2322,18 +2883,29 @@ function drawRef(G) {
 }
 function drawBall(G) {
   const b = G.ball, spr = ballSpr(G.B, b.r);
+  // GHOST BALL fades out as it nears the net and back in on the far side; a HOT BALL glows, then burns red
+  const ga = G.W.ghost && !b.held && (G.state === 'play' || G.state === 'serve') ? clamp((Math.abs(b.x) - 0.3) / 1.0, 0, 1) : 1;
+  const hk = G.W.heat ? clamp((G.heat - 1) / 1.1, 0, 1) : 0, fire = hk > 0.7 ? '#ff4a2a' : ORANGE;
+  if (!ga) return;
   if (!b.held) {
     // a streak behind it that tapers off: long when it's flying, a stub when it's slow
-    const n = G.trail.length, col = b.spin > 0 ? ORANGE : b.spin < 0 ? '#86b2ff' : '#ffd6c4';
+    const n = G.trail.length, col = hk > 0.25 ? fire : b.spin > 0 ? ORANGE : b.spin < 0 ? '#86b2ff' : '#ffd6c4';
     ctx.strokeStyle = col; ctx.lineCap = 'round';
     for (let i = 1; i < n; i++) {
       const a = G.trail[i - 1], q = G.trail[i], f = i / n;
-      ctx.globalAlpha = 0.12 + 0.5 * f; ctx.lineWidth = Math.max(1, b.r * PPM * 1.5 * f) * K;
+      ctx.globalAlpha = (0.12 + 0.5 * f) * ga; ctx.lineWidth = Math.max(1, b.r * PPM * (1.5 + hk) * f) * K;
       ctx.beginPath(); ctx.moveTo(WX(a.x), WY(a.y)); ctx.lineTo(WX(q.x), WY(q.y)); ctx.stroke();
     }
-    ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+    ctx.lineCap = 'butt';
+    if (hk > 0) {
+      ctx.globalAlpha = (0.2 + 0.25 * hk) * ga * (0.8 + 0.2 * Math.sin(G.time * 30)); ctx.fillStyle = fire;
+      ctx.beginPath(); ctx.arc(WX(b.x), WY(b.y), b.r * PPM * (1.7 + 1.2 * hk) * K, 0, 7); ctx.fill();
+    }
   }
+  ctx.globalAlpha = ga;
   blit(spr, b.x, b.y, -b.rot);
+  ctx.globalAlpha = 1;
+  if (ga < 1) return;
   if (Math.abs(b.spin) > 0.03 && !b.held) {   // a little white pixel arrow over the ball: which way its top is turning, for as long as it spins
     const d = Math.sign(b.spin) * (b.spinDir || 1), u = Math.max(1, Math.round(K)), x0 = Math.round(WX(b.x)), y0 = Math.round(WY(b.y) - (b.r * PPM + 5) * K);
     const px = [[-1, 0], [0, 0], [1, 0], [-2, 1], [2, 1], [-3, 2], [1, 2], [2, 2], [3, 2], [2, 3]];
@@ -2356,6 +2928,12 @@ function drawCourt(G) {
     wRect(x - PAD_W - px, 0, PAD_W * 2 + px * 2, px * 2, INK); wRect(x - PAD_W, 0, PAD_W * 2, px, on ? '#3ff0ff' : '#ff3fa4');
     for (let k = -1; k <= 1; k++) wRect(x + k * 0.22 - px, px * 3 + ((G.time * 4 + k) % 1) * 0.3, px * 2, px, on ? '#ff3fa4' : '#3ff0ff');
   }
+  if (G.W.bump) BUMPERS.forEach((q, k) => {   // BUMPERS: a red pinball mushroom cap, flashing white when it kicks the ball
+    const since = G.time - ((G.bumpAt || [])[k] ?? -9), fl = since < 0.18, r = BUMP_R * PPM * K * (fl ? 1.25 : 1 + 0.04 * Math.sin(G.time * 5 + k)), x = WX(q.x), y = WY(q.y);
+    const disc = (rr, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill(); };
+    ctx.globalAlpha = 0.25; disc(r * 1.9, fl ? '#ffffff' : '#ff6a5a'); ctx.globalAlpha = 1;
+    disc(r + K, INK); disc(r, fl ? '#ffffff' : '#e8413c'); disc(r * 0.62, fl ? '#ffe9a0' : '#ffd25a'); disc(r * 0.3, '#ffffff');
+  });
 }
 function drawWind(G) {
   const px = 1 / PPM;
@@ -2368,7 +2946,9 @@ function drawWind(G) {
 function drawWorld(G) {
   lg.drawImage(paintStage(G.map.id), 0, 0);
   drawCrowd(lg, G.crowd, G.time, G.excite || 0, G.scorer >= 0 ? G.scorer : null);
+  drawStageExtras(lg, G);
   extendStage();
+  drawStageExtras(eg, G, EXT_X + COURT_DX, EXT_T + COURT_DY, 'dragon');
   ctx.drawImage(extC, PX(-EXT_X), PY(-EXT_T), extC.width * Z * S, extC.height * Z * S);
   const flying = G.ref.mode !== 'stand';
   drawRefStand();
@@ -2999,7 +3579,7 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 if (location.search.includes('debug')) {
-  window.floppy = G; window.floppySET = SET; window.floppyFn = { solveArc, predictBall, TABLE_TOP, TABLE_HALF, BODY };
+  window.floppy = G; window.floppySET = SET; window.floppyFn = { solveArc, predictBall, TABLE_TOP, TABLE_HALF, BODY, CPU_LEVELS, MAPS, MODES, memeLook };
   window.floppyStep = n => { for (let i = 0; i < n; i++) { frame(STEP); if (!G.paused) G.step(STEP); } render(G); };
 }
 requestAnimationFrame(loop);
