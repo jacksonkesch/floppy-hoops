@@ -32,6 +32,9 @@
   .group { margin-top: 10px; }
   .group h3 { margin: 0 0 6px; font-size: 11px; font-weight: 400; color: #7d88a8; letter-spacing: 0.1em; }
   .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
+  .modes-head.first { margin-top: 0; padding-top: 0; border-top: 0; }
+  /* DONE stays on screen while the long list scrolls under it */
+  #menu .foot { position: sticky; bottom: -20px; z-index: 1; margin: 18px -20px -20px; padding: 12px 20px 16px; background: #1b2031; border-top: 2px solid #2b3350; }
   #menu #done, #tourpanel #tour-start, #soundpanel #snd-done { background: #43f07a; color: #141019; font-size: 20px; padding: 10px 28px; }
   .hint { font-size: 11px; color: #7d88a8; }
   #tour-names { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 14px; margin-top: 12px; }
@@ -40,6 +43,7 @@
   .name-row input::placeholder { color: #59627d; }
   #reelpanel[hidden] { display: none; }
   #reelpanel { position: fixed; top: 16px; left: 16px; bottom: 16px; width: min(290px, calc(100vw - 32px)); font-family: Silkscreen, "Courier New", monospace; }
+  #touchbar { position: fixed; left: 8px; bottom: 8px; display: none; gap: 8px; z-index: 5; }
   body.touch #touchbar { display: flex; }
   #touchbar button { font: 12px Silkscreen, "Courier New", monospace; color: #fff6e0; background: rgba(20, 16, 25, 0.72); border: 2px solid #fff6e0; border-radius: 6px; min-width: 44px; height: 44px; padding: 0 10px; }
   #touchbar button[data-a="pause"] { display: none; } #touchbar[data-pause="1"] button[data-a="pause"] { display: block; }
@@ -63,21 +67,23 @@
 <div id="menu" hidden>
   <div class="panel" role="dialog" aria-label="Customize">
     <h2>CUSTOMIZE</h2>
+    <div class="modes-head first"><span class="lbl">MATCH</span></div>
+    <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button data-v="5">5</button><button data-v="7">7</button><button data-v="11">11</button><button data-v="21">21</button><button data-v="0">ENDLESS</button></div></div>
+    <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button data-v="0">OFF</button><button data-v="1">ON</button></div></div>
+    <div class="row"><span class="lbl">SERVES EACH</span><div class="seg" data-key="serves"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="5">5</button></div></div>
+    <div class="row"><span class="lbl">TOUCH TABLE</span><div class="seg" data-key="tableTouch"><button data-v="1">LOSE THE POINT</button><button data-v="0">ALLOWED</button></div></div>
+    <div class="row"><span class="lbl">NEW MIX</span><div class="seg" data-key="shuffle"><button data-v="point">EVERY POINT</button><button data-v="game">EVERY GAME</button></div></div>
+    <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button data-v="off">OFF</button><button data-v="on">ON</button></div></div>
+    <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="impossible">IMPOSSIBLE</button></div></div>
+    <div class="modes-head"><span class="lbl">MIX</span></div>
     <p class="note">Every point gets a new mix from what's switched on here. Tap to switch things on or off.</p>
     <div class="group"><h3>MAPS</h3><div class="chips" data-pool="maps"></div></div>
     <div class="group"><h3>BALLS</h3><div class="chips" data-pool="balls"></div></div>
     <div class="group"><h3>SPIN</h3><div class="chips" data-pool="spins"></div></div>
     <div class="group"><h3>FLOOR + GRAVITY</h3><div class="chips" data-pool="envs"></div></div>
+    <div class="group"><h3>PLAYER AMOUNT</h3><div class="chips" data-pool="players"></div></div>
     <div class="modes-head"><span class="lbl">MODES</span><span class="hint">OFF / ON (SOME POINTS) / ALWAYS. OPPOSITES NEVER STACK.</span></div>
     <div id="mode-list"></div>
-    <div class="modes-head"><span class="lbl">MATCH</span></div>
-    <div class="row"><span class="lbl">PLAYERS</span><div class="seg" data-key="doubles"><button data-v="0">SINGLES</button><button data-v="1">DOUBLES</button></div></div>
-    <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button data-v="5">5</button><button data-v="7">7</button><button data-v="11">11</button><button data-v="21">21</button><button data-v="0">ENDLESS</button></div></div>
-    <div class="row"><span class="lbl">WIN BY 2</span><div class="seg" data-key="winBy2"><button data-v="0">OFF</button><button data-v="1">ON</button></div></div>
-    <div class="row"><span class="lbl">SERVES EACH</span><div class="seg" data-key="serves"><button data-v="1">1</button><button data-v="2">2</button><button data-v="5">5</button></div></div>
-    <div class="row"><span class="lbl">TOUCH TABLE</span><div class="seg" data-key="tableTouch"><button data-v="1">LOSE THE POINT</button><button data-v="0">ALLOWED</button></div></div>
-    <div class="row"><span class="lbl">NEW MIX</span><div class="seg" data-key="shuffle"><button data-v="point">EVERY POINT</button><button data-v="game">EVERY GAME</button></div></div>
-    <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="impossible">IMPOSSIBLE</button></div></div>
     <div class="foot"><button id="done">DONE</button><span class="hint">ESC TO CLOSE</span></div>
   </div>
 </div>
@@ -100,7 +106,6 @@
     <div class="foot"><button id="snd-done">DONE</button><span class="hint">M MUTES ANY TIME</span></div>
   </div>
 </div>
-<script src="planck.min.js"></script>
 <script src="clips.js"></script>
 <script>
 (() => {
@@ -458,15 +463,23 @@ const PPM = 20, ART_W = 320, ART_H = 180, STAGE_W = 400, STAGE_H = 225, STAGE_GX
 const ax = x => STAGE_GX + x * PPM, ay = y => STAGE_GY - y * PPM;
 const STEP = 1 / 60, GAME_SPEED = 1;
 const GRAVITY = 11.8;              // one g for ball and players (~5.2 player heights/s², like the real thing): a tapped hop lands at ~1.25 s
-const TABLE_TOP = 1.05, TABLE_HALF = 2.5, TABLE_T = 0.09, NET_H0 = 0.22, LEG_X = 1.85;
+// sized like PPC in player heights (PH ~1.83 m): the table is ~2.1 PH long and its top ~0.73 PH up (chest high on the small players)
+const TABLE_TOP = 1.34, TABLE_HALF = 1.93, TABLE_T = 0.09, NET_H0 = 0.22, LEG_X = 1.43;
 let NET_H = NET_H0;   // the TALL NET / LOW NET modes change it
-const HOME_X = [TABLE_HALF + 3.9, TABLE_HALF + 5.3];   // singles uses the first; doubles both (front, back)
+const HOME_X = [TABLE_HALF + 2.15, TABLE_HALF + 3.55];   // singles uses the first (~1.15 PH behind the end, like PPC); doubles both (front, back)
 // the plank people: hip at the origin, legs below, torso above, head on a wobbly neck, a free arm with the paddle
-const BODY = { legLen: 0.95, legW: 0.2, torsoW: 0.46, torsoH: 0.82, headR: 0.29, armLen: 0.62, armW: 0.2, padR: 0.2 };
+// PSCALE: the players are small next to the table, like the real thing (the table top comes up to ~0.7 of a player, chest high).
+// Everything up-and-down scales with them (their hops and fall, the ball's gravity and arc heights), so hang times stay the same
+// and a ball still comes in at the same height on a player; sideways stays in metres, so the court and the ball's pace don't change.
+const PSCALE = 0.8, PG_K = 1.07;   // PG_K: players fall a touch faster than the ball (and hop up harder to match), like the real thing
+const BODY = { ...Object.fromEntries(Object.entries({ legLen: 0.95, legW: 0.2, torsoW: 0.46, torsoH: 0.82, headR: 0.29, armLen: 0.62, armW: 0.2 }).map(([k, v]) => [k, v * PSCALE])), padR: 0.18 };
 const LEAN_MAX = 0.92, LEAN_T = 0.25, LEAN_EXP = 0.6;   // ~53 degrees, speeding up as it goes, reached at ~0.4 s, then it stops
-const LAZY_POP = 0.9, FAST_IN = 9.5;
-// a rally steps up: from the 2nd hit, every 3rd hit is a step (RALLY_STEP x faster, higher, deeper), RALLY_MAXK steps at most
-const RALLY_UX = 6, RALLY_STEP = 1.22, RALLY_MAXK = 4;
+// CONTACT_TL: where a CPU plans its jump to meet the ball (table lengths over the table); the paddle reaches out and meets it a
+// moment earlier and a touch higher, ~0.25 TL, like PPC
+const LAZY_POP = 0.7, FAST_IN = 7.3, CONTACT_TL = 0.17;
+// a rally steps up: from the 2nd hit, every 3rd hit is a step (RALLY_STEP x faster, higher, deeper), RALLY_MAXK steps at most.
+// RALLY_UX ~1.2 table lengths/s; the top step is ~1.6x that (~1.9 TL/s, like PPC); each step pushes the CPU RALLY_BACK m further back
+const RALLY_UX = 4.63, RALLY_STEP = 1.12, RALLY_MAXK = 4, RALLY_BACK = 0.85, RALLY_CAP = RALLY_UX * RALLY_STEP ** RALLY_MAXK * 1.04;
 const AIR_RIGHT = 5, AIR_DAMP = 1.8;
 const JUMP_V = 7.55, ARM_SPEED = 12, POINT_T = 3.5, SERVE_T = 1.05, WALL_X = 10.6;
 const CAT_WORLD = 1, CAT_TABLE = 2, CAT_PLAYER = 4, CAT_BALL = 8, CAT_PADDLE = 16, CAT_REF = 32;
@@ -488,7 +501,7 @@ const MAPS = [
   { id: 'bounce', name: 'BOUNCY HOUSE', fric: 0.9, jump: 1.25, bouncy: true, sub: 'SPRINGY FLOOR' },
 ];
 // Tokyo's boost pads: where they sit (m from the middle) and how much more a hop off one goes
-const PADS = [-(TABLE_HALF + 1.55), TABLE_HALF + 1.55], PAD_W = 0.45, PAD_BOOST = 1.45;
+const PADS = [-(TABLE_HALF + 0.85), TABLE_HALF + 0.85], PAD_W = 0.45, PAD_BOOST = 1.45;
 // mixable modes, like Floppy Hoops: OFF / ON (can turn up on a point) / ALWAYS. One per slot, so opposites never stack.
 const MODES = [
   { id: 'longarm', cat: 'PLAYERS', slot: 'arms', name: 'LONG ARMS', sub: 'REACH WAY OUT', body: { armLen: 1.5 }, reach: 1.8 },
@@ -510,7 +523,8 @@ const MODES = [
 ];
 const MODE_CATS = ['PLAYERS', 'BALL', 'PHYSICS', 'TABLE', 'OBSTACLES'];
 const MODE_P = 0.5, MODE_EXTRA = 1 / 6;   // chance a point gets a mode, and of each further slot stacking on
-const TRAMPS = [-(TABLE_HALF + 3.1), TABLE_HALF + 3.1], TRAMP_W = 0.55;
+const TRAMPS = [-(TABLE_HALF + 3.7), TABLE_HALF + 3.7], TRAMP_W = 0.55;   // (same spot on the floor as before the table shrank: behind the singles home now, and a bounce throws you
+// toward the table, so this keeps ~3 m of floor between)
 // r: radius (m, drawn a bit bigger than real so you can see it), e: table bounce, gs: gravity scale, dens: how hard it hits people
 const BALLS = [
   { id: 'pingpong', name: 'PING PONG', r: 0.12, e: 0.98, gs: 1, dens: 2, spin: 1 },
@@ -529,7 +543,9 @@ const ENVS = [
   { id: 'slippery', name: 'SLIPPERY', grav: 1, fric: 0.02 },
   { id: 'lowgrav', name: 'LOW GRAVITY', grav: 0.45, fric: 1 },
 ];
-const POOLS = { maps: MAPS, balls: BALLS, spins: SPINS, envs: ENVS };
+// player amount is rolled per point like the rest of the mix: doubles puts two players on each side
+const PLAYER_AMTS = [{ id: 'singles', name: 'SINGLES' }, { id: 'doubles', name: 'DOUBLES' }];
+const POOLS = { maps: MAPS, balls: BALLS, spins: SPINS, envs: ENVS, players: PLAYER_AMTS };
 const CPU_LEVELS = {
   // react: seconds between looks at the ball; err: how badly it judges where the ball goes; mis: how wild its own shots are;
   // aim: how short it drops its shots (short ones are the hard ones to return)
@@ -567,9 +583,9 @@ const SOUND_BY_ID = Object.fromEntries(SOUND_REEL.map(e => [e.id, e]));
 // ---------------------------------------------------------------- settings
 const SETTINGS_KEY = 'floppy-pong-settings-v3';
 const DEFAULTS = {
-  doubles: 0, target: 7, winBy2: 0, serves: 1, tableTouch: 1, shuffle: 'point', level: 'normal', muted: 0, grunts: 1,
-  pools: { maps: MAPS.map(m => m.id), balls: BALLS.map(b => b.id), spins: ['normal', 'extreme'], envs: ENVS.map(e => e.id) },
-  sounds: {}, tour: { size: 4, names: ['YOU', 'CPU 1', 'CPU 2', 'CPU 3', 'CPU 4', 'CPU 5', 'CPU 6', 'CPU 7'], cpu: [0, 1, 1, 1, 1, 1, 1, 1] },
+  target: 5, winBy2: 0, serves: 1, tableTouch: 1, shuffle: 'point', level: 'normal', muted: 0, grunts: 1, memes: 'off',
+  pools: { maps: MAPS.map(m => m.id), balls: BALLS.map(b => b.id), spins: ['normal', 'extreme'], envs: ENVS.map(e => e.id), players: PLAYER_AMTS.map(q => q.id) },
+  sounds: {}, tour: { size: 8, names: ['YOU', 'CPU 1', 'CPU 2', 'CPU 3', 'CPU 4', 'CPU 5', 'CPU 6', 'CPU 7'], cpu: [0, 1, 1, 1, 1, 1, 1, 1] },
   modes: Object.fromEntries(MODES.map(m => [m.id, 1])),   // 0 off, 1 on, 2 always
 };
 function loadSettings() {
@@ -580,7 +596,17 @@ function loadSettings() {
   for (const k of Object.keys(POOLS)) { out.pools[k] = out.pools[k].filter(id => POOLS[k].some(q => q.id === id)); if (!out.pools[k].length) out.pools[k] = [POOLS[k][0].id]; }
   // maps added after a save start switched on
   if (s.pools && s.pools.maps && !s.newMaps2) { for (const m of MAPS.slice(5)) if (!out.pools.maps.includes(m.id)) out.pools.maps.push(m.id); out.newMaps2 = 1; }
+  // the old per-match PLAYERS switch became the PLAYER AMOUNT pool; old defaults (first to 7, 4-player cup) move to the new ones once
+  if (!s.flow2) {
+    if (+s.doubles === 1) out.pools.players = ['doubles'];
+    if (+s.target === 7) out.target = 5;
+    if (+(s.tour && s.tour.size) === 4) out.tour.size = 8;
+    out.flow2 = 1;
+  }
+  delete out.doubles;
+  if (![1, 2, 3, 5].includes(+out.serves)) out.serves = 1;
   if (!CPU_LEVELS[out.level]) out.level = 'normal';
+  out.memes = out.memes === 'on' ? 'on' : 'off';
   return out;
 }
 function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
@@ -921,7 +947,7 @@ function paintStage(key) {
 }
 
 // the crowd: tiny fans that cheer for the side they sit on, hold up signs and bounce when their team scores
-const CHEERS = ['PONG!', 'SPIN IT', 'SMASH', 'NO NET', 'BOO REF', 'TOPSPIN', 'FLOP!', 'OOF', 'NICE', 'WOW'];
+const CHEERS = ['PONG!', 'SPIN IT', 'FASTER!', 'NO NET', 'BOO REF', 'TOPSPIN', 'FLOP!', 'OOF', 'NICE', 'WOW'];
 const TEAM_SIGNS = [['GO RED', 'RED!', 'WE RED'], ['GO BLUE', 'BLUE!', 'WE BLUE']];
 function makeCrowd(key, seed) {
   const r = rng(seed * 131 + 7), out = [], used = new Map();
@@ -1082,7 +1108,7 @@ function ballSpr(B, br = B.r) {
 }
 // the paddle, seen edge-on: a thin red blade standing up out of the fist, a stub of wooden handle under it.
 // Anchored at the middle of the blade (that's the point that hits the ball).
-const PAD_SPR = {}, PAD_BLADE = 9, PAD_HANDLE = 2;
+const PAD_SPR = {}, PAD_BLADE = 7, PAD_HANDLE = 2;
 function paddleSpr(T) {
   if (PAD_SPR[T.name]) return PAD_SPR[T.name];
   const w = 2, h = PAD_BLADE + PAD_HANDLE;
@@ -1099,17 +1125,17 @@ function paddleSpr(T) {
 // degrees). Let go and it jumps along the lean: a tap is a tall hop straight up, a long hold a long flat one. There is no
 // jumping in the air. The paddle is held up in front of the chest on a short arm and nudges toward the ball by itself;
 // nobody swings. The reach is small, so getting your body to the ball (lean, hop) is what makes the hit.
-let SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82, NECK_H = BODY.legLen + BODY.torsoH, COM_H = NECK_H * 0.55, REACH = 0.42;
+let SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82, NECK_H = BODY.legLen + BODY.torsoH, COM_H = NECK_H * 0.55, REACH0 = 0.42, REACH = REACH0;   // (~0.27 of a player now, like the real thing)
 const BODY0 = { ...BODY };
 // the body modes (long arms, big heads...) change everyone's plank at once; returns true when it changed
 function setBody(mods, reach) {
   const nb = { ...BODY0 }; for (const k in mods) nb[k] = BODY0[k] * mods[k];   // mods are multipliers
-  if (Object.keys(nb).every(k => nb[k] === BODY[k]) && REACH === 0.42 * reach) return false;
+  if (Object.keys(nb).every(k => nb[k] === BODY[k]) && REACH === REACH0 * reach) return false;
   Object.assign(BODY, nb);
-  SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82; NECK_H = BODY.legLen + BODY.torsoH; COM_H = NECK_H * 0.55; REACH = 0.42 * reach;
+  SHOULDER_H = BODY.legLen + BODY.torsoH * 0.82; NECK_H = BODY.legLen + BODY.torsoH; COM_H = NECK_H * 0.55; REACH = REACH0 * reach;
   return true;
 }
-const PAD_REST = { x: 0.12, y: -0.38 }, JUMP_XK = 1;
+const PAD_REST = { x: 0.12 * PSCALE, y: -0.38 * PSCALE }, JUMP_XK = PSCALE;   // sideways hop speed shrinks with the body too
 // a hop goes the way the key points more than the way the plank leans: a 10 degree lean already launches ~33 degrees off
 // vertical, and the full lean gives a long flat one (HOP_TH at most); takeoff speed is JUMP_V * sqrt-ish of the tilt
 const HOP_TH = 1.05, HOP_A0 = 0.18;
@@ -1135,7 +1161,7 @@ class Player {
   reset(x = this.home) {
     Object.assign(this, { fx: x, fy: 0, a: 0, w: 0, air: false, cx: 0, cy: 0, vx: 0, vy: 0, slide: 0, hold: 0, holdT: 0,
       down: 0, up: 0, fall: 0, lag: 0, lagV: 0, squash: 0, hitCd: 0, swing: 0, spinKey: [false, false] });
-    const s = this.shoulder(); this.pad = { x: s.x + this.dir * PAD_REST.x, y: s.y + PAD_REST.y }; this.padV = { x: 0, y: 0 };
+    const s = this.shoulder(); this.pad = { x: s.x + this.dir * PAD_REST.x, y: s.y + PAD_REST.y }; this.padV = { x: 0, y: 0 }; this.lastSh = null;
   }
   foot() { return this.air ? { x: this.cx - Math.sin(this.a) * COM_H, y: this.cy - Math.cos(this.a) * COM_H } : { x: this.fx, y: this.fy }; }
   at(h) { const f = this.foot(); return { x: f.x + Math.sin(this.a) * h, y: f.y + Math.cos(this.a) * h }; }   // h metres up the plank
@@ -1172,13 +1198,13 @@ class Player {
   }
   // a push of (jx, jy) m/s landing h metres up the plank: it turns the plank, and a big one throws it off its foot
   knock(jx, jy, h = COM_H) {
-    const mk = this.G.massK || 1; jx /= mk; jy /= mk;
+    const mk = this.G.massK || 1; jx /= mk; jy /= mk * (1 / PSCALE);   // (pops up in proportion to the body)
     const m = Math.hypot(jx, jy); if (m < 0.05) return;
     if (m > 6) { jx *= 6 / m; jy *= 6 / m; }
     this.w += (jx * Math.cos(this.a) - jy * Math.sin(this.a)) * (h - (this.air ? COM_H : 0)) * 1.2;
     if (this.down > 0 || this.up > 0) return;
     if (this.air) { this.vx += jx; this.vy += jy; }
-    else if (m > 2.4) { const s = this.slide; this.takeoff(); this.vx = s + jx; this.vy = Math.max(1.2, jy + 1.5); this.slide = 0; }
+    else if (m > 2.4) { const s = this.slide; this.takeoff(); this.vx = s + jx; this.vy = Math.max(1.2 * PSCALE, jy + 1.5 * PSCALE); this.slide = 0; }
     else this.slide += jx * 0.4;
   }
   update(dt) {
@@ -1216,9 +1242,9 @@ class Player {
   land(f, gr) {
     const G = this.G, hard = -this.vy;
     // a trampoline, or the springy bouncy-house floor, throws you back up instead
-    if (gr === 0 && !this.ghost && ((G.W.tramp && onTramp(f.x) && hard > 1) || (G.map.bouncy && hard > 2.5))) {
+    if (gr === 0 && !this.ghost && ((G.W.tramp && onTramp(f.x) && hard > PSCALE) || (G.map.bouncy && hard > 2.5 * PSCALE))) {
       const tramp = G.W.tramp && onTramp(f.x);
-      this.vy = tramp ? Math.max(6.5, hard * 1.05) : hard * 0.6; this.cy += 0.02; if (tramp) this.vx = this.vx * 0.7 - Math.sign(f.x) * 1.2; this.squash = 1;
+      this.vy = tramp ? Math.max(6.5 * PSCALE, hard * 1.05) : hard * 0.6; this.cy += 0.02; if (tramp) this.vx = this.vx * 0.7 - Math.sign(f.x) * 1.2; this.squash = 1;
       G.sfx.tone && G.sfx.tone('sine', 180, 520, 0.15, 0.06); G.dust(f.x, 0, 3);
       return;
     }
@@ -1255,7 +1281,7 @@ class Player {
       }
       return;
     }
-    for (const h of [0, 0.45, 0.9, 1.35, NECK_H + BODY.headR]) {
+    for (const h of [0, 0.25 * NECK_H, 0.5 * NECK_H, 0.75 * NECK_H, NECK_H + BODY.headR]) {
       const p = this.at(h);
       if (Math.abs(p.x) >= TABLE_HALF + 0.08 || p.y >= TABLE_TOP + 0.03) continue;
       this.cx += os * (TABLE_HALF + 0.08) - p.x; this.vx = os * Math.max(0.6, Math.abs(this.vx) * 0.3); this.w += os * 1.5;
@@ -1268,7 +1294,10 @@ class Player {
     let tx, ty;
     if (tgt) { const dx = tgt.x - s.x, dy = tgt.y - s.y, d = Math.hypot(dx, dy) || 1, r = clamp(d, 0.2, REACH); tx = s.x + dx / d * r; ty = s.y + dy / d * r; }
     else { const r = rot({ x: this.dir * PAD_REST.x, y: PAD_REST.y }, -this.a); tx = s.x + r.x; ty = s.y + r.y; }
-    const ox = this.pad.x, oy = this.pad.y, dx = tx - ox, dy = ty - oy, d = Math.hypot(dx, dy), mx = ARM_SPEED * REACH * dt, k = d > mx ? mx / d : 1;
+    // the paddle rides along with the body (it's on the end of the arm), then swings toward the target on top of that
+    const ox = this.pad.x, oy = this.pad.y, ls = this.lastSh || s; this.lastSh = s;
+    this.pad.x += s.x - ls.x; this.pad.y += s.y - ls.y;
+    const dx = tx - this.pad.x, dy = ty - this.pad.y, d = Math.hypot(dx, dy), mx = ARM_SPEED * REACH * dt, k = d > mx ? mx / d : 1;
     this.pad.x += dx * k; this.pad.y += dy * k;
     const ex = this.pad.x - s.x, ey = this.pad.y - s.y, e = Math.hypot(ex, ey);
     if (e > REACH) { this.pad.x = s.x + ex / e * REACH; this.pad.y = s.y + ey / e * REACH; }
@@ -1278,13 +1307,18 @@ class Player {
 
 // ---------------------------------------------------------------- the ref
 // Stands behind the net (you can't hit him), tosses every serve, and after each point launches himself at whoever lost it.
+// the ref stands up on a box behind the net, so his chest and head are well over the table (like the real thing)
+const refStand = () => Math.max(0, TABLE_TOP - 0.25 * (NECK_H + 2 * BODY.headR));
 class Ref {
   constructor(G) { this.G = G; this.look = { skin: pick(['#f3cfa9', '#c98b5e', '#9a6441']), hair: '#8d8d96', style: pick(['bald', 'short']), num: 0 }; this.reset(); }
-  reset() { Object.assign(this, { x: 0, y: 0, vx: 0, vy: 0, a: 0, w: 0, mode: 'stand', t: 0, target: null, armUp: 1 }); }
-  hand() { return { x: this.x + 0.3, y: this.y + 2.3 }; }
+  reset() { Object.assign(this, { x: 0, y: refStand(), vx: 0, vy: 0, a: 0, w: 0, mode: 'stand', t: 0, target: null, armUp: 1 }); }
+  hand() {   // held out toward the server, clear of the net (a giant ball or a tall net mustn't start touching it)
+    const sv = this.G.server, r = this.G.ball ? this.G.ball.r : 0.1;
+    return { x: this.x + (sv ? sv.os : 1) * Math.max(0.3 * PSCALE, r + 0.08), y: Math.max(this.y + NECK_H - 0.1 * PSCALE, TABLE_TOP + NET_H + r + 0.1) };
+  }
   launchAt(p) {
-    const h = p.headPos(), v = solveArc(this.x, 1.0, h.x, h.y, Math.max(h.y, 2) + 1.1, this.G.pg);
-    Object.assign(this, { mode: 'fly', target: p, vx: v.vx, vy: v.vy, y: 0.1, w: -Math.sign(v.vx) * 7 });
+    const h = p.headPos(), y0 = this.y + 1.0, v = solveArc(this.x, y0, h.x, h.y, Math.max(h.y, y0, 2) + 1.1, this.G.pg);
+    Object.assign(this, { mode: 'fly', target: p, vx: v.vx, vy: v.vy, y: this.y + 0.1, w: -Math.sign(v.vx) * 7 });
     this.G.sfx.boing();
   }
   update(dt) {
@@ -1295,7 +1329,7 @@ class Ref {
     const p = this.target;
     if (this.mode === 'fly' && p) {
       const h = p.headPos();
-      if (Math.hypot(this.x - h.x, this.y + 1.1 - h.y) < 0.75) {
+      if (Math.hypot(this.x - h.x, this.y + 1.1 * PSCALE - h.y) < 0.6) {
         p.knock(Math.sign(this.vx) * 4.2, 2.5, NECK_H);
         this.vx *= -0.3; this.vy = 2.2; this.w *= -0.6; this.mode = 'fall';
         G.sfx.thud(1); if (SET.grunts) G.sfx.oof(); G.addShake(3); G.popup('BONK', h.x, h.y + 0.6, CREAM, 1);
@@ -1321,6 +1355,7 @@ class CPU {
       this.spinAt = -1;
       if (G.spinTeam === p.team) { const k = Math.random() < 0.7 ? this.fwdKey() : 1 - this.fwdKey(); this.key(k, true); this.key(k, false); }
     }
+    if (this.tapAt >= 0 && this.tapSpin !== Math.sign(G.ball.spin)) { this.tapAt = -1; this.next = Math.min(this.next, this.t + 0.05); }   // spin went on after it planned the jump: plan again
     if (this.tapAt >= 0 && this.t >= this.tapAt) { this.tapAt = -1; if (!p.busy() && this.k < 0) this.holdFor(this.tapK, 0.03); }
     if (this.k >= 0) {
       if (this.mode === 'lean') {   // hold the lean until the ball is gone, then swing back up and hop in place
@@ -1346,19 +1381,32 @@ class CPU {
   }
   hopTo(dx) {
     const p = this.p, n = Math.abs(dx), inward = Math.sign(dx) === -p.os;
-    // never a hop toward the net that would come down on the table
-    const hops = this.G.hops.filter(h => !inward || (p.fx - p.os * h.dx) * p.os >= TABLE_HALF + 0.3);
+    // never a hop toward the net that would come down on the table (nor one onto a trampoline: on the short court its bounce
+    // keeps a CPU in the air for ages)
+    const land = h => p.fx + Math.sign(dx) * h.dx;
+    const hops = this.G.hops.filter(h => (!inward || land(h) * p.os >= TABLE_HALF + 0.3) && !(this.G.W.tramp && onTramp(land(h))));
     if (!hops.length || n < hops[0].dx * 0.7) return false;
     let best = hops[0]; for (const h of hops) if (Math.abs(h.dx - n) < Math.abs(best.dx - n)) best = h;
     let side = dx > 0 ? 1 : 0; if (Math.random() < this.L.wrongHop) side = 1 - side;
     this.holdFor(side, best.hold); this.lastAct = 'hop';
     return true;
   }
+  yields(m) {   // doubles: leave the ball to a CPU partner who is nearer where it comes off the end (on a tie, slot 1 leaves it)
+    if (!m.cpu || m.air || m.busy() || this.G.toss) return false;
+    const os = this.p.os, s = this.G.prediction().path.find(s => s.x * os > TABLE_HALF + 0.2);
+    if (!s) return false;
+    const dp = Math.abs(this.p.fx - s.x), dm = Math.abs(m.fx - s.x);
+    return dm + 0.3 < dp || (Math.abs(dp - dm) <= 0.3 && this.p.slot > m.slot);
+  }
   think() {
     const G = this.G, p = this.p, L = this.L;
-    if (!G.incoming(p)) {   // nothing coming: drift back home while the ball is on the other side
+    const mate = G.doubles ? G.players.find(q => q !== p && q.team === p.team) : null;
+    if (!G.incoming(p) || (mate && this.yields(mate))) {   // nothing coming (or our CPU partner is better placed): drift back home while the ball is on the other side
       const live = clamp((G.W.e - 0.4) / 0.5 - G.W.drag * 2, 0.25, 1);   // (a dead ball, bowling, or a draggy beach ball dies off the end: wait close in for it)
-      const dx = p.os * Math.min(TABLE_HALF + (Math.abs(p.home) - TABLE_HALF) * live + Math.min(Math.floor((G.rally + 2) / 3), RALLY_MAXK) * 1.2 * live, WALL_X - 0.9) - p.fx;   // (further back as the rally steps up)
+      let depth = Math.min(TABLE_HALF + (Math.abs(p.home) - TABLE_HALF) * live + Math.min(Math.floor((G.rally + 2) / 3), RALLY_MAXK) * RALLY_BACK * live, WALL_X - 0.9);   // (further back as the rally steps up)
+      if (mate && Math.abs(p.home) < Math.abs(mate.home)) depth = Math.max(TABLE_HALF + 0.6, Math.min(depth, Math.abs(mate.fx) - 1.3));   // doubles: the front player stays in front of the back one, not stacked on him
+      if (G.W.tramp) for (const t of TRAMPS) if (Math.abs(depth - Math.abs(t)) < TRAMP_W + 0.3) depth = Math.abs(t) + (depth < Math.abs(t) ? -1 : 1) * (TRAMP_W + 0.3);   // (wait beside a trampoline, not on it)
+      const dx = p.os * depth - p.fx;
       if (Math.abs(dx) > 0.8 && G.ball.x * p.os < 0 && !G.ball.held) this.hopTo(dx);
       return;
     }
@@ -1374,9 +1422,9 @@ class CPU {
     if (!S.length) return;
     // 0. a lob dropping in on us: jump up and smash it (one that comes to the paddle anyway only now and then)
     const comes = S.some(s => Math.hypot(s.x - p.fx, s.y - sh) < REACH * 0.92);
-    if (this.goSmash && (!comes || Math.random() < L.smash) && this.jumpAt(S, sh, 0.5)) return;
-    // 1. it comes to us: the arm does the rest (but deep in a long rally a held paddle fumbles, so lean into it instead)
-    if (comes && !(G.heat > 0 && Math.random() < 0.5 + L.aim * 0.4)) return;
+    if (this.goSmash && (!comes || Math.random() < L.smash) && this.jumpAt(S, sh, 0.5, 0.45)) return;
+    // 1. it comes to us: the arm does the rest (but a held paddle fumbles a fast one, so lean into that instead)
+    if (comes && !(Math.hypot(G.ball.vx, G.ball.vy) > FAST_IN && Math.random() < 0.5 + L.aim * 0.4)) return;
     // 2. lean in for it
     const room = (p.fx - os * (TABLE_HALF + 0.12)) * os, maxIn = Math.min(LEAN_MAX, Math.atan2(room, TABLE_TOP + 0.06) - 0.1);
     for (const s of S) {
@@ -1404,24 +1452,54 @@ class CPU {
     // 4. a high one: jump straight up at it (and smash it if it works out)
     if (Math.random() < 0.75 + L.smash) this.jumpAt(S, sh, 0);   // (most come in head-high now: jumping is the usual return)
   }
-  // jump straight up to meet the ball `min` or more above the shoulder; false if there's no such moment
-  jumpAt(S, sh, min) {
-    const G = this.G, p = this.p, vJ = JUMP_V * G.jumpK, g = G.pg;
+  // jump straight up to meet the ball `min` or more above the shoulder; false if there's no such moment. Of the moments it
+  // could, it goes for the one nearest head-and-a-bit high (~a quarter of the table over it, where PPC players meet it)
+  jumpAt(S, sh, min, tol = 9) {
+    const G = this.G, p = this.p, vJ = JUMP_V * G.jumpK, g = G.pg, yc = TABLE_TOP + CONTACT_TL * 2 * TABLE_HALF;
+    let best = null, bc = 9;
     for (const s of S) {
       const need = s.y - 0.25 - sh;
       if (need <= min || Math.abs(s.x - p.fx) > REACH * 0.9 || need > vJ * vJ / (2 * g) * 0.95) continue;
       const tau = (vJ - Math.sqrt(vJ * vJ - 2 * g * need)) / g, at = s.t - tau - 0.03;
       if (at < 0) continue;
+      // (and while it's still out in front, so the paddle meets it before the head does)
+      const c = Math.abs(s.y - yc) + ((p.fx - s.x) * p.os < 0.22 ? 0.35 : 0);
+      if (c < bc - 0.02) { bc = c; best = { s, at }; }
+    }
+    if (best && bc <= tol) {
+      const { s, at } = best;
       // hop a little toward it, unless that would come down on the table
       const toward = s.x > p.fx ? 1 : 0, out = 1 - this.fwdKey();
       this.tapK = toward !== out && (p.fx - p.os * 0.6) * p.os < TABLE_HALF + 0.3 ? out : toward;
-      this.tapAt = this.t + at; this.lastAct = 'jump'; return true;
+      this.tapAt = this.t + at; this.tapSpin = Math.sign(G.ball.spin); this.lastAct = 'jump'; return true;
     }
     return false;
   }
 }
 
 // ---------------------------------------------------------------- game
+// the MEME CHARACTERS (a setting, same crew and looks as Floppy Hoops): when it's on, every player is one of these, a different
+// pick each match. Looks only. Craig always wears #13.
+const MEME_LOOKS = [
+  { name: 'Craig', skin: '#efc39d', hair: '#6b4526', style: 'teacher', glasses: true, beard: '#5a3a22', sleeve: '#6e1f2a', belly: 4, teacher: true },
+  { name: 'Loren', skin: '#fde8d8', hair: '#4a2c17', style: 'bigforehead', outfit: 'jeans' },
+  { name: 'Colton', skin: '#e8b88f', hair: '#4a2c17', style: 'short', outfit: 'lv', shoes: 'jordan' },
+  { name: 'Liam', skin: '#f3cfa9', hair: '#f1d57a', style: 'swoop' },
+  { name: 'Brock', skin: '#f3cfa9', hair: '#ff7a1a', style: 'swoop' },
+  { name: 'James', skin: '#e8b88f', hair: '#3a2312', style: 'curly' },
+  { name: 'Jonas', skin: '#f6d9bf', hair: '#4a2c17', style: 'buzz', buff: true },
+  { name: 'Jackson', skin: '#f3cfa9', hair: '#2a1a10', style: 'frosted', tip: '#f8f0c4' },
+  { name: 'Cam', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
+  { name: 'Zayne', skin: '#c48a5c', hair: '#1e130c', style: 'curly', outfit: 'premier', shoes: 'sambas' },
+];
+function memeLook(used) {
+  const m = pick(MEME_LOOKS.filter(q => !used.has('meme:' + q.name)));
+  used.add('meme:' + m.name);
+  if (m.teacher) { used.add(13); return { ...m, num: 13 }; }
+  let num; do { num = pick([1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 21, 23, 44]); } while (used.has(num));
+  used.add(num);
+  return { ...m, num };
+}
 function makeLook(used) {
   let num; do { num = pick([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 23]); } while (used.has(num) && used.size < 12);
   used.add(num);
@@ -1442,11 +1520,12 @@ const MENU_ITEMS = [
 ];
 const MENU_X = 14, MENU_W = 104, MENU_Y0 = 54, MENU_DY = 12, MENU_H = 10;
 // camera + between-points timing, tuned to how PPC frames and paces a point (measured from footage):
-// rally view = 1.4x the player spread but never tighter than CAM_MIN stage px (table ~28% of the screen), no tilt;
+// rally view = 1.75x the player spread but never tighter than CAM_MIN stage px (table ~24% of the width at the start, ~15% deep in a rally, like PPC), no tilt;
 // at a point it eases 2x closer (CAM_PT_W px wide) tilted 5 deg; soft follow ~0.7 s; the ref leaps 0.15 s after the
 // ball dies, the big POINT call pops at 1.7 s for 1.4 s, then a hard cut to the next serve
-const CAM_MIN = 360, CAM_SPREAD = 1.4, CAM_PT_W = 180, CAM_PT_TILT = 0.087, CAM_TAU = 0.7;
+const CAM_MIN = 320, CAM_SPREAD = 1.75, CAM_PT_W = 180, CAM_PT_TILT = 0.087, CAM_TAU = 0.7;
 const REF_LEAP_T = 0.15, CALL_T = 1.7, CALL_DUR = 1.4, BANNER_T = 1.5;
+const READY_GO = 0.9, FIRST_TO_T = 4, TIP_T = 0.5;   // ready screen: pause after the last side is ready; how long FIRST TO N shows; table tip-over time
 // a long rally pushes everyone back, so the camera can open up past the painted stage: the scenery carries on with mirrored
 // side strips and stretched top/bottom rows (EXT_* stage px), up to CAM_MAX wide (table ~18% of the screen, PPC is ~16%)
 const EXT_X = 80, EXT_T = 80, EXT_B = 16, CAM_MAX = STAGE_W + 2 * EXT_X;
@@ -1463,36 +1542,53 @@ class Game {
   setupMatch(o) {
     this.demo = !!o.demo; this.humans = o.humans; this.names = o.names || null; if (!this.demo) this.menu = null;
     this.paused = false; this.help = false;
-    this.doubles = !!+SET.doubles || this.humans.includes(2); this.target = this.demo ? 0 : +SET.target; this.winBy2 = !!+SET.winBy2;
+    this.fixedDoubles = this.humans.includes(2); this.target = this.demo ? 0 : +SET.target; this.winBy2 = !!+SET.winBy2;
     this.servesEach = this.demo ? 1 : +SET.serves; this.tableRule = !!+SET.tableTouch;
-    const used = new Set(); this.players = [];
-    for (let t = 0; t < 2; t++) for (let s = 0; s < (this.doubles ? 2 : 1); s++) {
-      const p = new Player(this, t, s, makeLook(used)); this.players.push(p);
-      const nh = this.humans[t] === 2 ? 2 : this.humans[t] ? 1 : 0;   // in doubles one person plays the front one; 2 V 2 has a person on each
-      if (s >= nh) p.cpu = new CPU(this, p, this.demo ? 'normal' : SET.level);
+    // all four players exist for the whole match; singles or doubles is rolled with the mix and picks who is on court
+    const used = new Set(); this.roster = [];
+    for (let t = 0; t < 2; t++) for (let s = 0; s < 2; s++) {
+      const p = new Player(this, t, s, SET.memes === 'on' && !this.demo ? memeLook(used) : makeLook(used)); this.roster.push(p);
+      // a person's key pair drives both players on their side; in 2 V 2 each of the four has their own keys
+      p.seat = this.humans[t] === 2 ? t + 2 * s : t;
+      if (!this.humans[t]) p.cpu = new CPU(this, p, this.demo ? 'normal' : SET.level);
     }
+    this.players = this.roster.filter(p => p.slot === 0); this.doubles = false;
+    this.finDone = false; this.firstToT = 0; this.tableTip = null; this.readySeats = null;
     this.score = [0, 0]; this.serverTeam = Math.random() < 0.5 ? 0 : 1; this.servesLeft = this.servesEach; this.serveIdx = [0, 0];
-    this.rally = 0; this.bestRally = 0; this.smashes = [0, 0]; this.hits = [0, 0]; this.bonks = [0, 0]; this.gamePt = -1; this.winner = -1;
+    this.rally = 0; this.bestRally = 0; this.hits = [0, 0]; this.bonks = [0, 0]; this.gamePt = -1; this.winner = -1;
     this.ref = new Ref(this); this.map = null;
     this.pickMix(); this.newServe();
+    if (!this.demo) this.startReady();
+  }
+  setRoster(d) {
+    if (this.players.length === (d ? 4 : 2)) return;
+    const was = this.players;
+    this.doubles = d; this.players = this.roster.filter(p => d || p.slot === 0);
+    for (const p of this.players) if (!was.includes(p)) { p.reset(); if (p.cpu) p.cpu.reset(); }
   }
   pickMix() {
-    const pool = k => POOLS[k].filter(q => SET.pools[k].includes(q.id));
+    const pool = k => { const on = SET.pools[k] || POOLS[k].map(q => q.id), l = POOLS[k].filter(q => on.includes(q.id)); return l.length ? l : POOLS[k]; };
     const oldMap = this.map;
     this.map = pick(pool('maps')); this.B = pick(pool('balls')); this.spinMode = pick(pool('spins')); this.env = pick(pool('envs'));
+    this.setRoster(this.fixedDoubles || pick(pool('players')).id === 'doubles');
     const B = this.B, E = this.env, S = this.spinMode;
     this.rollModes();
     const M = this.map, mod = this.modeK(), grav = Math.max(0.3, E.grav * (M.grav || 1));
-    this.W = { g: GRAVITY * B.gs * grav * mod.ballG, e: B.e, magnus: 0.35 * S.k * B.spin, spinKick: 1.4 * S.k * B.spin, drag: B.id === 'beach' ? 0.12 : 0,
+    this.W = { g: GRAVITY * PSCALE * B.gs * grav * mod.ballG, e: B.e, magnus: 0.35 * PSCALE * S.k * B.spin, spinKick: 1.08 * S.k * B.spin, drag: B.id === 'beach' ? 0.12 : 0,
       wind: mod.wind ? (Math.random() < 0.5 ? -1 : 1) * rand(0.6, 1.1) : 0, tramp: mod.tramp, floorE: M.bouncy ? 1.05 : 0, wallE: M.bouncy ? 0.95 : 0 };
-    this.pg = GRAVITY * grav; this.jumpK = Math.pow(grav, 0.25) * (M.jump || 1) * mod.jump; this.fric = M.fric * E.fric;
+    // the players' own fall and hop height scale with their size (same hang time, same look); sideways hop speed stays in metres
+    this.pg = GRAVITY * grav * PSCALE * PG_K; this.jumpK = Math.pow(grav, 0.25) * (M.jump || 1) * mod.jump * PSCALE * PG_K; this.fric = M.fric * E.fric;
     this.massK = mod.mass; this.ballK = mod.ballR;
     setNet(mod.net);
-    if (setBody(mod.body, mod.reach)) { for (const p of this.players) p.spr = null; if (this.ref) this.ref.spr = null; }
+    if (setBody(mod.body, mod.reach)) { for (const p of this.roster) p.spr = null; if (this.ref) this.ref.spr = null; }
     if (M !== oldMap) { this.crowd = makeCrowd(M.id, this.crowdSeed); paintStage(M.id); }
     this.buildHops();
   }
-  mixLabel() { return [this.map.name, this.B.name, this.spinMode.name, this.env.id === 'normal' ? '' : this.env.name].filter(Boolean).join(' - '); }
+  // the map, then only what differs from a plain point (modes go on the line under it)
+  mixLabel() {
+    return [this.map.name, this.B.id === 'pingpong' ? '' : this.B.name, this.spinMode.id === 'normal' ? '' : this.spinMode.name,
+      this.env.id === 'normal' ? '' : this.env.name, this.doubles ? 'DOUBLES' : ''].filter(Boolean).join(' - ');
+  }
   // the modes for this point: every ALWAYS one, then a chance of one ON mode, and a smaller chance of more stacking on (one per slot)
   rollModes() {
     const act = {}, on = {};
@@ -1527,32 +1623,56 @@ class Game {
     }
   }
   newServe() {
-    Object.assign(this, { state: 'serve', t: 0, toss: false, lastTeam: -1, oppBounces: 0, spinTeam: -1, rally: 0, heat: 0, lastNet: false, touches: 0, playT: 0, pointT: 0, scorer: -1, call: null });
+    Object.assign(this, { state: 'serve', t: 0, toss: false, lastTeam: -1, oppBounces: 0, spinTeam: -1, rally: 0, lastNet: false, touches: 0, playT: 0, pointT: 0, scorer: -1, call: null, tableTip: null });
     const mates = this.players.filter(p => p.team === this.serverTeam);
     this.server = mates[this.serveIdx[this.serverTeam] % mates.length];
     for (const p of this.players) {
       p.reset(); if (p.cpu) p.cpu.reset();
-      else for (let k = 0; k < 2; k++) if (this.kd[p.team + 2 * p.slot][k]) p.press(k ? 1 : -1);
+      else for (let k = 0; k < 2; k++) if (this.kd[p.seat][k]) p.press(k ? 1 : -1);
     }
     this.ball = newBall({ r: this.B.r * this.ballK }); this.ref.reset(); this.trail = [];
     if (!this.demo) this.banner = { text: this.mixLabel(), sub: this.modes.map(m => m.name).join(' + '), t: BANNER_T };
   }
+  // ------------------------------------------------ READY UP: before a match every side hops once to say it's ready
+  startReady() {
+    this.state = 'ready'; this.readyT = 0; this.goT = -1; this.readySeats = [];
+    for (let t = 0; t < 2; t++) {
+      const h = this.humans[t];
+      if (h === 2) for (let s = 0; s < 2; s++) this.readySeats.push({ team: t, seat: t + 2 * s, cpu: false, ok: false });
+      else this.readySeats.push({ team: t, seat: t, cpu: !h, ok: false, wait: rand(0.6, 1.5) });
+    }
+  }
+  readyHop(ps) { for (const p of ps) if (!p.busy()) p.jump(); }
+  readyKey(seat, ps) {
+    this.readyHop(ps);
+    const r = this.readySeats.find(q => q.seat === seat);
+    if (r && !r.ok) { r.ok = true; this.sfx.click(); }
+  }
+  stepReady(dt) {
+    this.readyT += dt;
+    for (const r of this.readySeats) if (r.cpu && !r.ok && this.readyT >= r.wait) { r.ok = true; this.readyHop(this.players.filter(p => p.team === r.team)); }
+    if (this.goT < 0 && this.readySeats.every(r => r.ok)) this.goT = 0;
+    if (this.goT >= 0 && (this.goT += dt) >= READY_GO) {
+      this.state = 'serve'; this.t = 0; this.firstToT = FIRST_TO_T; this.sfx.whistle();
+      for (const p of this.players) if (!p.cpu) for (let k = 0; k < 2; k++) if (this.kd[p.seat][k]) p.press(k ? 1 : -1);
+    }
+  }
   doToss() {
-    const s = this.server, h = this.ref.hand(), b = this.ball, W = this.W, os = s.os, tx = s.home + s.dir * 0.2, ty = SHOULDER_H + 0.05;
+    const s = this.server, h = this.ref.hand(), b = this.ball, W = this.W, os = s.os, TL = 2 * TABLE_HALF, tx = os * (TABLE_HALF + 0.6 * TL), ty = TABLE_TOP + 0.2 * TL;
     // the ref just lets it go beside the net with a little push down: it bounces near the net on the server's half and
     // floats up to the server's paddle about a second later (try a few, keep the one that gets there best)
     let v = null, best = 9;
-    for (let xb = 0.8; xb < 1.85; xb += 0.05) for (let tau = 0.12; tau < 0.62; tau += 0.04) {
+    for (let xb = Math.max(0.12 * TL, Math.abs(h.x) + 0.1); xb < 0.37 * TL; xb += 0.01 * TL) for (let tau = 0.1; tau < 0.62; tau += 0.02) {   // (always out past the hand: a giant ball's hand is wide)
       const vx = (os * xb - h.x) / tau, vy = (TABLE_TOP + b.r - h.y + 0.5 * W.g * tau * tau) / tau;
       const pr = predictBall({ ...b, x: h.x, y: h.y, vx, vy, spin: 0, held: false }, W, 3), tb = pr.evs.find(e => e.type === 'table');
       if (!tb || tb.a !== os) continue;
       let dm = 9, tm = 0, pk = 0;
       for (const q of pr.path) if (q.t > tb.t) { pk = Math.max(pk, q.y); const dd = Math.hypot(q.x - tx, q.y - ty); if (dd < dm) { dm = dd; tm = q.t - tb.t; } }
-      const cost = dm + Math.abs(tm - 1) + 1.2 * Math.abs(xb - 1) + 0.2 * Math.abs(pk - TABLE_TOP - 1.8);
+      const cost = 0.5 * dm + Math.abs(tm - 0.98) + 2.5 * Math.abs(xb - 0.2 * TL) + 1.2 * Math.abs(pk - TABLE_TOP - 0.36 * TL) + 0.6 * Math.abs(0.91 * Math.abs(vx) - 0.92 * TL);
       if (cost < best) { best = cost; v = { vx, vy }; }
     }
     if (!v || best > 1.2) {   // a dead ball (bowling) or a weird mix: lob it straight to them like before
-      const a = solveArc(h.x, h.y, tx, ty, Math.max(h.y, ty) + 0.9, W.g); v = { vx: a.vx * (1 + W.drag * a.T * 0.5), vy: a.vy };
+      const a = solveArc(h.x, h.y, s.home + s.dir * 0.2, SHOULDER_H + 0.05, Math.max(h.y, SHOULDER_H) + 0.9 * PSCALE, W.g); v = { vx: a.vx * (1 + W.drag * a.T * 0.5), vy: a.vy };
     }
     Object.assign(b, { x: h.x, y: h.y, vx: v.vx, vy: v.vy, held: false, spin: 0 });
     this.toss = true; this.state = 'play'; this.playT = 0; this.touches++;
@@ -1562,10 +1682,11 @@ class Game {
   playerKey(p, k, down) {
     const side = k ? 1 : -1;
     if (down) {
+      if (p.spinKey[k]) return;   // a teammate on the same keys already spent this press on spin
       // right after your own hit (until the ball lands) a key puts spin on it instead: toward the net is topspin
       if (this.spinTeam === p.team && this.spinMode.k > 0 && this.state === 'play' && !this.ball.spin) {
-        p.spinKey[k] = true; const top = side === p.dir; this.ball.spin = top ? 1 : -1; this.sfx.spin(top ? 1 : -1);
-        this.popup(top ? 'TOPSPIN' : 'BACKSPIN', this.ball.x, this.ball.y + 0.4, top ? ORANGE : '#86b2ff', 0.7);
+        const top = side === p.dir; this.ball.spin = top ? 1 : -1; this.sfx.spin(top ? 1 : -1);
+        for (const q of this.players) if (q === p || (!q.cpu && q.seat === p.seat)) q.spinKey[k] = true;
         return;
       }
       p.press(side);
@@ -1578,17 +1699,18 @@ class Game {
     const seat = team + 2 * slot;
     if (this.kd[seat][k] === down) return;
     this.kd[seat][k] = down;
-    const p = this.players.find(q => q.team === team && q.slot === slot && !q.cpu);
-    if (!p) return;
+    const ps = this.players.filter(q => q.seat === seat && !q.cpu);   // one person can drive two players (doubles)
+    if (!ps.length) return;
+    if (this.state === 'ready') { if (down && !this.paused) this.readyKey(seat, ps); return; }
     if (this.state === 'finish' && this.fin) {
       if (this.paused) return;
       const F = this.fin;
-      if (p === F.shooter) { if (down && !F.fired) F.hold = true; else if (!down && F.hold) this.fireFinish(); }
-      else if (p.team !== F.team) this.playerKey(p, k, down);   // the one getting shot at can try to duck
+      if (ps.includes(F.shooter)) { if (down && !F.fired) F.hold = true; else if (!down && F.hold) this.fireFinish(); }
+      else for (const p of ps) if (p.team !== F.team) this.playerKey(p, k, down);   // the one getting shot at can try to duck
       return;
     }
     if (down && (this.paused || (this.state !== 'serve' && this.state !== 'play' && this.state !== 'point'))) return;
-    this.playerKey(p, k, down);
+    for (const p of ps) this.playerKey(p, k, down);
   }
   releaseAll() { for (let i = 0; i < 4; i++) for (let k = 0; k < 2; k++) if (this.kd[i][k]) this.humanKey(i & 1, k, false, i >> 1); }
   // ------------------------------------------------ rules
@@ -1600,9 +1722,29 @@ class Game {
     const b = this.ball, s = p.shoulder(), tx = b.x + b.vx * 0.05, ty = b.y + b.vy * 0.05;
     return Math.hypot(tx - s.x, ty - s.y) > 2.3 ? null : { x: tx, y: ty };
   }
+  // touching the table loses the point, serve included, and knocks it over (drawn only: see drawWorld)
   tableTouch(p) {
-    if (!this.tableRule || this.state !== 'play') return;
+    if (!this.tableRule || (this.state !== 'play' && this.state !== 'serve')) return;
     this.pointTo(1 - p.team, 'TOUCHED THE TABLE');
+    if (this.state === 'point') { this.tableTip = { dir: -p.os, t: 0 }; this.addShake(1.5); this.sfx.thud(1); if (this.ball.held) this.ball.held = false; }
+  }
+  // two players on one key pair move as one, so the wall or the table would squash them together: keep them a step apart
+  spaceMates(dt) {
+    const gap = clamp((HOME_X[1] - HOME_X[0]) * 0.55, 0.5, 0.9), lim = WALL_X - 0.4, edge = TABLE_HALF + 0.12;
+    for (let t = 0; t < 2; t++) {
+      const [a, b] = this.players.filter(p => p.team === t);
+      if (!b || a.air || b.air || a.fy > 0 || b.fy > 0) continue;
+      // one key pair drives both: keep them a stride apart. Two CPUs only get nudged off each other when they bunch up
+      const linked = !a.cpu && !b.cpu && a.seat === b.seat, bots = a.cpu && b.cpu;
+      if (!linked && !bots) continue;
+      const os = a.os, [n, f] = a.fx * os <= b.fx * os ? [a, b] : [b, a];
+      const need = (linked ? gap : 0.4) - (f.fx - n.fx) * os; if (need <= 0) continue;
+      const mv = Math.min(need / 2, 3 * dt);
+      let df = f.fx * os + mv, dn = n.fx * os - mv;
+      if (df > lim) { dn -= df - lim; df = lim; }
+      if (dn < edge) { df = Math.min(lim, df + edge - dn); dn = edge; }
+      f.fx = df * os; n.fx = dn * os;
+    }
   }
   ballEvent(type, a, sp) {
     const b = this.ball;
@@ -1625,59 +1767,52 @@ class Game {
   hit(p, off) {
     const b = this.ball, W = this.W, d = p.dir, fwd = p.vel(SHOULDER_H).x * d, L = p.cpu && p.cpu.L;
     const inSpd = Math.hypot(b.vx, b.vy);
-    let v = null, smash = false;
+    let v = null;
     this.hits[p.team]++;
     // standing still, the paddle just bats it back in a high, slow lob that lands mid-table and rises to the other paddle (easy to
     // smash); lean or move into it, or jump, to drive it
     const lazy = this.lastLazy = clamp(1 - Math.abs(fwd) / 1.2 - (p.air ? 1 : 0), 0, 1) * (this.toss ? 0 : 1);
-    // a long rally: a paddle that's just held there starts to fumble it (two lazy paddles would bat it forever)
-    const heat = this.heat = clamp((this.rally - 12) / 20, 0, 1);
-    // a smash: up in the air at a high ball near our end, hit flat and hard (if it clears the net)
-    if (p.air && b.y > TABLE_TOP + 1.9 && Math.abs(b.x) < HOME_X[0] + 1.2 && (!L || Math.random() < 0.15 + L.smash * 0.6)) {
-      v = solveFlat(b.x, b.y, d * rand(0.7, TABLE_HALF - 0.35), TABLE_TOP + b.r, rand(9, 11.5) / Math.sqrt(this.B.gs), W.g);
-      const yNet = arcYAt(b.x, b.y, v, W.g, 0);
-      if (yNet !== null && yNet > TABLE_TOP + NET_H + b.r + 0.15) smash = true; else v = null;
-    }
-    if (!v) {
+    // (no separate smash, like PPC: a jump or a lean just drives it; the rally's steps make it fast)
+    {
       // a short one is the hard one to get back (you have to reach in over the table), so a better CPU drops it short
       // and an easy one sends it long, straight to you
       const aim = L ? L.aim : 0.5, depth = clamp(0.62 - aim * 0.24 + fwd * 0.1 + rand(-0.3, 0.3), 0.05, 0.95);
       // the rally's step: 0 for the first hit, then up one every 3 hits (hits 2, 5, 8, 11)
       const k = this.toss ? 0 : Math.min(Math.floor((this.rally + 2) / 3), RALLY_MAXK), up = Math.pow(RALLY_STEP, k);
-      const xl = d * Math.min(0.75 + depth * 0.9 + k * 0.1, TABLE_HALF - 0.5);   // ~1.1 m (a fifth of the table) past the net, deeper as it steps up
+      const xl = d * TABLE_HALF * Math.min(0.3 + depth * 0.36 + k * 0.04, 0.8);   // ~a fifth of the table past the net, deeper as it steps up
       // a big floaty arc, ~2 m over the table (higher each step), but at least the step's speed (from far back that's a long high one,
       // from close in a fast flat one)
-      let apex = Math.max(b.y + rand(0.8, 1.1), TABLE_TOP + NET_H + b.r + 0.3, TABLE_TOP + b.r + rand(1.9, 2.4) + k * 0.45 - aim * 0.15 + lazy * LAZY_POP);
+      let apex = Math.max(b.y + rand(0.4, 0.6) * PSCALE, TABLE_TOP + NET_H + b.r + 0.3, TABLE_TOP + b.r + (rand(1.85, 2.2) + k * 0.12 - aim * 0.12 + lazy * LAZY_POP) * PSCALE);
       v = solveArc(b.x, b.y, xl, TABLE_TOP + b.r, apex, W.g);
-      const ux = RALLY_UX * up * rand(0.92, 1.08) * (1 - lazy * 0.3);
+      const ux = Math.min(RALLY_CAP, RALLY_UX * up * rand(0.92, 1.08) * (1 - lazy * 0.3));
+      // from far back that arc would have to fly faster than PPC's pace ever gets (~2 table lengths/s): lob it higher instead
+      if (Math.abs(v.vx) > RALLY_CAP) v = solveFlat(b.x, b.y, xl, TABLE_TOP + b.r, RALLY_CAP, W.g);
       if (k && Math.abs(v.vx) < ux) {
-        let f = solveFlat(b.x, b.y, xl, TABLE_TOP + b.r, ux, W.g); const lo = TABLE_TOP + b.r + 1.4 + k * 0.2;
+        let f = solveFlat(b.x, b.y, xl, TABLE_TOP + b.r, ux, W.g); const lo = TABLE_TOP + b.r + (1.08 + k * 0.15) * PSCALE;
         if (b.y + Math.max(f.vy, 0) ** 2 / (2 * W.g) < lo) f = solveArc(b.x, b.y, xl, TABLE_TOP + b.r, lo, W.g);   // (but never a dead flat one)
         if (Math.abs(f.vx) > Math.abs(v.vx) && (arcYAt(b.x, b.y, f, W.g, 0) ?? 9) > TABLE_TOP + NET_H + b.r + 0.25) v = f;
       }
-      for (let k = 0; k < 6 && (arcYAt(b.x, b.y, v, W.g, 0) ?? 9) < TABLE_TOP + NET_H + b.r + 0.25; k++) v = solveArc(b.x, b.y, xl, TABLE_TOP + b.r, apex += 0.3, W.g);
+      for (let k = 0; k < 6 && (arcYAt(b.x, b.y, v, W.g, 0) ?? 9) < TABLE_TOP + NET_H + b.r + 0.25; k++) v = solveArc(b.x, b.y, xl, TABLE_TOP + b.r, apex += 0.3 * PSCALE, W.g);
     }
-    // off the rim of the paddle it goes wild, and so does a fast one (a smash is hard to get back); the CPU's level adds its own wobble
+    // off the rim of the paddle it goes wild, and so does a fast one (a top-step ball is hard to get back); the CPU's level adds its own wobble
     const wild = Math.max(0, off - 0.6) * 2.5 + Math.max(0, inSpd - FAST_IN) * 0.35 + (L ? L.mis * 1.3 * (1 - lazy) : 0);
-    const wk = smash ? 0.35 : 1; v.vx *= 1 + gauss() * (0.02 + wild * 0.06) * wk + W.drag * v.T * 0.5; v.vy += gauss() * (0.05 + wild * 0.3) * wk;   // (halved: the arcs fly twice as far)
+    if (W.wind && v.T) v.vx -= 0.5 * W.wind * v.T;   // aim into the wind so it curves back onto the spot (it still drifts, but lands in)
+    v.vx *= 1 + gauss() * (0.02 + wild * 0.06) + W.drag * v.T * 0.5; v.vy += gauss() * (0.05 + wild * 0.3);   // (halved: the arcs fly twice as far)
     // a dead ball (bowling, or a short soft one) can bounce twice without ever leaving the table, and nobody can reach
     // that without touching it: push it a bit longer until it gets off the end
-    for (let k = 0; !smash && k < 12; k++) {
+    for (let k = 0; k < 12; k++) {
       const far = predictBall({ ...b, vx: v.vx, vy: v.vy, spin: 0 }, W, 3).evs.filter(e => e.type === 'table' && e.a === d);
       if (far.length < 2) break;
       v.vx *= 1.07;
     }
-    // a smash beats a paddle that's just held there: the ball pops straight up off it
-    if (!smash && Math.random() < lazy * Math.max(clamp((inSpd - FAST_IN) / 3, 0, 1), heat * 0.5)) v = { vx: d * rand(0.4, 1.2), vy: rand(2, 3.5) };
+    // a fast one beats a paddle that's just held there: the ball pops straight up off it (two still paddles can't bat it forever:
+    // the rally's steps speed it up past FAST_IN)
+    if (Math.random() < lazy * clamp((inSpd - FAST_IN) / 2.3, 0, 1)) v = { vx: d * rand(0.4, 1.2), vy: rand(2, 3.5) };
     Object.assign(b, { vx: v.vx, vy: v.vy, spin: 0, spinDir: d, w: -d * 30 });
     Object.assign(this, { toss: false, lastTeam: p.team, oppBounces: 0, lastNet: false, spinTeam: p.team });
     this.rally++; this.touches++; this.playT = 0; p.hitCd = 0.3; p.swing = 1;
-    if (smash) {
-      this.smashes[p.team]++; this.sfx.smash(); this.addShake(3); this.slowmo(0.35, 0.22);
-      this.popup('SMASH', b.x, b.y + 0.55, ORANGE, 1.2);
-      for (let i = 0; i < 10; i++) this.addPart(b.x, b.y, rand(-3, 3), rand(-1, 4), 9, 0.4, pick([ORANGE, '#ffd23a', CREAM]), 1);
-    } else this.sfx.tock(Math.hypot(b.vx, b.vy) / 6);
-    if (SET.grunts && Math.random() < (smash ? 0.9 : 0.2)) this.sfx.grunt();
+    this.sfx.tock(Math.hypot(b.vx, b.vy) / 6);
+    if (SET.grunts && Math.random() < 0.2) this.sfx.grunt();
     if (p.cpu) p.cpu.afterHit();
   }
   paddleHits() {
@@ -1696,16 +1831,17 @@ class Game {
     const b = this.ball;
     for (const p of this.players) {
       const f = p.foot(), n = p.at(NECK_H), hc = p.headPos();
-      let c = closestOnSeg(f, n, b), rad = 0.17, h = c.t * NECK_H;
+      let c = closestOnSeg(f, n, b), rad = 0.17 * PSCALE, h = c.t * NECK_H;
       let dist = Math.hypot(b.x - c.x, b.y - c.y);
       const dh = Math.hypot(b.x - hc.x, b.y - hc.y);
-      if (dh - BODY.headR < dist - rad) { c = hc; rad = BODY.headR; dist = dh; h = NECK_H + 0.2; }
+      if (dh - BODY.headR < dist - rad) { c = hc; rad = BODY.headR; dist = dh; h = NECK_H + 0.2 * PSCALE; }
       if (dist >= rad + b.r || dist < 1e-6) continue;
+      if (p.hitCd > 0 && this.lastTeam === p.team && this.state === 'play') continue;   // (it just left this one's paddle: their own head mustn't bump it on)
       const nx = (b.x - c.x) / dist, ny = (b.y - c.y) / dist, pv = p.vel(h), vn = (b.vx - pv.x) * nx + (b.vy - pv.y) * ny;
       b.x = c.x + nx * (rad + b.r); b.y = c.y + ny * (rad + b.r);
       if (vn >= 0) continue;
       // the paddle would have got there anyway, so it's a scrappy return off the rim instead of a body hit
-      if (this.canHit(p) && this.state === 'play' && !this.toss) { this.hit(p, 0.9); return; }
+      if (this.canHit(p) && this.state === 'play') { this.hit(p, 0.9); return; }   // (on the toss canHit is only the server: a big head mustn't eat the serve)
       const share = 1 / (1 + this.B.dens / 20), J = 1.5 * -vn;
       b.vx += J * nx * share; b.vy += J * ny * share; b.spin *= 0.3;
       const push = J * (1 - share) * 0.8;
@@ -1719,7 +1855,7 @@ class Game {
     }
   }
   pointTo(team, why) {
-    if (this.state !== 'play') return;
+    if (this.state !== 'play' && this.state !== 'serve') return;
     this.state = 'point'; this.pointT = 0; this.scorer = team; this.excite = 1; this.spinTeam = -1;
     this.bestRally = Math.max(this.bestRally, this.rally);
     if (!this.demo) this.score[team]++;
@@ -1744,7 +1880,7 @@ class Game {
   wouldWin(t) { const s = this.score.slice(); s[t]++; return this.target > 0 && s[t] >= this.target && (!this.winBy2 || s[t] - s[1 - t] >= 2); }
   teamName(t) { return this.names ? shortName(this.names[t]) : this.humans[0] && !this.humans[1] ? (t === 0 ? 'YOU' : 'CPU') : TEAM[t].name; }
   afterPoint() {
-    if (this.winner >= 0) return this.demo ? this.gameOver(this.winner) : this.startFinish(this.winner);
+    if (this.winner >= 0) return this.gameOver(this.winner);   // FINISH HIM is a choice on the win screen
     if (SET.shuffle === 'point' || this.demo) this.pickMix();
     this.newServe();
   }
@@ -1762,7 +1898,7 @@ class Game {
   finShot() { const F = this.fin, spd = 7 + F.pow * 11; return { vx: F.shooter.dir * Math.cos(F.ang) * spd, vy: Math.sin(F.ang) * spd }; }
   finAimErr() {   // how far over (+) or under (-) the target's chest the shot would go right now
     const F = this.fin, b = this.ball, v = this.finShot(), f = F.target.foot(), T = (f.x - b.x) / v.vx;
-    return T > 0 ? b.y + v.vy * T - this.W.g * T * T / 2 - (f.y + 1.5) : 9;
+    return T > 0 ? b.y + v.vy * T - this.W.g * T * T / 2 - (f.y + 1.5 * PSCALE) : 9;
   }
   fireFinish() {
     const F = this.fin; if (!F || F.fired) return;
@@ -1782,6 +1918,8 @@ class Game {
         else if (F.hold && F.pow >= F.cpuPow && Math.abs(this.finAimErr()) < 0.3) this.fireFinish();
         if (F.t > 4.5) this.fireFinish();
       }
+      if (!s.cpu && ((!F.hold && F.t > 8) || F.t > 12)) this.fireFinish();   // an idle human shooter can't freeze the game
+
       if (!F.fired) { const x = s.pad.x + d * 0.18, y = s.pad.y + 0.06; Object.assign(b, { x, y, px: x, py: y, vx: 0, vy: 0, held: true }); }
     } else {
       F.flyT += dt; b.px = b.x; b.py = b.y;
@@ -1800,7 +1938,7 @@ class Game {
       if (F.hitT < 0 && F.flyT > 1.5 && !F.missed) { F.missed = true; this.popup('MISSED!', clamp(b.x, -5, 5), TABLE_TOP + 2.4, CREAM, 1.3, 1.4); }
     }
     if (F.hitT >= 0) F.hitT += dt;
-    if (F.hitT > 2.3 || (F.hitT < 0 && F.flyT > 2.6)) { this.fin = null; this.gameOver(F.team); }
+    if (F.hitT > 2.3 || (F.hitT < 0 && F.flyT > 2.6)) { this.fin = null; this.gameOver(F.team, true); }   // back to the win screen
   }
   // ------------------------------------------------ menus, game over, tournament
   startGame(mode) {
@@ -1810,7 +1948,7 @@ class Game {
     this.go(() => this.setupMatch({ humans, names }));
   }
   go(cb) { this.trans = { t: 0, cb, done: false }; this.sfx.swish(); }
-  toTitle() { this.tourney = null; this.go(() => { this.setupMatch({ demo: true, humans: [false, false] }); this.menu = 'title'; this.menuSel = 0; }); }
+  toTitle() { this.go(() => { this.tourney = null; this.setupMatch({ demo: true, humans: [false, false] }); this.menu = 'title'; this.menuSel = 0; }); }
   menuMove(d) { this.menuSel = (this.menuSel + d + MENU_ITEMS.length) % MENU_ITEMS.length; this.sfx.click(); }
   menuPick() {
     const id = MENU_ITEMS[this.menuSel].id;
@@ -1822,8 +1960,9 @@ class Game {
     else if (id === 'help') { this.help = true; this.sfx.click(); }
     else if (id === 'switch') location.href = 'index.html';
   }
-  gameOver(team) {
-    this.state = 'over'; this.overT = 0; this.overSel = 0; this.winner = team; this.excite = 1;
+  gameOver(team, again = false) {
+    this.state = 'over'; this.overT = again ? 0.6 : 0; this.overSel = 0; this.winner = team; this.excite = 1; this.call = null;
+    if (again) return;   // coming back from FINISH HIM: the result is already in
     this.sfx.fanfare();
     const win = SOUND_LIST.find(e => e.winner);
     if (win && this.soundOn(win.id)) setTimeout(() => this.sfx.cue(win.id), 700);
@@ -1831,11 +1970,16 @@ class Game {
     const T = this.tourney;
     if (T && T.cur) { T.cur.w = T.cur[team ? 'b' : 'a']; T.cur.score = this.score.slice(); this.advanceByes(); }
   }
-  overButtons() { return this.tourney ? ['CONTINUE', 'QUIT'] : ['PLAY AGAIN', 'MENU']; }
+  overButtons() {
+    const f = this.finDone || this.demo ? [] : ['FINISH HIM'];   // a one-time choice: once it's been done it's gone
+    return this.tourney ? ['CONTINUE', ...f, 'QUIT'] : ['PLAY AGAIN', ...f, 'MENU'];
+  }
   overPick(i) {
-    if (this.overT < 0.6) return;
+    if (this.overT < 0.6 || this.state !== 'over') return;
+    const b = this.overButtons()[i]; if (!b) return;
     this.sfx.click(); this.sfx.stopClip();
-    if (i === 1) return this.toTitle();
+    if (b === 'FINISH HIM') { this.finDone = true; const w = this.winner; return this.go(() => this.startFinish(w)); }
+    if (b === 'MENU' || b === 'QUIT') return this.toTitle();
     if (this.tourney) return this.go(() => this.showBracket());
     const h = this.humans, names = this.names;
     this.go(() => this.setupMatch({ humans: h, names }));
@@ -1858,7 +2002,7 @@ class Game {
       const r = T.rounds[T.rounds.length - 1];
       for (const m of r) if (!m.w) {
         if (m.a === null || m.b === null) m.w = m.a === null ? m.b : m.a;
-        else if (m.a.cpu && m.b.cpu) { const aw = Math.random() < 0.5, lo = (Math.random() * (SET.target || 7)) | 0, hi = Math.max(+SET.target || 7, lo + 2); m.w = aw ? m.a : m.b; m.score = aw ? [hi, lo] : [lo, hi]; }
+        else if (m.a.cpu && m.b.cpu) { const aw = Math.random() < 0.5, lo = (Math.random() * (SET.target || 5)) | 0, hi = +SET.winBy2 ? Math.max(+SET.target || 5, lo + 2) : (+SET.target || 5); m.w = aw ? m.a : m.b; m.score = aw ? [hi, lo] : [lo, hi]; }
       }
       if (r.some(m => !m.w)) return;
       if (r.length === 1) { T.champion = r[0].w; return; }
@@ -1890,14 +2034,40 @@ class Game {
   dust(x, y, n) { for (let i = 0; i < n; i++) this.addPart(x + rand(-0.15, 0.15), y + 0.03, rand(-1.2, 1.2), rand(0.3, 1.2), 2, rand(0.25, 0.5), this.map.id === 'beach' ? '#e6cc92' : '#d8d2c4', 1); }
   dot(x, y) { this.addPart(x, y + 0.02, 0, 0, 0, 0.35, CREAM, 1, 'ring'); }
   popup(text, x, y, col, size = 1, dur = 1.2) { this.pops.push({ text, x: clamp(x, -7, 7), y: clamp(y, 1.2, 8), col, size, dur, t: 0 }); }
+  // the cheers, watched from the frame loop (it only reads the rules): RALLY milestones, ACE, streaks, and DEUCE / NEXT POINT WINS on the call
+  fxWatch() {
+    if (this.fxPlayers !== this.roster) Object.assign(this, { fxPlayers: this.roster, fxStreak: { team: -1, n: 0 }, fxCall: this.call });
+    if (this.demo || this.state === 'serve' || this.state === 'ready') { this.fxCall = this.call; return; }
+    const c = this.call;
+    if (!c || c === this.fxCall) return;
+    this.fxCall = c;
+    const team = c.team, st = this.fxStreak, sc = this.score, tgt = this.target;
+    if (st.team === team) st.n++; else { st.team = team; st.n = 1; }
+    if (tgt && sc[0] === sc[1] && sc[0] >= tgt - 1) { if (this.winBy2) c.deuce = true; else c.sudden = true; }
+    const who = this.players.filter(q => q.team === team), h = who[0].headPos(), x = who.reduce((a, q) => a + q.foot().x, 0) / who.length;
+    let y = h.y + 0.9;
+    if (this.server && this.server.team === team && this.touches <= 1 && c.why !== 'TOUCHED THE TABLE') { this.popup('ACE!', x, y, '#7dff9a', 1.6, 1.6); this.sfx.steal(); y += 0.7; }
+    if (st.n >= 5) this.popup('ON FIRE!', x, y, ORANGE, 1.5, 1.6);
+    else if (st.n === 3) this.popup('3 IN A ROW!', x, y, '#ffd23f', 1.2, 1.6);
+  }
   // ------------------------------------------------ the loop
   step(dt) {
     this.stepN++; this.time += dt; this.t += dt;
     if (this.menu) this.stateT += dt;
     if (this.state === 'over') this.overT += dt;
-    if (this.state === 'serve' && this.t >= SERVE_T) this.doToss();
-    if (this.state === 'play' && (this.playT += dt) > 6) this.letBall();   // nobody has touched it for ages: it's stuck somewhere
-    for (const p of this.players) { if (p.cpu && this.state !== 'finish') p.cpu.update(dt); p.update(dt); }
+    // (the court is short now: a server who has flown in right up to the ref's hand gets a moment to come down before the drop)
+    if (this.state === 'serve' && this.t >= SERVE_T && (this.t > SERVE_T + 2 || !this.server || (() => {
+      const h = this.ref.hand(), sv = this.server, c = closestOnSeg(sv.foot(), sv.headPos(), h);
+      return Math.hypot(c.x - h.x, c.y - h.y) > this.ball.r + REACH + 0.5;
+    })())) this.doToss();
+    if (this.state === 'play' && (this.playT += dt) > 6) {
+      // a ball that came off your own body and died on your half (e.g. a giant ball wedged on two heads) is yours; anything else is a let
+      const L = this.lastTeam;
+      if (!this.toss && L >= 0 && this.ball.x * (L === 0 ? -1 : 1) > 0) this.pointTo(1 - L, 'NO RETURN'); else this.letBall();
+    }   // nobody has touched it for ages: it's stuck somewhere
+    if (this.state === 'ready') this.stepReady(dt);
+    for (const p of this.players) { if (p.cpu && this.state !== 'finish' && this.state !== 'ready') p.cpu.update(dt); p.update(dt); }
+    if (this.doubles) this.spaceMates(dt);
     for (const p of this.players) p.arm(dt, this.armTarget(p));
     const b = this.ball;
     if (this.call) this.call.t += dt;
@@ -1920,7 +2090,9 @@ class Game {
     this.parts = this.parts.filter(q => q.life > 0 && q.y > -0.5);
     for (const q of this.pops) q.t += dt;
     this.pops = this.pops.filter(q => q.t < q.dur);
-    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
+    if (this.banner && this.state !== 'ready' && (this.banner.t -= dt) <= 0) this.banner = null;
+    if (this.state !== 'ready') this.firstToT = Math.max(0, this.firstToT - dt);
+    if (this.tableTip) this.tableTip.t += dt;
     this.updateCam(dt);
   }
   // a TV camera: it frames both players and the ball, tight when they're close and pulled back when the ball flies off,
@@ -1997,6 +2169,12 @@ function txt(str, x, y, size, col, opt = {}) {
   for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) ctx.fillText(str, x + dx * o, y + dy * o);
   ctx.fillStyle = col; ctx.fillText(str, x, y);
 }
+// the txt() size that keeps str within maxW art pixels
+function fitSize(str, size, maxW) {
+  ctx.font = `400 ${Math.round(size * S)}px Silkscreen, "Courier New", monospace`;
+  const w = ctx.measureText(str).width / S;
+  return w > maxW ? size * maxW / w : size;
+}
 function wobblyWord(w, cx, y, size, col, deep, t) {
   ctx.font = `700 ${Math.round(size * S)}px Silkscreen, "Courier New", monospace`;
   const widths = [...w].map(ch => ctx.measureText(ch).width), total = widths.reduce((a, b) => a + b, 0);
@@ -2024,11 +2202,11 @@ const pxOf = v => Math.max(2, Math.round(v * PPM));
 // ---------------------------------------------------------------- sprites made once
 function playerSprites(p) {
   if (p.spr) return p.spr;
-  const T = p.T, L = p.look, leg = legSprite(pxOf(BODY.legW), pxOf(BODY.legLen), T, L.skin);
+  const T = p.T, L = p.look, leg = legSprite(pxOf(BODY.legW), pxOf(BODY.legLen), T, L.skin, L);
   return (p.spr = {
     leg, legB: { c: darken(leg.c, 0.28), ox: leg.ox, oy: leg.oy },
-    torso: torsoSprite(pxOf(BODY.torsoW), pxOf(BODY.torsoH), T, L.num), head: headSprite(pxOf(BODY.headR * 2), L, T),
-    arm: armSprite(pxOf(BODY.armW), pxOf(BODY.armLen), T, L.skin), pad: paddleSpr(T),
+    torso: torsoSprite(pxOf(BODY.torsoW), pxOf(BODY.torsoH), T, L.num, L.belly || 0, L), head: headSprite(pxOf(BODY.headR * 2), L, T),
+    arm: armSprite(pxOf(BODY.armW), pxOf(BODY.armLen), T, L.skin, L.sleeve, L), pad: paddleSpr(T),
   });
 }
 const REF_T = { name: 'REF', jersey: '#f4f4f4', dark: '#26262e', light: '#ffffff', num: INK };
@@ -2073,7 +2251,7 @@ function drawPlayer(G, p) {
   const put = (s, lx, ly, r = 0) => { ctx.save(); ctx.translate(lx * K, -ly * K); if (r) ctx.rotate(r); if (flip) ctx.scale(-1, 1); ctx.drawImage(s.c, -s.ox * K, -s.oy * K, s.c.width * K, s.c.height * K); ctx.restore(); };
   // the arm on the far side, hanging
   const s = p.shoulder();
-  limb(sp.arm, { x: s.x - d * 0.04, y: s.y }, p.at(SHOULDER_H - 0.4), flip);
+  limb(sp.arm, { x: s.x - d * 0.04, y: s.y }, p.at(SHOULDER_H - 0.4 * PSCALE), flip);
   ctx.save(); ctx.translate(WX(f.x), WY(f.y)); ctx.rotate(p.a); if (sq) ctx.scale(1 + sq * 0.08, 1 - sq * 0.1);
   const hip = BODY.legLen * PPM;
   put(sp.legB, -d, hip); put(sp.leg, d, hip);
@@ -2087,6 +2265,32 @@ function drawPlayer(G, p) {
   const hand = { x: pd.x - Math.sin(ang) * down, y: pd.y - Math.cos(ang) * down };
   limb(sp.arm, s, hand, flip);
   blit(sp.pad, pd.x, pd.y, ang);
+}
+// a draw-only pose on top of the physics: the side that just won hops and wiggles, the side that lost sags forward
+function moodOf(G, p) {
+  if (G.menu && G.menu !== 'title') return null;
+  const over = G.state === 'over', c = G.call;
+  const win = over ? G.winner : G.state === 'point' && c ? c.team : -1, t = over ? G.overT : c ? c.t : 0;
+  if (!(win >= 0)) return null;
+  if (p.team !== win) { const k = clamp(t / 0.5, 0, 1) * (over ? 1 : clamp((1.8 - t) / 0.4, 0, 1)); return { dy: 0, r: p.dir * 0.3 * k, sag: 0.1 * k }; }
+  if (!over) return t > 0.9 ? null : { dy: Math.abs(Math.sin(t * Math.PI / 0.45)) * 0.28, r: 0, sag: 0 };   // a quick double hop
+  const ph = (t * 1.5 + p.slot * 0.35) % 1, up = ph < 0.42 ? Math.sin(ph / 0.42 * Math.PI) : 0;
+  return { dy: up * 0.4, r: up ? 0 : Math.sin(t * 13 + p.slot) * 0.08, sag: 0 };
+}
+function withMood(G, p, draw) {
+  const m = moodOf(G, p);
+  if (!m) return draw();
+  const f = p.foot(), x = WX(f.x), y = WY(f.y);
+  ctx.save(); ctx.translate(x, y - Math.round(m.dy * PPM) * K); if (m.r) ctx.rotate(m.r); if (m.sag) ctx.scale(1 + m.sag * 0.4, 1 - m.sag); ctx.translate(-x, -y);
+  draw(); ctx.restore();
+}
+function drawRefStand() {
+  const h = refStand(); if (h < 0.05) return;
+  const x0 = WX(-0.42), x1 = WX(0.42), y0 = WY(h), y1 = WY(0), w = x1 - x0, k = Math.max(1, K);
+  ctx.fillStyle = INK; ctx.fillRect(x0 - k, y0 - k, w + 2 * k, y1 - y0 + k);
+  ctx.fillStyle = '#5b4a3c'; ctx.fillRect(x0, y0, w, y1 - y0);
+  ctx.fillStyle = '#7a6350'; ctx.fillRect(x0, y0, w, 2 * k);
+  ctx.fillStyle = '#463729'; ctx.fillRect(x0 + w * 0.15, y0 + (y1 - y0) * 0.35, w * 0.7, k);
 }
 function drawRef(G) {
   const R = G.ref, sp = refSprites(R), hp = R.mode === 'fly' || R.mode === 'fall' ? 1.0 : 0;
@@ -2116,13 +2320,13 @@ function drawBall(G) {
     ctx.globalAlpha = 1; ctx.lineCap = 'butt';
   }
   blit(spr, b.x, b.y, -b.rot);
-  if (b.spin && !b.held) {   // the curly arrow round a spinning ball
-    const x = WX(b.x), y = WY(b.y), r = (b.r * PPM + 3) * K, a0 = G.time * 9 * b.spin * (b.spinDir || 1), col = b.spin > 0 ? ORANGE : '#86b2ff';
-    ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, K * 0.9);
-    ctx.beginPath(); ctx.arc(x, y, r, a0, a0 + Math.PI * 1.3); ctx.stroke();
-    const ex = x + Math.cos(a0 + Math.PI * 1.3) * r, ey = y + Math.sin(a0 + Math.PI * 1.3) * r;
-    ctx.fillStyle = col; ctx.fillRect(ex - K, ey - K, 2 * K, 2 * K);
+  if (Math.abs(b.spin) > 0.03 && !b.held) {   // a little white pixel arrow over the ball: which way its top is turning, for as long as it spins
+    const d = Math.sign(b.spin) * (b.spinDir || 1), u = Math.max(1, Math.round(K)), x0 = Math.round(WX(b.x)), y0 = Math.round(WY(b.y) - (b.r * PPM + 5) * K);
+    const px = [[-1, 0], [0, 0], [1, 0], [-2, 1], [2, 1], [-3, 2], [1, 2], [2, 2], [3, 2], [2, 3]];
+    ctx.fillStyle = INK; for (const [i, j] of px) ctx.fillRect(x0 + (d * i - 1) * u, y0 + (j - 1) * u, 3 * u, 3 * u);
+    ctx.fillStyle = '#ffffff'; for (const [i, j] of px) ctx.fillRect(x0 + d * i * u, y0 + j * u, u, u);
   }
+
 }
 // a box in world metres (x, y = bottom-left)
 function wRect(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(Math.round(WX(x)), Math.round(WY(y + h)), Math.max(1, Math.ceil(w * PPM * K)), Math.max(1, Math.ceil(h * PPM * K))); }
@@ -2153,13 +2357,18 @@ function drawWorld(G) {
   extendStage();
   ctx.drawImage(extC, PX(-EXT_X), PY(-EXT_T), extC.width * Z * S, extC.height * Z * S);
   const flying = G.ref.mode !== 'stand';
+  drawRefStand();
   if (!flying) drawRef(G);
-  blit(tableSprite(), 0, 0);
+  if (G.tableTip) {   // someone barged the table: it tips away from them onto its far legs (just the picture; it's back upright next point)
+    const T = G.tableTip, k = clamp(T.t / TIP_T, 0, 1), e = 1 - (1 - k) * (1 - k), w = T.t > TIP_T ? Math.sin((T.t - TIP_T) * 16) * Math.exp(-(T.t - TIP_T) * 5) * 0.05 : 0;
+    const x = WX(T.dir * TABLE_HALF), y = WY(0);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(T.dir * (0.26 * e - w)); ctx.translate(-x, -y); blit(tableSprite(), 0, 0); ctx.restore();
+  } else blit(tableSprite(), 0, 0);
   drawCourt(G);
   for (const p of G.players) shadowAt(p.foot().x, p.foot().y, 0.6);
   if (!G.ball.held) shadowAt(G.ball.x, G.ball.y, G.ball.r * 2.4);
   // back players first, so the one at the front of a doubles pair is in front
-  [...G.players].sort((a, b) => b.slot - a.slot).forEach(p => drawPlayer(G, p));
+  [...G.players].sort((a, b) => b.slot - a.slot).forEach(p => withMood(G, p, () => drawPlayer(G, p)));
   if (flying) drawRef(G);
   drawWind(G);
   drawBall(G);
@@ -2180,6 +2389,19 @@ function drawWorld(G) {
       if (p === G.server) txt('SERVE', x, y - 4 * S, 8, GREEN, { ow: 0.7 });
     }
   }
+  if (G.state === 'ready' && G.readySeats) {   // before the match: who still has to hop in
+    const bob = Math.sin(G.realTime * 8) * 0.06;
+    for (const R of G.readySeats) {   // one tag per seat, over the middle of the players that seat drives
+      const ps = G.players.filter(p => p.seat === R.seat && (R.cpu ? p.cpu : !p.cpu)); if (!ps.length) continue;
+      const hs = ps.map(p => p.headPos()), x = WX(hs.reduce((a, h) => a + h.x, 0) / hs.length), y = WY(Math.max(...hs.map(h => h.y)) + 0.6 + (R.ok ? 0 : bob));
+      if (R.ok) txt('READY', x, y, 8, GREEN, { ow: 0.7 });
+      else if (!R.cpu) for (const p of ps) {   // the same little marker as at the serve: these are yours, hop them in
+        const h = p.headPos(), ax = WX(h.x), ay = WY(h.y + 0.55 + bob), col = p.T.light;
+        for (let k = 0; k < 4; k++) ctx.fillStyle = INK, ctx.fillRect(Math.round(ax - (k + 1) * K), Math.round(ay + (k - 1) * K), Math.ceil((2 * k + 2) * K), Math.ceil(K * 1.5));
+        for (let k = 0; k < 3; k++) ctx.fillStyle = col, ctx.fillRect(Math.round(ax - (k + 0.5) * K), Math.round(ay + k * K), Math.ceil((2 * k + 1) * K), Math.ceil(K));
+      }
+    }
+  }
   for (const q of G.pops) {
     const k = q.t < 0.1 ? lerp(0.3, 1.25, q.t / 0.1) : q.t < 0.2 ? lerp(1.25, 1, (q.t - 0.1) / 0.1) : 1;
     ctx.globalAlpha = clamp((q.dur - q.t) / 0.3, 0, 1);
@@ -2197,8 +2419,13 @@ function drawScoreboard(G) {
     txt(String(G.score[t]), AX(x + 14), AY(12.5 - pop * 2), 16 + pop * 6, '#ffffff', { bold: true });
     if (G.state !== 'over') txt(G.teamName(t), AX(x + 14), AY(29), 8, T.light, { ow: 0.8 });   // the over screen names them itself
   }
-  artRect(154, 7, 12, 11, INK); artRect(155, 8, 10, 9, '#f4f4f4');
-  txt(G.target ? String(G.target) : '-', AX(160), AY(12.5), 8, INK, { outline: '#f4f4f4', ow: 0.01 });
+  // a dash between the scores, and what you're playing to in small print under the names (a boxed 7 there read like a third score)
+  artRect(156, 12, 8, 3, INK); artRect(157, 13, 6, 1, CREAM);
+  if (G.state !== 'over' && G.firstToT > 0) {   // only for the first few seconds of a match
+    ctx.globalAlpha = clamp(G.firstToT / 0.5, 0, 1);
+    txt(G.target ? 'FIRST TO ' + G.target + (G.winBy2 ? ' - WIN BY 2' : '') : 'ENDLESS', AX(160), AY(37), 8, '#9aa3c0', { ow: 0.7 });
+    ctx.globalAlpha = 1;
+  }
 }
 // the big call after a point, and the aim arrow when someone's lining up the finishing shot (both tilt with the camera)
 function drawBigCall(G) {
@@ -2207,10 +2434,10 @@ function drawBigCall(G) {
     const t = c.t - CALL_T, T = TEAM[c.team], pop = t < 0.16 ? 1.8 - 0.8 * t / 0.16 : 1, x = AX(160), y = AY(58);
     ctx.save(); ctx.translate(x, y); ctx.scale(pop, pop); ctx.translate(-x, -y);
     txt('POINT', x, AY(60), 24, T.light, { bold: true, ow: 1.3 });
-    txt(G.teamName(c.team), x, AY(83), 24, T.light, { bold: true, ow: 1.3 });
+    txt(T.name, x, AY(83), 24, T.light, { bold: true, ow: 1.3 });   // POINT RED / POINT BLUE, like the ref calls it (no reason line)
     ctx.restore();
-    if (t > 0.35) txt(c.why, x, AY(101), 8, CREAM, { ow: 0.8 });
-    if (c.gp !== undefined && t > 0.6) txt('GAME POINT ' + G.teamName(c.gp), x, AY(113), 8, TEAM[c.gp].light, { ow: 0.9 });
+    if ((c.deuce || c.sudden) && t > 0.6) txt(c.deuce ? 'DEUCE!' : 'NEXT POINT WINS!', x, AY(101), 8, '#ffd23f', { ow: 0.9 });
+    else if (c.gp !== undefined && t > 0.6) txt((G.names ? 'MATCH POINT ' : 'GAME POINT ') + G.teamName(c.gp), x, AY(101), 8, TEAM[c.gp].light, { ow: 0.9 });
   }
   if (G.state === 'finish' && F && !F.fired) {
     const b = G.ball, d = F.shooter.dir, len = 0.8 + F.pow * 1.6, col = F.pow > 0.66 ? '#ff5a3c' : F.pow > 0.33 ? ORANGE : '#ffd23f';
@@ -2231,20 +2458,45 @@ function drawFinish(G) {
   if (human) txt('HOLD YOUR KEY TO POWER UP, LET GO TO SHOOT', AX(160), AY(162), 8, GREEN, { ow: 0.8 });
   else if (G.players.some(p => !p.cpu && p.team !== F.team)) txt('LEAN AND JUMP TO DODGE IT!', AX(160), AY(162), 8, GREEN, { ow: 0.8 });
 }
+// the ready-up screen before every match: three short how-tos, then each side hops in on its own keys
+function seatKeys(G, r) {
+  if (G.humans[0] === 2) return [['W', 'E'], ['I', 'O'], ['Z', 'X'], ['<', '>']][r.seat];
+  return G.humans[1] && r.team ? ['I', 'O'] : ['W', 'E'];
+}
+function drawReady(G) {
+  const touch = document.body.classList.contains('touch'), go = G.goT >= 0;
+  const cols = [['MOVE', touch ? 'HOLD A SIDE: LEAN' : 'HOLD A KEY: LEAN', 'LET GO: JUMP'], ['GOAL', 'BOUNCE IT ON', 'THEIR SIDE'], ['SPIN', 'AFTER YOUR HIT', 'TAP TOWARD/AWAY']];
+  ctx.globalAlpha = 0.6; artRect(8, 36, 304, 31, INK); ctx.globalAlpha = 1;
+  cols.forEach(([h, a, b], i) => {
+    const x = AX(59 + i * 101);
+    txt(h, x, AY(42), 8, ORANGE, { ow: 0.8 });
+    txt(a, x, AY(52), fitSize(a, 8, 96), CREAM, { ow: 0.7 }); txt(b, x, AY(61), fitSize(b, 8, 96), CREAM, { ow: 0.7 });
+  });
+  const pop = go ? 1 + Math.max(0, 0.5 - G.goT * 2) : 1 + Math.sin(G.realTime * 5) * 0.04;
+  txt(go ? 'GO!' : 'READY UP!', AX(160), AY(80), 16 * pop, go ? GREEN : CREAM, { bold: true, ow: 1.1 });
+  if (G.banner) txt(G.banner.text, AX(160), AY(95), fitSize(G.banner.text, 8, 300), CREAM, { ow: 0.8 });
+  if (G.banner && G.banner.sub) txt(G.banner.sub, AX(160), AY(104), fitSize(G.banner.sub, 8, 300), ORANGE, { ow: 0.8 });
+  // one tag per side at the bottom: its keys (or CPU), and whether it's in
+  const seats = G.readySeats || [], per = [0, 1].map(t => seats.filter(r => r.team === t));
+  per.forEach((list, t) => list.forEach((r, i) => {
+    const cx = t ? 320 - 52 - i * 64 : 52 + i * 64, T = TEAM[t], keys = seatKeys(G, r);
+    if (r.cpu) txt('CPU', AX(cx), AY(157), 8, T.light, { ow: 0.8 });
+    else if (touch) txt(G.humans[0] === 2 || G.humans[1] ? 'TAP THIS SIDE' : 'TAP TO HOP', AX(cx), AY(157), 8, T.light, { ow: 0.8 });
+    else { drawKey(cx - 15, 150, keys[0]); drawKey(cx + 1, 150, keys[1]); }
+    txt(r.ok ? 'READY!' : r.cpu ? '...' : 'HOP IN', AX(cx), AY(171), 8, r.ok ? GREEN : CREAM, { ow: 0.8 });
+  }));
+}
 function drawHUD(G) {
   drawScoreboard(G);
   if (G.state === 'finish') drawFinish(G);
-  if (G.state === 'play' && G.rally >= 3) txt(`RALLY ${G.rally}`, AX(160), AY(40), 8, G.heat > 0 ? ORANGE : G.rally >= 8 ? '#ffd23f' : CREAM, { ow: 0.7 });
-  if (G.banner) {
+  if (G.state === 'ready') drawReady(G);
+  else if (G.banner) {
     ctx.globalAlpha = clamp(G.banner.t / 0.4, 0, 1);
     txt(G.banner.text, AX(160), AY(52), 8, G.banner.col || CREAM, { ow: 0.9 });
     if (G.banner.sub) txt(G.banner.sub, AX(160), AY(62), 8, ORANGE, { ow: 0.9 });
     ctx.globalAlpha = 1;
   }
-  if (!G.demo && G.score[0] + G.score[1] < 2 && (G.state === 'serve' || G.state === 'play')) {
-    txt('HOLD A KEY TO LEAN, LET GO TO JUMP', AX(160), AY(160), 8, GREEN, { ow: 0.8 });
-    txt(document.body.classList.contains('touch') ? 'HOLD THE LEFT OR RIGHT SIDE' : G.humans[0] === 2 ? 'RED: W E + Z X    BLUE: I O + ARROWS' : G.humans[1] ? 'RED: W E     BLUE: I O' : 'W E  OR  ARROW KEYS', AX(160), AY(170), 8, CREAM, { ow: 0.8 });
-  }
+  // (no control hint during play, like PPC: the ready-up screen teaches the keys)
 }
 function drawKey(x, y, ch) {
   artRect(x, y, 14, 14, INK); artRect(x + 1, y + 1, 12, 12, '#cfc6b0'); artRect(x + 1, y + 1, 12, 9, CREAM);
@@ -2270,8 +2522,10 @@ function drawTitle(G) {
   });
   txt('ARROWS + ENTER', AX(65), AY(166), 8, '#7d88a8', { ow: 0.6 });
   // two short lines: the whole mix on one line runs off the screen
-  txt([+SET.doubles ? 'DOUBLES' : 'SINGLES', G.map.name, G.B.name].join(' - '), AX(222), AY(160), 8, '#b9c3dd', { ow: 0.7 });
-  txt([G.spinMode.name, G.env.id === 'normal' ? '' : G.env.name].filter(Boolean).join(' - '), AX(222), AY(170), 8, ORANGE, { ow: 0.8 });
+  // (and each shrinks to fit the 190px beside the menu: DOUBLES - ROME COLOSSEUM - BASKETBALL is wider than that)
+  const cap1 = [G.doubles ? 'DOUBLES' : 'SINGLES', G.map.name, G.B.name].join(' - '), cap2 = [G.spinMode.name, G.env.id === 'normal' ? '' : G.env.name].filter(Boolean).join(' - ');
+  txt(cap1, AX(222), AY(160), fitSize(cap1, 8, 186), '#b9c3dd', { ow: 0.7 });
+  txt(cap2, AX(222), AY(170), fitSize(cap2, 8, 186), ORANGE, { ow: 0.8 });
   if (G.help) drawHelp(G);
 }
 function drawHelp(G) {
@@ -2281,7 +2535,7 @@ function drawHelp(G) {
   drawKey(84, 36, 'W'); drawKey(100, 36, 'E'); txt('RED', AX(132), AY(43), 8, TEAM[0].light);
   drawKey(178, 36, 'I'); drawKey(194, 36, 'O'); txt('BLUE', AX(226), AY(43), 8, TEAM[1].light);
   ['HOLD A KEY: LEAN THAT WAY', 'LET GO: JUMP THE WAY YOU LEAN', 'TAP = HOP UP, HOLD LONG = BIG HOP', 'STAND STILL: SOFT LOB. LEAN IN: HARD HIT', 'BOUNCE IT ON THEIR HALF OF THE TABLE',
-    'PRESS A KEY RIGHT AFTER YOUR HIT: SPIN', 'JUMP AT A HIGH BALL: SMASH', 'DON\'T TOUCH THE TABLE', '2 V 2 BACK PLAYERS: RED Z X, BLUE ARROWS']
+    'PRESS A KEY RIGHT AFTER YOUR HIT: SPIN', 'EVERY FEW HITS IT GETS FASTER', 'DON\'T TOUCH THE TABLE', '2 V 2 BACK PLAYERS: RED Z X, BLUE ARROWS']
     .forEach((l, i) => txt(l, AX(160), AY(62 + i * 11), 8, i === 5 ? ORANGE : i === 6 ? GREEN : i === 7 ? '#ff8173' : i === 8 ? '#86b2ff' : CREAM, { ow: 0.8 }));
   txt('PRESS ANY KEY OR CLICK TO GO BACK', AX(160), AY(162), 8, '#7d88a8', { ow: 0.6 });
 }
@@ -2318,31 +2572,39 @@ function drawTrophy(x, y) {
   artRect(x - 3, y + 1, 3, 5, gold); artRect(x + 14, y + 1, 3, 5, gold);
   artRect(x + 6, y + 12, 2, 3, dark); artRect(x + 3, y + 15, 8, 3, dark); artRect(x + 2, y + 1, 1, 6, '#fff3b0');
 }
-const OVER_BTNS = [0, 1].map(i => ({ x: 70 + i * 100, y: 140, w: 80, h: 20 }));
+// the buttons on the win screen: two or three across (FINISH HIM goes once you've used it)
+function overRects(G) { const n = G.overButtons().length, w = 80, gap = n > 2 ? 12 : 20, x0 = 160 - (n * w + (n - 1) * gap) / 2; return G.overButtons().map((_, i) => ({ x: x0 + i * (w + gap), y: 140, w, h: 20 })); }
 function drawOver(G) {
-  const a = clamp(G.overT / 0.6, 0, 1);
-  ctx.fillStyle = `rgba(8,10,18,${0.62 * a})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
-  const T = TEAM[G.winner], k = 1 + Math.max(0, 0.4 - G.overT) * 1.5, name = G.teamName(G.winner);
-  const title = name === 'YOU' ? 'YOU WIN!' : `${name} WINS!`;
-  txt(title, AX(160), AY(36), (title.length > 12 ? 16 : 24) * k, T.light, { ow: 1.4 });
-  txt(`${G.score[0]}  TO  ${G.score[1]}`, AX(160), AY(60), 16, CREAM);
-  txt(G.teamName(0), AX(112), AY(76), 8, TEAM[0].light, { ow: 0.8 }); txt(G.teamName(1), AX(208), AY(76), 8, TEAM[1].light, { ow: 0.8 });
-  [['HITS', G.hits], ['SMASHES', G.smashes], ['GOT BONKED', G.bonks]].forEach(([l, v], i) => {
-    const y = 86 + i * 9;
-    txt(l, AX(160), AY(y), 8, '#b9c3dd', { ow: 0.7 });
-    txt(String(v[0]), AX(112), AY(y), 8, CREAM, { ow: 0.7 }); txt(String(v[1]), AX(208), AY(y), 8, CREAM, { ow: 0.7 });
-  });
-  txt(`LONGEST RALLY: ${G.bestRally}`, AX(160), AY(116), 8, '#ffd23f', { ow: 0.7 });
+  const a = clamp(G.overT / 0.6, 0, 1), t = G.overT;
+  ctx.fillStyle = `rgba(8,10,18,${0.36 * a})`; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);   // light, so the hops and slumps still show
+  const T = TEAM[G.winner];
+  // the title drops in big, overshoots, settles: RED WINS! in a box of the winner's colour (a tournament player's own name)
+  const k = t < 0.35 ? 1.7 - t / 0.35 * 0.7 : 1 + Math.sin((t - 0.35) * 16) * 0.08 * Math.max(0, 1 - (t - 0.35) / 0.6);
+  const who = G.names ? G.teamName(G.winner) : T.name, title = who === 'YOU' ? 'YOU WIN!' : who + ' WINS!';
+  ctx.globalAlpha = clamp(t / 0.25, 0, 1);
+  artRect(60, 22, 200, 34, INK); artRect(61, 23, 198, 32, T.jersey); artRect(61, 51, 198, 4, T.dark);
+  const x = AX(160), y = AY(38); ctx.save(); ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-x, -y);
+  txt(title, x, y, fitSize(title, 24, 188), '#ffffff', { bold: true, ow: 1.4 });
+  ctx.restore();
+  ctx.globalAlpha = a;
+  // the numbers, kept to a line or two
+  const line = `BEST RALLY ${G.bestRally}   HITS ${G.hits[0]}-${G.hits[1]}   BONKS ${G.bonks[0]}-${G.bonks[1]}`;
+  ctx.globalAlpha = 0.6 * a; artRect(84, 60, 152, 27, INK); ctx.globalAlpha = a;
+  txt(`${G.score[0]} - ${G.score[1]}`, AX(160), AY(68), 16, CREAM);
+  txt(line, AX(160), AY(81), fitSize(line, 8, 148), '#b9c3dd', { ow: 0.7 });
+  ctx.globalAlpha = 1;
   if (G.overT < 1.2) return;
-  const labels = G.overButtons(), cols = [['#43b04a', '#2d7a33'], ['#d63a3f', '#8f222b']];
-  OVER_BTNS.forEach((r, i) => {
+  const labels = G.overButtons(), cols = labels.map(l => l === 'FINISH HIM' ? ['#e9e2d0', '#a39c8a'] : l === 'MENU' || l === 'QUIT' ? ['#d63a3f', '#8f222b'] : ['#43b04a', '#2d7a33']);
+  overRects(G).forEach((r, i) => {
     const sel = i === G.overSel, bob = sel ? Math.round(Math.sin(G.realTime * 7)) : 0;
     if (sel) artRect(r.x - 3, r.y - 3 + bob, r.w + 6, r.h + 6, ORANGE);
     artRect(r.x - 1, r.y - 1 + bob, r.w + 2, r.h + 2, INK);
     artRect(r.x, r.y + bob, r.w, r.h, cols[i][0]); artRect(r.x, r.y + r.h - 3 + bob, r.w, 3, cols[i][1]);
-    txt(labels[i], AX(r.x + r.w / 2), AY(r.y + 9 + bob), 8, '#ffffff', { ow: 0.8 });
+    txt(labels[i], AX(r.x + r.w / 2), AY(r.y + 9 + bob), 8, labels[i] === 'FINISH HIM' ? INK : '#ffffff', { ow: 0.8, outline: labels[i] === 'FINISH HIM' ? '#ffffff' : INK });
+    if (sel && G.overHold) artRect(r.x, r.y + r.h - 3 + bob, Math.round(r.w * clamp(G.overHold.t / OVER_HOLD, 0, 1)), 3, '#ffd23f');   // holding a key fills the picked button
   });
-  txt('LEFT / RIGHT TO PICK, ENTER TO GO', AX(160), AY(170), 8, '#7d88a8', { ow: 0.6 });
+  const touch = document.body.classList.contains('touch');
+  txt(touch ? 'TAP A BUTTON' : 'TAP A KEY: MOVE   HOLD IT: PICK   Q: ' + labels[labels.length - 1], AX(160), AY(170), 8, '#7d88a8', { ow: 0.6 });
 }
 function drawChampion(G) {
   ctx.fillStyle = 'rgba(8,10,18,0.7)'; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
@@ -2353,9 +2615,10 @@ function drawChampion(G) {
 }
 function drawPause() {
   ctx.fillStyle = 'rgba(8,10,18,0.6)'; ctx.fillRect(OX, OY, ART_W * S, ART_H * S);
+  const touch = document.body.classList.contains('touch');
   txt('PAUSED', AX(160), AY(80), 24, CREAM);
-  txt('PRESS P TO KEEP PLAYING', AX(160), AY(104), 8, ORANGE);
-  txt('Q FOR MAIN MENU', AX(160), AY(116), 8, '#b9c3dd');
+  txt(touch ? 'TAP TO RESUME' : 'PRESS P TO KEEP PLAYING', AX(160), AY(104), 8, ORANGE);
+  txt(touch ? 'MENU BUTTON FOR MAIN MENU' : 'Q FOR MAIN MENU', AX(160), AY(116), 8, '#b9c3dd');
 }
 const TRANS_T = 0.6;
 function drawTrans(G) {
@@ -2399,7 +2662,7 @@ const G = new Game();
 
 // ---------------------------------------------------------------- customize panel
 const menuEl = document.getElementById('menu');
-const NUM_KEYS = new Set(['doubles', 'target', 'winBy2', 'serves', 'tableTouch']);
+const NUM_KEYS = new Set(['target', 'winBy2', 'serves', 'tableTouch']);
 let draft = null;
 for (const box of menuEl.querySelectorAll('.chips[data-pool]')) {
   for (const q of POOLS[box.dataset.pool]) {
@@ -2437,9 +2700,8 @@ function openMenu() {
 }
 function closeMenu() {
   if (draft) {
-    const doublesChanged = +draft.doubles !== +SET.doubles;
     Object.assign(SET, draft); saveSettings(SET); draft = null;
-    if (G.menu === 'title') { if (doublesChanged) G.setupMatch({ demo: true, humans: [false, false] }); else G.pickMix(); }
+    if (G.menu === 'title') G.pickMix();   // singles or doubles is part of the mix now, so a re-roll covers it
   }
   menuEl.hidden = true; G.menuOpen = false; cv.focus();
 }
@@ -2498,7 +2760,7 @@ soundEl.addEventListener('click', e => {
 // ---------------------------------------------------------------- tournament sign-up panel
 const tourEl = document.getElementById('tourpanel'), tourNames = document.getElementById('tour-names'), tourSizeEl = document.getElementById('tour-size');
 for (let n = 2; n <= 8; n++) { const b = document.createElement('button'); b.type = 'button'; b.dataset.size = n; b.textContent = n; tourSizeEl.appendChild(b); }
-let tourSize = 4, tourCpu = [];
+let tourSize = 8, tourCpu = [];
 function readTour() { return [...tourNames.querySelectorAll('input')].map(i => i.value); }
 function syncTour(names) {
   for (const b of tourSizeEl.querySelectorAll('[data-size]')) b.setAttribute('aria-pressed', String(Number(b.dataset.size) === tourSize));
@@ -2515,7 +2777,7 @@ function syncTour(names) {
   }
 }
 function openTour() {
-  tourSize = clamp(+SET.tour.size || 4, 2, 8); tourCpu = SET.tour.cpu.slice();
+  tourSize = clamp(+SET.tour.size || 8, 2, 8); tourCpu = SET.tour.cpu.slice();
   syncTour(SET.tour.names); tourEl.hidden = false; G.menuOpen = true;
   const f = tourNames.querySelector('input'); if (f) f.focus({ preventScroll: true });
 }
@@ -2562,9 +2824,11 @@ function hold(id, tk, down) {
   if (![...held.values()].some(v => v[0] === was[0] && v[1] === was[1] && (v[2] || 0) === (was[2] || 0))) G.humanKey(was[0], was[1], false, was[2] || 0);
 }
 function letGo() { held.clear(); G.releaseAll(); }
-const inRally = () => !G.menu && !G.demo && (G.state === 'serve' || G.state === 'play' || G.state === 'point' || G.state === 'finish');
+const inRally = () => !G.menu && !G.demo && (G.state === 'ready' || G.state === 'serve' || G.state === 'play' || G.state === 'point' || G.state === 'finish');
 function togglePause() { if (!inRally() && !G.paused) return; G.paused = !G.paused; if (G.paused) letGo(); }
-function overMove(d) { if (G.overT >= 1.2) { G.overSel = (G.overSel + d + 2) % 2; G.sfx.click(); } }
+function overMove(d) { if (G.overT >= 1.2) { const n = G.overButtons().length; G.overSel = (G.overSel + d + n) % n; G.sfx.click(); } }
+// on the game-over screen a play key tapped moves the pick (on release) and a play key held starts PLAY AGAIN, so you can rematch without looking
+const OVER_HOLD = 0.5, OVER_PLAY = { KeyW: -1, KeyI: -1, KeyZ: -1, ArrowLeft: -1, KeyE: 1, KeyO: 1, KeyX: 1, ArrowRight: 1 };
 const GO_KEYS = new Set(['Enter', 'Space', 'KeyW', 'KeyE', 'KeyI', 'KeyO']);
 resize();
 window.addEventListener('resize', resize);
@@ -2584,7 +2848,7 @@ window.addEventListener('keydown', e => {
     if (G.help) { G.help = false; G.sfx.click(); return; }
     if (code === 'KeyW' || code === 'ArrowUp') G.menuMove(-1);
     else if (code === 'KeyS' || code === 'ArrowDown') G.menuMove(1);
-    else if (code === 'Enter' || code === 'Space') G.menuPick();
+    else if (code === 'Enter' || code === 'Space') { e.preventDefault(); G.menuPick(); }   // or this Enter also clicks the DONE button the panel just focused
     return;
   }
   if (G.menu === 'bracket') {
@@ -2599,8 +2863,9 @@ window.addEventListener('keydown', e => {
   if (G.state === 'over') {
     if (e.repeat) return;
     G.sfx.init();
-    if (code === 'KeyW' || code === 'KeyI' || code === 'ArrowLeft' || code === 'KeyA') overMove(-1);
-    else if (code === 'KeyE' || code === 'KeyO' || code === 'ArrowRight' || code === 'KeyD') overMove(1);
+    if (OVER_PLAY[code]) { if (G.overT >= 1.2) G.overHold = { code, t: 0 }; }
+    else if (code === 'KeyA') overMove(-1);
+    else if (code === 'KeyD') overMove(1);
     else if (code === 'Enter' || code === 'Space') G.overPick(G.overSel);
     else if (code === 'KeyQ' || code === 'Escape') G.toTitle();
     return;
@@ -2611,7 +2876,11 @@ window.addEventListener('keydown', e => {
   G.sfx.init();
   hold(code, keyFor(code), true);
 });
-window.addEventListener('keyup', e => { hold(e.code, null, false); });
+window.addEventListener('keyup', e => {
+  const oh = G.overHold;
+  if (oh && oh.code === e.code) { G.overHold = null; if (G.state === 'over' && oh.t < OVER_HOLD) overMove(OVER_PLAY[e.code]); }
+  hold(e.code, null, false);
+});
 window.addEventListener('blur', () => { letGo(); if (inRally()) G.paused = true; });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { letGo(); if (inRally()) G.paused = true; } });
 
@@ -2621,7 +2890,7 @@ function menuHit(p) {
   for (let i = 0; i < MENU_ITEMS.length; i++) { const y = MENU_Y0 + i * MENU_DY; if (p.x >= MENU_X && p.x <= MENU_X + MENU_W && p.y >= y && p.y <= y + MENU_H) return i; }
   return -1;
 }
-const overHit = p => OVER_BTNS.findIndex(r => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2);
+const overHit = p => overRects(G).findIndex(r => p.x >= r.x - 2 && p.x <= r.x + r.w + 2 && p.y >= r.y - 2 && p.y <= r.y + r.h + 2);
 cv.addEventListener('pointermove', e => {
   if (G.state === 'over' && !G.menu && G.overT >= 1.2) { const i = overHit(artPoint(e)); if (i >= 0) G.overSel = i; cv.style.cursor = i >= 0 ? 'pointer' : ''; return; }
   if (G.menu !== 'title' || G.menuOpen || G.help) { cv.style.cursor = ''; return; }
@@ -2646,6 +2915,7 @@ cv.addEventListener('pointerdown', e => {
   } else if (G.menu === 'bracket') G.startTourneyMatch();
   else if (G.menu === 'champion') { if (G.stateT > 1.2) G.toTitle(); }
   else if (G.state === 'over') { const i = overHit(artPoint(e)); if (i >= 0) { G.overSel = i; G.overPick(i); } }
+  else if (G.paused && !G.menuOpen) togglePause();   // a tap anywhere on the paused game resumes it
   else if (e.pointerType !== 'mouse' && inRally() && !G.paused) {
     const r = cv.getBoundingClientRect();
     hold('touch' + e.pointerId, touchZone((e.clientX - r.left) / r.width), true);
@@ -2672,7 +2942,7 @@ touchBar.addEventListener('click', e => {
 setInterval(() => {
   touchBar.dataset.menu = G.paused || (G.state === 'over' && !G.menu) || G.menu === 'bracket' ? '1' : '';
   touchBar.dataset.pause = inRally() ? '1' : '';
-  const hint = inRally() && !G.paused && G.score[0] + G.score[1] < 2 ? touchHintHtml() : '';
+  const hint = inRally() && G.state !== 'ready' && !G.paused && G.score[0] + G.score[1] < 2 ? touchHintHtml() : '';   // the ready screen has its own tags
   if (touchHint.dataset.text !== hint) { touchHint.dataset.text = hint; touchHint.innerHTML = hint; }
 }, 150);
 if (document.fonts && document.fonts.load) document.fonts.load('400 16px Silkscreen').catch(() => {});
@@ -2688,6 +2958,8 @@ function frame(rdt) {
     if (tr.t >= TRANS_T) G.trans = null;
   }
   if (G.tsT > 0 && (G.tsT -= rdt) <= 0) G.ts = 1;
+  G.fxWatch();
+  if (G.overHold) { if (G.state !== 'over' || G.trans || G.menu) G.overHold = null; else if ((G.overHold.t += rdt) >= OVER_HOLD) { G.overHold = null; G.overPick(G.overSel); } }
   for (let t = 0; t < 2; t++) {
     if (G.score[t] > shownScore[t]) scorePop[t] = 1;
     shownScore[t] = G.score[t];
@@ -2713,7 +2985,7 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 if (location.search.includes('debug')) {
-  window.floppy = G; window.floppySET = SET; window.floppyFn = { solveArc, predictBall };
+  window.floppy = G; window.floppySET = SET; window.floppyFn = { solveArc, predictBall, TABLE_TOP, TABLE_HALF, BODY };
   window.floppyStep = n => { for (let i = 0; i < n; i++) { frame(STEP); if (!G.paused) G.step(STEP); } render(G); };
 }
 requestAnimationFrame(loop);
