@@ -688,29 +688,49 @@ const MAPS = [
       B(39.5, 44.5, -0.3, 'boat', { bot: -1.6, mv: t => ({ dx: 0, dy: Math.sin(t * 1.7) * 0.22 }) }),
       B(47, 68, 0, 'dock'), B(52, 54.5, 1.2, 'crate', { bot: 0 }), B(54.5, 56.5, 2.4, 'crate', { bot: 0 }), B(61, 62, 1.0, 'barrel', { bot: 0 }),
       B(71.5, 97, 0, 'dock')] },
-  { id: 'alley', name: 'GRIDLOCK ALLEY', theme: 'alley', ride: 'train', killY: -3, x0: -7, x1: 96, cps: [0, 23, 52, 70],
-    goal: { x0: 85.5, x1: 89, y0: 0, y1: 3.2 }, rideX: 80,
+  // the city: a street with traffic, a double-decker bus you run THROUGH (lower deck, a hop up the stairwell, upper deck, out the back), a truck and a train to catch
+  { id: 'alley', name: 'GRIDLOCK ALLEY', theme: 'alley', ride: 'train', killY: -3, x0: -7, x1: 104, cps: [0, 23, 48.5, 72],
+    goal: { x0: 93.5, x1: 97, y0: 0, y1: 3.2 }, rideX: 88,
     solids: [B(-9, 19, 0, 'street'), ...car(5, '#c84a4a'), ...car(12.3, '#4a8ac8'),
-      B(22, 47, 0, 'street'), ...car(24.5, '#e0a030'), B(31, 37.5, 2.4, 'bus', { bot: 0, bounce: 1 }), ...car(40.5, '#6ac06a'),
-      B(50.5, 98, 0, 'street'), B(55, 57.5, 2.2, 'cab', { bot: 0 }), B(57.5, 63.5, 3.3, 'truck', { bot: 0 }), ...car(67.5, '#b05ac8'), ...car(73.2, '#d8d8e0')] },
+      B(22, 55, 0, 'street'), ...car(24.5, '#e0a030'),
+      // the bus, x 30-50: lower deck at street level, the upper deck at 4.3 with a stairwell gap at x 44-47, a roof you bonk on
+      B(30, 50, 0, 'busfloor', { bot: -0.2 }), B(30, 30.6, 8.0, 'buswall', { bot: 4.3 }),
+      B(30.6, 44, 4.3, 'busdeck', { bot: 3.9 }), B(47, 50, 4.3, 'busdeck', { bot: 3.9 }), B(44, 47, 4.3, 'busstair', { bot: 4.1, oneway: 1 }),
+      B(29.7, 50.3, 8.2, 'busroof', { bot: 8.0, ceil: 1 }),
+      B(32, 33.6, 0.65, 'busseat', { bot: 0 }), B(36, 37.6, 0.65, 'busseat', { bot: 0 }), B(40, 41.6, 0.65, 'busseat', { bot: 0 }),
+      B(33, 34.6, 4.95, 'busseat', { bot: 4.3 }), B(37, 38.6, 4.95, 'busseat', { bot: 4.3 }), B(41, 42.6, 4.95, 'busseat', { bot: 4.3 }),
+      ...car(52.5, '#6ac06a'),
+      B(58, 106, 0, 'street'), B(62, 64.5, 2.2, 'cab', { bot: 0 }), B(64.5, 71, 3.3, 'truck', { bot: 0 }), ...car(75.5, '#b05ac8'), ...car(81.2, '#d8d8e0')] },
   { id: 'rail', name: 'RAIL RUNNER', theme: 'rail', ride: 'heli', killY: 1.2, x0: -7, x1: 97, cps: [-2, 9, 23, 37, 51, 66, 80],
     goal: { x0: 87.6, x1: 91, y0: 7.2, y1: 10.5 }, rideX: 89, rideY: 9.6,
     solids: [B(-9, 5, 3.2, 'boxcar', { bot: 0.9 }), B(7.5, 18.5, 3.2, 'boxcar', { bot: 0.9 }), B(21.5, 32.5, 1.9, 'flatcar', { bot: 0.9 }),
       B(25, 27.5, 3.0, 'crate', { bot: 1.9 }), B(27.5, 30, 3.8, 'crate', { bot: 1.9 }), B(35.5, 46.5, 3.6, 'tanker', { bot: 0.9 }),
       B(49.5, 60.5, 3.2, 'boxcar', { bot: 0.9 }), B(64, 75, 3.4, 'boxcar', { bot: 0.9 }),
       B(78, 88, 3.8, 'loco', { bot: 0.9 }), B(88, 93, 5.0, 'locab', { bot: 0.9 }), B(93, 97, 3.6, 'loco', { bot: 0.9 })] },
+  // the tower: street, into a dark office floor (desks, a lit EXIT sign), a lift, a second office floor with a hole in the wall, a lift, the roof with a helipad
   { id: 'spire', name: 'GLASS SPIRE', theme: 'spire', ride: 'chopper', killY: -3, x0: -7, x1: 92, cps: [0, 13, 33, 53, 70],
     goal: { x0: 80.5, x1: 84.5, y0: 14, y1: 17 }, rideX: 81, rideY: 14,
-    solids: [B(-9, 11, 0, 'street'), B(7, 10, 1.3, 'planter', { bot: 0 }), B(11, 27, 3, 'tower'),
-      lift(27.6, 31.4, 1.5, 9.2, 7), B(32, 47, 9, 'tower'), B(38, 40.2, 10.2, 'ac', { bot: 9 }),
+    solids: [B(-9, 11, 0, 'street'), B(7, 10, 1.3, 'planter', { bot: 0 }),
+      B(11, 27, 3, 'office', { room: 1, exit: 24 }), B(14, 16.2, 3.75, 'desk2', { bot: 3 }), B(19.5, 21.7, 3.75, 'desk2', { bot: 3 }), B(23.2, 24.2, 4.1, 'cooler', { bot: 3 }),
+      B(11, 27.2, 7.6, 'office', { ceil: 1, bot: 7.3, slab: 1 }),
+      lift(27.6, 31.4, 1.5, 9.2, 7),
+      B(32, 47, 9, 'office', { room: 1, exit: 34 }), B(35, 37.2, 9.75, 'desk2', { bot: 9 }), B(40, 42.2, 9.75, 'desk2', { bot: 9 }), B(43.8, 44.8, 10.1, 'cooler', { bot: 9 }),
+      B(32, 47.2, 13.6, 'office', { ceil: 1, bot: 13.3, slab: 1 }),
       lift(47.6, 51.4, 6, 13.6, 6.5, 0.4), B(52, 65, 13, 'tower'), B(58, 59.4, 14.1, 'ac', { bot: 13 }), B(69, 93, 14, 'tower', { pad: 1 })] },
-  { id: 'airport', name: 'DEPARTURES HALL', theme: 'airport', ride: 'jet', killY: -5, x0: -7, x1: 100, cps: [0, 20, 45, 70],
-    goal: { x0: 87.4, x1: 89.6, y0: 2.7, y1: 5.6 }, rideX: 87.6, strip: { x0: 36, x1: 40 },
-    solids: [B(-9, 74, 0, 'tile'), B(-9, 72, 9, 'ceil', { bot: 6.4, ceil: 1 }), B(8, 11, 1.2, 'desk', { bot: 0 }), B(14, 17, 1.2, 'desk', { bot: 0 }),
-      B(22, 30, 0.6, 'belt', { bot: 0, belt: 2.2 }), B(43, 44.5, 0.9, 'bin', { bot: 0 }),
-      B(48, 49.5, 0.8, 'step', { bot: 0 }), B(49.5, 51, 1.6, 'step', { bot: 0 }), B(51, 52.5, 2.4, 'step', { bot: 0 }), B(52.5, 66, 3.2, 'mezz', { bot: 2.8 }),
-      B(74, 102, 0, 'tarmac'), B(84, 85.2, 0.9, 'airstep', { bot: 0 }), B(85.2, 86.4, 1.8, 'airstep', { bot: 0 }), B(86.4, 87.6, 2.7, 'airstep', { bot: 0 })],
-    caps: [{ x: 57.4, y: 3.2, k: 'barrel' }, { x: 58.4, y: 3.2, k: 'barrel' }, { x: 59.4, y: 3.2, k: 'barrel' }, { x: 60.4, y: 3.2, k: 'barrel' }] },   // a row of fuel drums on the mezzanine: shoot one and they all go
+  // the reference's terminal is a climb: hall, escalator, food court, escalator, rooftop with drums and billboards, the gate, then the jet
+  { id: 'airport', name: 'DEPARTURES HALL', theme: 'airport', ride: 'jet', killY: -5, x0: -7, x1: 132, cps: [0, 24, 50, 78, 100],
+    goal: { x0: 118.4, x1: 120.6, y0: 2.7, y1: 5.6 }, rideX: 118.6, strip: { x0: 36, x1: 40 }, roof: { x0: 66, x1: 104 },
+    solids: [B(-9, 60, 0, 'tile'), B(-9, 60, 9, 'ceil', { bot: 6.4, ceil: 1 }),
+      B(8, 11, 1.2, 'desk', { bot: 0 }), B(14, 17, 1.2, 'desk', { bot: 0 }), B(22, 30, 0.6, 'belt', { bot: 0, belt: 2.2 }), B(33, 34.5, 0.9, 'bin', { bot: 0 }),
+      B(42, 49, 0, 'escalator', { bot: -0.6, k: 3 / 7, belt: 1 }),                          // escalator 1: up 3 m over 7 m, and it carries you
+      B(49, 60, 3, 'floor', { bot: 2.6 }), B(52, 54.5, 4.2, 'counter', { bot: 3 }), B(57.5, 58.6, 3.9, 'bin', { bot: 3 }),   // the food court
+      B(60, 67, 3, 'escalator', { bot: 2.4, k: 3 / 7, belt: 1 }),                           // escalator 2
+      B(67, 72, 6, 'floor', { bot: 5.6 }),                                                  // the top landing, then out onto the roof
+      B(72, 104, 6, 'roof', { bot: 0 }), B(73.5, 75.5, 7.5, 'acbox', { bot: 6 }), B(88, 90, 7, 'vent', { bot: 6 }), B(96, 98, 7, 'vent', { bot: 6 }),
+      B(84, 90, 9.2, 'billboard', { bot: 8.6, sign: 'BOB' }), B(94, 100, 9.2, 'billboard', { bot: 8.6, sign: 'PETES' }),      // billboards on stilts: hop on top to skip the roof fight
+      B(104, 106.5, 4.5, 'wall', { bot: 0 }), B(106.5, 114, 5.2, 'gate', { bot: 0 }),       // the drop, a low wall, then Gate C4's block
+      B(114, 134, 0, 'tarmac'), B(115.4, 116.6, 0.9, 'airstep', { bot: 0 }), B(116.6, 117.8, 1.8, 'airstep', { bot: 0 }), B(117.8, 119, 2.7, 'airstep', { bot: 0 })],
+    caps: [{ x: 78.4, y: 6, k: 'barrel' }, { x: 79.4, y: 6, k: 'barrel' }, { x: 80.4, y: 6, k: 'barrel' }, { x: 81.4, y: 6, k: 'barrel' }] },   // a row of fuel drums on the roof: shoot one and they all go
   { id: 'plane', name: 'CLOUD FREIGHTER', theme: 'plane', ride: 'chute', killY: -4, x0: -7, x1: 70, cps: [0, 16, 40, 54],
     goal: { x0: 63.5, x1: 74, y0: -4, y1: 3.5 }, rideX: 63, pack: { x0: 53, x1: 55 },   // (the chute rack: past it you wear one)
     solids: [B(-9, 24, 0, 'deck'), B(-9, 63, 9, 'ceil', { bot: 5.2, ceil: 1, plane: 1 }), B(6, 8.5, 1.4, 'cargo', { bot: 0 }), B(13, 15, 1.0, 'cargo', { bot: 0 }), B(15, 16.6, 2.0, 'cargo', { bot: 0 }),
@@ -794,6 +814,7 @@ function rayBox(ox, oy, dx, dy, s) {
   return t0;
 }
 const inX = (s, x, pad = 0) => x >= s.x0 - pad && x <= s.x1 + pad;
+const topAt = (s, x) => s.k ? s.top + clamp(x - s.x0, 0, s.x1 - s.x0) * s.k : s.top;   // (a slope's top is its height at the left end)
 
 // how far the body has leaned when a hop of hold time H leaves the ground (from standing still): bots plan with it
 const LEAN_AT = (() => {
@@ -888,8 +909,7 @@ class Dude {
       if (!o.alive || o.gone || o.down > 0 || Math.abs(this.x - h.x) > 0.5 || o.y + Math.cos(o.a) * BH < this.y - 0.6) return this.fall();
       this.x += o.x - o.px; this.y = o.y + Math.cos(o.a) * BH * 0.98;
     } else if (s) {
-      this.x += s.dx || 0; this.y = s.top;
-      if (s.belt) this.x += s.belt * dt;
+      this.x += s.dx || 0; if (s.belt) this.x += s.belt * dt; this.y = topAt(s, this.x);
     }
     // shoved along the floor: slide and stop
     if (this.vx) {
@@ -924,6 +944,7 @@ class Dude {
   moveX(G, dx) {
     const nx = this.x + dx, top = this.y + BH * 0.85 * Math.max(0.4, Math.cos(this.a));
     for (const s of G.S) {
+      if (s.k && nx + WIDTH > s.x0 && nx - WIDTH < s.x1) { const ty = topAt(s, nx); if (this.y >= ty - 0.03) continue; if (this.y > ty - 0.6) { this.y = ty; continue; } }
       if (s.oneway || this.y >= s.top - 0.03 || top <= s.bot) continue;
       if (nx + WIDTH > s.x0 && nx - WIDTH < s.x1 && !(this.x + WIDTH > s.x0 && this.x - WIDTH < s.x1)) {
         this.x = dx > 0 ? s.x0 - WIDTH - 0.001 : s.x1 + WIDTH + 0.001;
@@ -978,8 +999,8 @@ class Dude {
       let best = null, bt = -Infinity;
       for (const s of G.S) {
         if (s.ceil || !inX(s, this.x, 0.12)) continue;
-        const was = s.top - (s.dy || 0);
-        if (this.y >= was - 0.02 && ny <= s.top && s.top > bt) { best = s; bt = s.top; }
+        const st = topAt(s, this.x), was = st - (s.dy || 0);
+        if (this.y >= was - 0.02 && ny <= st && st > bt) { best = s; bt = st; }
       }
       for (const o of G.P) {
         if (o === this || !o.alive || o.gone || o.down > 0 || o.getup > 0) continue;
@@ -1043,10 +1064,10 @@ class Dude {
       if (!this.grounded) {
         this.vy -= GRAV * (G.M.g || 1) * dt; this.x += this.vx * dt; this.a += this.spin * dt;
         const ny = this.y + this.vy * dt;
-        for (const s of G.S) if (!s.ceil && inX(s, this.x) && this.y >= s.top - 0.02 && ny <= s.top && this.vy < 0) {
-          this.y = s.top; this.ground = s;
+        for (const s of G.S) if (!s.ceil && inX(s, this.x) && this.y >= topAt(s, this.x) - 0.02 && ny <= topAt(s, this.x) && this.vy < 0) {
+          this.y = topAt(s, this.x); this.ground = s;
           if (Math.abs(this.vy) > 4) { this.vy = -this.vy * 0.3; this.spin *= 0.5; } else { this.grounded = true; this.vy = 0; this.vx = 0; }
-          G.dust(this.x, s.top, 4, 0.6); G.sfx.thud(0.5);
+          G.dust(this.x, this.y, 4, 0.6); G.sfx.thud(0.5);
           break;
         }
         if (!this.grounded) this.y = ny;
@@ -1072,10 +1093,10 @@ class Bot {
       if (nx > goal.x0 && nx < goal.x1 && ny + BH * 0.5 > goal.y0 && ny < goal.y1) return { x: nx, y: ny, goal: true, t };
       let hitWall = false;
       for (const s of G.S) {
-        const o = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (o ? o.dx : 0), x1 = s.x1b + (o ? o.dx : 0), top = s.topb + (o ? o.dy : 0), bot = s.botb + (o ? o.dy : 0);
+        const o = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (o ? o.dx : 0), x1 = s.x1b + (o ? o.dx : 0), top = s.topb + (o ? o.dy : 0) + (s.k ? clamp(nx - x0, 0, x1 - x0) * s.k : 0), bot = s.botb + (o ? o.dy : 0);
         if (vy <= 0 && !s.ceil && nx >= x0 - 0.1 && nx <= x1 + 0.1 && y >= top - 0.05 && ny <= top)
           return { x: nx, y: top, s, t, edge: Math.min(nx - x0, x1 - nx), th };
-        if (!s.oneway && nx + WIDTH > x0 && nx - WIDTH < x1 && ny < top - 0.03 && ny + BH * 0.8 > bot && !(x + WIDTH > x0 && x - WIDTH < x1)) hitWall = true;
+        if (!s.k && !s.oneway && nx + WIDTH > x0 && nx - WIDTH < x1 && ny < top - 0.03 && ny + BH * 0.8 > bot && !(x + WIDTH > x0 && x - WIDTH < x1)) hitWall = true;
         if (vy > 0 && !s.oneway && nx >= x0 && nx <= x1 && bot >= y + BH * 0.85 - 0.02 && bot <= ny + BH * 0.85) vy = 0;
       }
       if (hitWall) vx = -vx * 0.25; else x = nx;
@@ -1190,13 +1211,13 @@ class Game {
       const gap = SET.itemRate === 2 ? 8 : 12;
       for (let x = M.cps[0] + 7; x < M.goal.x0 - 3; x += gap) {
         const s = this.floorAt(x); if (!s) continue;
-        this.spots.push({ x, y: s.top + 1.15, item: null, t: rand(0, 1.2) });
+        this.spots.push({ x, y: topAt(s, x) + 1.15, item: null, t: rand(0, 1.2) });
       }
     }
     const x0 = M.cps[0], order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     this.P.forEach((p, k) => {
       const x = x0 - 1.2 + order[k] * 0.8, s = this.floorAt(x);
-      p.reset(x, s ? s.top : 0); p.ground = s; p.cp = M.cps[0]; p.facing = 1; p.a = rand(-0.05, 0.05);
+      p.reset(x, s ? topAt(s, x) : 0); p.ground = s; p.cp = M.cps[0]; p.facing = 1; p.a = rand(-0.05, 0.05);
       if (p.bot) { p.bot.plan = null; p.bot.wait = rand(0.1, 0.6); }
     });
     this.cams = this.mode === '2p' && !this.demo ? [{ p: this.P[0] }, { p: this.P[1] }] : [{ p: (this.mode === 'cpu' || this.mode === 'tt') && !this.demo ? this.P[0] : null }];
@@ -1210,7 +1231,7 @@ class Game {
   // the highest still floor under x (where you stand / respawn)
   floorAt(x) {
     let best = null;
-    for (const s of this.S) if (!s.ceil && !s.mv && !s.oneway && s.style !== 'hull' && inX(s, x) && (!best || s.top > best.top)) best = s;
+    for (const s of this.S) if (!s.ceil && !s.mv && !s.oneway && s.style !== 'hull' && inX(s, x) && (!best || topAt(s, x) > topAt(best, x))) best = s;
     return best;
   }
   heard(x, r = 13) { return (this.cams || []).some(c => Math.abs(c.x - x) < r); }
@@ -1240,7 +1261,7 @@ class Game {
   }
   respawn(p) {
     const x = p.cp, s = this.floorAt(x), keep = p.score;
-    p.reset(x, (s ? s.top : 0) + 1.4); p.cp = x; p.score = keep;
+    p.reset(x, (s ? topAt(s, x) : 0) + 1.4); p.cp = x; p.score = keep;
     p.grounded = false; p.ground = null; p.imm = IMMUNE_T + 0.4; p.facing = 1;
     if (p.bot) { p.bot.plan = null; p.bot.wait = rand(0.2, 0.5); }
     this.spark(x, p.y + 1, CREAM, 10);
@@ -1460,9 +1481,9 @@ class Game {
       const nx = q.x + q.vx * dt, ny = q.y + q.vy * dt;
       let boom = q.t <= 0;
       for (const s of this.S) {
-        if (s.oneway || nx < s.x0 || nx > s.x1 || ny > s.top || ny < s.bot) continue;
+        if (s.oneway || nx < s.x0 || nx > s.x1 || ny > topAt(s, nx) || ny < s.bot) continue;
         if (q.kind === 'rocket') { boom = true; break; }
-        if (q.y >= s.top - 0.05) { q.vy = Math.abs(q.vy) * 0.45; q.vx *= 0.7; if (Math.abs(q.vy) > 1) this.sfx.thud(0.3); } else q.vx = -q.vx * 0.5;
+        if (q.y >= topAt(s, nx) - 0.05) { q.vy = Math.abs(q.vy) * 0.45; q.vx *= 0.7; if (Math.abs(q.vy) > 1) this.sfx.thud(0.3); } else q.vx = -q.vx * 0.5;
         q.x -= q.vx * dt; break;
       }
       if (q.kind === 'rocket') {
@@ -1565,7 +1586,7 @@ class Game {
       const g = M.goal, gy = (g.y0 + g.y1) / 2 + 0.8, k = clamp(1 - Math.abs(f.x - (g.x0 + g.x1) / 2) / 14, 0, 1);
       if (Math.abs(gy - ty) > 2) ty += (clamp(gy, ty - 3.2, ty + 3.2) - ty) * k;
     }
-    if (!f.alive && f.deadT < RESPAWN_T - 0.8) { tx = f.cp + 2.6; const s = this.floorAt(f.cp); ty = (s ? s.top : 0) + 2; }
+    if (!f.alive && f.deadT < RESPAWN_T - 0.8) { tx = f.cp + 2.6; const s = this.floorAt(f.cp); ty = (s ? topAt(s, f.cp) : 0) + 2; }
     if (this.state === 'away' || this.state === 'over') {
       const g = M.goal, w = this.winner || this.champ;
       if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.5 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' || M.ride === 'pod' ? Math.min(4, this.rideFx().dy * 0.5) : 0); }
@@ -1626,6 +1647,7 @@ const horizon = f => CAMY * PPM * f;   // view-y of the world's y=0 seen through
 const PF = {};
 'A 010101111101101,B 110101110101110,C 011100100100011,D 110101101101110,E 111100110100111,F 111100110100100,G 011100101101011,H 101101111101101,I 111010010010111,J 001001001101010,K 101101110101101,L 100100100100111,M 101111111101101,N 110101101101101,O 010101101101010,P 110101110100100,Q 010101101110011,R 110101110101101,S 011100010001110,T 111010010010010,U 101101101101111,V 101101101101010,W 101101111111101,X 101101010101101,Y 101101010010010,Z 111001010100111,0 111101101101111,1 010110010010111,2 110001010100111,3 110001010001110,4 101101111001001,5 111100110001110,6 011100111101111,7 111001010010010,8 111101111101111,9 111101111001111,! 010010010000010,? 110001010000010,: 000010000010000,. 000000000000010,- 000000111000000,> 100010001010100,< 001010100010001,/ 001001010100100,+ 000010111010000'
   .split(',').forEach(e => { PF[e[0]] = e.slice(2); });
+PF["'"] = '010010000000000'; PF[','] = '000000000010100'; PF['('] = '010100100100010'; PF[')'] = '010001001001010';
 const ptxtW = (str, k = 1) => (str.length * 4 - 1) * k;
 // pixel text: y is the TOP of the letters; k is the pixel size
 function ptxt(str, x, y, col, opt = {}) {
@@ -1796,20 +1818,11 @@ const BACKDROP = {
     clouds(0.3, 20, '#ffffff', G.t, 3, 5, 90);
   },
   airport(G) {
-    // inside the terminal: a long glass wall with the runway behind it
-    sky('#efe9df');
-    const y = Math.round(horizon(0.5)), wy = y - 56;
-    par(0.5, 40, (k, x) => {
-      x = Math.round(x); rr(x, wy, 38, 50, '#8ec8ee'); rr(x, wy + 34, 38, 16, '#a8d8f4'); rr(x, wy + 46, 38, 4, '#7a8a7a');
-      if (hsh(k) > 0.5) { const px = x + 4 + Math.round(hsh(k + 2) * 14); rr(px, wy + 40, 20, 3, '#f4f6fa'); rr(px + 15, wy + 37, 2, 4, '#e8423a'); rr(px + 7, wy + 42, 7, 1, '#c9ced6'); }
-      rr(x + 18, wy, 2, 50, '#5a6070'); rr(x - 1, wy, 1, 50, '#5a6070'); rr(x, wy + 17, 38, 1, '#5a6070');
-    });
-    rr(-HW - 2, y - 6, HW * 2 + 4, 7, '#b8b0a4'); rr(-HW - 2, y - 6, HW * 2 + 4, 1, '#8a8478');
-    // the departures board
-    par(1, 150, (k, x) => {
-      x = Math.round(x); const by = Math.round(horizon(1)) - 54; rr(x, by, 36, 17, '#1c1e26'); rr(x + 1, by + 1, 34, 15, '#2a2d38'); ptxt('DEPARTURES', x + 18, by + 2, '#ffd23a', { outline: false });
-      for (let i = 0; i < 3; i++) { rr(x + 2, by + 8 + i * 3, 12, 2, '#3a3e4c'); rr(x + 16, by + 8 + i * 3, i === 1 ? 10 : 6 + (k + i) % 5, 2, i === 1 ? '#7fe39a' : '#c8ccd6'); }
-    });
+    // the sky over the runway; the terminal interior is drawn in world space (drawTerminal), so it ends where the hall ends
+    sky('#6ec8f4', '#cdeafc', 10); clouds(0.06, -34, '#ffffff', G.t, 2, 3, 100);
+    const hy = Math.round(horizon(0.3)) + 2;   // the far side of the airfield
+    par(0.3, 64, (k, x) => { x = Math.round(x); rr(x, hy - 9, 22, 9, '#d8dce4'); rr(x + 3, hy - 13, 6, 4, '#c0c6d0'); rr(x + 1, hy - 7, 20, 1, '#9aa2b0'); if (hsh(k) > 0.5) { rr(x + 28, hy - 4, 24, 3, '#f4f6fa'); rr(x + 46, hy - 7, 2, 4, '#e8423a'); } });
+    rr(-HW - 2, hy, HW * 2 + 4, HH * 2, '#9aa08e'); rr(-HW - 2, hy, HW * 2 + 4, 1, '#b8bca8');
   },
   plane(G) {
     // outside: the sky rushes past below the floor and through the open ramp
@@ -1982,6 +1995,21 @@ function drawSolid(G, s) {
       if (s.pad) { const cx = (G.M.goal.x0 + G.M.goal.x1) / 2; for (let x = cx - 2.6; x < cx + 2.6; x += 0.8) wb(x, top - 0.12, x + 0.5, top, '#ffd23a'); }
       break;
     }
+    case 'office': {   // a floor of the tower seen from inside: dark room, back wall with a window strip, blue cladding above the slab
+      if (s.slab) { wb(x0, s.bot, x1, top, '#2f6bd8'); wb(x0, s.bot, x1, s.bot + 0.12, '#1b3d86'); for (let x = x0 + 0.5; x < x1; x += 1.2) wb(x, s.bot + 0.12, x + 0.08, top, '#1b3d86'); break; }
+      const H = 4.3;
+      wb(x0, bot, x1, top, '#5a7a9e'); wb(x0 - 0.15, top - 0.5, x1 + 0.15, top, '#b8b4be'); wb(x0 - 0.15, top - 0.12, x1 + 0.15, top, '#dedae2'); outlineBox(x0 - 0.15, top - 0.5, x1 + 0.15, top);
+      for (let x = x0 + 0.3; x < x1 - 0.3; x += 1.6) for (let y = top - 1; y > bot; y -= 1.4) wb(x, y - 0.9, x + 1.2, y, (hsh(x * 3 + y) > 0.75 ? '#c8e8ff' : '#8ab4dc'));
+      // the room above the floor
+      wb(x0, top, x1, top + H, '#3a3642'); wb(x0, top + H - 0.9, x1, top + H, '#2a2733');
+      for (let x = x0 + 0.5; x < x1 - 0.8; x += 2.2) { wb(x, top + 1.6, x + 1.5, top + 3.1, '#4a5a7a'); wb(x, top + 1.6, x + 1.5, top + 1.9, '#6a86b0'); }   // back-wall windows (city glow)
+      wb(x0, top, x1, top + 0.35, '#4a4652'); for (let x = x0; x < x1; x += 1.1) wb(x, top, x + 0.06, top + 0.35, '#2a2733');   // skirting + carpet tiles
+      if (s.exit) { const ex = s.exit; wb(ex - 0.55, top + 3.2, ex + 0.55, top + 3.75, '#2a2733'); ptxt('EXIT', Math.round(AX(ex)), Math.round(AY(top + 3.72)), Math.floor(t * 2) % 2 ? '#ff5a5a' : '#ff9a9a', { outline: false }); }
+      wb(x0 + 1, top + 2.4, x0 + 1.5, top + 2.9, '#6a5a4a'); wb(x0 + 1.08, top + 2.48, x0 + 1.42, top + 2.82, '#8ab4dc');   // a picture frame
+      break;
+    }
+    case 'desk2': { wb(x0, s.bot + 0.55, x1, top, '#8a8a98'); wb(x0, top - 0.1, x1, top, '#b8b8c6'); wb(x0 + 0.15, s.bot, x0 + 0.3, top - 0.1, '#5a5a68'); wb(x1 - 0.3, s.bot, x1 - 0.15, top - 0.1, '#5a5a68'); wb(x0 + 0.5, top, x0 + 1.3, top + 0.6, '#3a3642'); wb(x0 + 0.58, top + 0.08, x0 + 1.22, top + 0.55, '#8ec8ee'); wb(x0 + 0.85, top + 0.6, x0 + 0.95, top + 0.8, '#5a5a68'); break; }   // desk with a monitor
+    case 'cooler': { wb(x0, s.bot, x1, top, '#e8e4dc'); wb(x0 + 0.15, top - 0.5, x1 - 0.15, top, '#8ec8ee'); wb(x0 + 0.3, top, x1 - 0.3, top + 0.55, '#9ad4f4'); outlineBox(x0, s.bot, x1, top); break; }
     case 'lift': {
       wb(x0 + 0.1, top, x0 + 0.16, top + 30, '#2a2834'); wb(x1 - 0.16, top, x1 - 0.1, top + 30, '#2a2834');
       wb(x0, top - 0.35, x1, top, '#e8b322'); for (let x = x0 + 0.3; x < x1; x += 0.6) wb(x, top - 0.35, x + 0.25, top - 0.2, '#2a2834');
@@ -1995,6 +2023,58 @@ function drawSolid(G, s) {
       for (let x = Math.ceil(x0); x < x1; x += tile ? 1 : 3) wb(x, top - 0.35, x + (tile ? 0.05 : 1.5), top - (tile ? 0 : 0.28), tile ? '#b8b0a2' : '#e8d33a');
       break;
     }
+    case 'escalator': {   // a moving stair: stepped treads under a handrail; the steps scroll up with time
+      const k = s.k || 0, h0 = top, n = Math.max(1, Math.round(w / 0.5)), step = w / n;
+      wb(x0, bot, x1, h0, '#9a96a0'); for (let i = 0; i <= n; i++) { const xa = x0 + i * step, ya = h0 + (xa - x0) * k; wb(xa, bot, Math.min(x1, xa + step), ya, '#9a96a0'); }
+      const off = ((G.rt * 1) % step); for (let i = -1; i < n; i++) { const xa = x0 + off + i * step; if (xa < x0 - 0.01 || xa + step > x1 + 0.01) continue; const ya = h0 + (xa - x0) * k; wb(xa, ya - 0.02, xa + step, ya + 0.1, '#c9c4d0'); wb(xa, ya + 0.08, xa + step * 0.5, ya + 0.1 + step * k, '#b8b4be'); }
+      // side panel + handrail
+      wb(x0, bot, x1, bot + 0.1, INK); pline(Math.round(AX(x0)), Math.round(AY(h0 + 1.0)), Math.round(AX(x1)), Math.round(AY(h0 + w * k + 1.0)), '#5a6070', 1); pline(Math.round(AX(x0)), Math.round(AY(h0 + 1.05)), Math.round(AX(x1)), Math.round(AY(h0 + w * k + 1.05)), INK, 1);
+      for (let i = 0; i <= 2; i++) { const xa = x0 + 0.4 + i * (w - 0.8) / 2, ya = h0 + (xa - x0) * k; wb(xa, ya, xa + 0.08, ya + 1.0, '#5a6070'); }
+      break;
+    }
+    case 'floor': { wb(x0, bot, x1, top, '#b8b0a4'); wb(x0, top - 0.3, x1, top, '#e8e2d6'); for (let x = Math.ceil(x0); x < x1; x += 1) wb(x, top - 0.3, x + 0.05, top, '#cfc8b8'); wb(x0, bot, x1, bot + 0.1, '#8a8478'); break; }
+    case 'counter': { plain('#8a5a34', '#f4f1ea', 0.2, s.bot); wb(x0 + 0.3, top, x0 + 0.9, top + 0.35, '#e8423a'); wb(x1 - 1.0, top, x1 - 0.3, top + 0.25, '#3a6ab0'); break; }
+    case 'roof': {   // white concrete bar on top of the terminal, with a parapet lip
+      wb(x0, top - 0.5, x1, top, '#f4f1ea'); wb(x0, top - 0.12, x1, top, '#ffffff'); wb(x0, top - 0.5, x1, top - 0.42, '#c9c2b6'); for (let x = Math.ceil(x0 / 2) * 2; x < x1; x += 2) wb(x, top - 0.42, x + 0.06, top - 0.12, '#dcd6cc');
+      break;
+    }
+    case 'acbox': { plain('#8a8692', '#b8b4be', 0.15, s.bot); for (let y = s.bot + 0.3; y < top - 0.2; y += 0.3) wb(x0 + 0.2, y, x1 - 0.2, y + 0.08, '#5a5862'); break; }
+    case 'vent': { plain('#9a96a0', '#c9c4d0', 0.12, s.bot); wb(x0 + 0.3, s.bot + 0.2, x1 - 0.3, top - 0.25, '#5a5862'); for (let x = x0 + 0.4; x < x1 - 0.3; x += 0.35) wb(x, s.bot + 0.25, x + 0.12, top - 0.3, '#9a96a0'); break; }
+    case 'billboard': {   // a sign on two stilts; its top is a ledge you can hop onto
+      const bob = s.sign === 'BOB', col = bob ? '#e8423a' : '#3fae55', base = (G.floorAt((x0 + x1) / 2) || { top: 0 }).top;
+      wb(x0 + 0.4, base, x0 + 0.6, s.bot, '#5a5862'); wb(x1 - 0.6, base, x1 - 0.4, s.bot, '#5a5862');
+      wb(x0, s.bot - 1.9, x1, top, '#f4f1ea'); wb(x0, s.bot - 1.9, x1, s.bot - 1.75, col); wb(x0, top - 0.18, x1, top, '#c9c2b6'); outlineBox(x0, s.bot - 1.9, x1, top);
+      ptxt(bob ? "BOB'S DOGS" : "PETE'S PANINI", Math.round(AX((x0 + x1) / 2)), Math.round(AY(s.bot - 0.45)), col, { outline: false });
+      if (bob) { wb(x0 + 1.2, s.bot - 1.4, x0 + 2.6, s.bot - 1.0, '#e8b23a'); wb(x0 + 1.35, s.bot - 1.3, x0 + 2.45, s.bot - 1.1, '#c0392b'); } else { wb(x0 + 1.2, s.bot - 1.5, x0 + 2.6, s.bot - 1.2, '#e8b23a'); wb(x0 + 1.2, s.bot - 1.2, x0 + 2.6, s.bot - 0.95, '#c9a060'); }
+      break;
+    }
+    case 'wall': { plain('#eceae4', '#ffffff', 0.15, s.bot); wb(x0, s.bot, x1, s.bot + 0.3, '#b8b0a4'); break; }
+    case 'gate': {   // Gate C4's block: white, a yellow sign on a pole, cloud cushions on top
+      plain('#f4f1ea', '#ffffff', 0.2, s.bot);
+      wb(x0 + 1.0, top, x0 + 1.15, top + 2.4, '#5a5862'); wb(x0 + 0.2, top + 1.6, x0 + 2.6, top + 2.4, '#ffd23a'); outlineBox(x0 + 0.2, top + 1.6, x0 + 2.6, top + 2.4); ptxt('C4', Math.round(AX(x0 + 1.4)), Math.round(AY(top + 2.3)), INK, { outline: false });
+      for (let i = 0; i < 3; i++) { const cx = x0 + 3.4 + i * 1.6; wb(cx, top, cx + 1.2, top + 0.4, '#ffffff'); wb(cx + 0.2, top + 0.4, cx + 1.0, top + 0.6, '#ffffff'); }
+      break;
+    }
+    case 'busfloor': {   // the whole bus body, seen from inside: far wall with windows on both decks, poles, the stairwell
+      const R = '#d8382e', L = x0 - 0.3, Rr = x1 + 0.3;
+      wb(L, -0.4, Rr, 8.2, R); wb(L, -0.4, Rr, -0.2, '#8a1f1a'); outlineBox(L, -0.4, Rr, 8.2);
+      wb(x0, 0, x1, 8.0, '#efe9df'); wb(x0, 0, x1, 0.25, '#9a96a0'); wb(x0, 3.9, x1, 4.3, '#b8b0a4'); wb(x0, 4.3, x1, 4.55, '#9a96a0');
+      for (const [ya, yb] of [[1.3, 3.1], [5.6, 7.4]]) for (let x = x0 + 0.8; x < x1 - 1.5; x += 2.6) { if (x > 43.2 && x < 47.6 && ya < 4) continue; wb(x, ya, x + 1.8, yb, '#8ec8ee'); wb(x, ya, x + 1.8, ya + 0.5, '#a8d8f4'); wb(x - 0.08, ya - 0.08, x + 1.88, ya, '#5a6070'); wb(x - 0.08, yb, x + 1.88, yb + 0.08, '#5a6070'); }
+      for (const x of [34.8, 38.8, 42.8]) { wb(x, 0.25, x + 0.1, 3.9, '#ffd23a'); wb(x, 4.55, x + 0.1, 8.0, '#ffd23a'); }   // grab poles
+      // the stairwell: steps climbing to the gap, with a rail
+      for (let i = 0; i < 7; i++) { const sx = 43.6 + i * 0.5, sy = 0.25 + i * 0.58; wb(sx, sy, sx + 0.55, sy + 0.14, '#5a5862'); wb(sx, 0.25, sx + 0.5, sy, '#c9c2b6'); }
+      pline(Math.round(AX(43.4)), Math.round(AY(1.4)), Math.round(AX(47.0)), Math.round(AY(5.4)), '#5a5862', 1);
+      // "BUS" cut-away hint: a thin dark rim where the near wall was removed, so the interior reads as inside
+      wb(x0 - 0.3, -0.2, x1 + 0.3, 0, '#8a1f1a');
+      ptxt('CITY LINE', Math.round(AX((x0 + x1) / 2)), Math.round(AY(8.0)) - 7, '#fff6e0', { outline: false });   // written on the outside strip under the roof
+      for (const wx of [x0 + 3, x1 - 3]) { pcircle(Math.round(AX(wx)), Math.round(AY(-0.35)), 5, INK); pcircle(Math.round(AX(wx)), Math.round(AY(-0.35)), 2, '#8a8a96'); }
+      break;
+    }
+    case 'buswall': { wb(x0, s.bot, x1, top, '#d8382e'); wb(x0 + 0.15, s.bot + 1.2, x1, top - 1.0, '#8ec8ee'); break; }
+    case 'busdeck': { wb(x0, s.bot, x1, top, '#b8b0a4'); wb(x0, top - 0.12, x1, top, '#d9d3c4'); wb(x0, s.bot, x1, s.bot + 0.1, '#8a8478'); break; }
+    case 'busstair': { wb(x0, top - 0.08, x1, top, '#ffd23a'); for (let x = x0 + 0.2; x < x1; x += 0.6) wb(x, top - 0.08, x + 0.3, top, INK); break; }   // the lip of the gap, striped
+    case 'busroof': { wb(x0, s.bot, x1, top, '#d8382e'); wb(x0, s.bot, x1, s.bot + 0.06, '#8a1f1a'); wb(x0 + 0.5, top, x1 - 0.5, top + 0.2, '#b02a22'); break; }
+    case 'busseat': { wb(x0, s.bot + 0.1, x1, top, '#3a86d8'); wb(x1 - 0.4, top, x1, top + 0.85, '#3a86d8'); wb(x1 - 0.4, top + 0.85, x1, top + 1.0, '#fff6e0'); wb(x0, top - 0.1, x1 - 0.4, top, '#2a66b0'); wb(x0 + 0.1, s.bot, x0 + 0.3, s.bot + 0.1, '#5a5862'); wb(x1 - 0.3, s.bot, x1 - 0.1, s.bot + 0.1, '#5a5862'); break; }
     case 'desk': { plain('#3a6ab0', '#f4f1ea', 0.2, s.bot); ptxt('CHECK IN', Math.round(AX((x0 + x1) / 2)), Math.round(AY(top - 0.35)), '#f4f1ea', { outline: false }); break; }
     case 'belt': {
       wb(x0, s.bot, x1, top, '#4a4854'); wb(x0, top - 0.15, x1, top, '#22212a');
@@ -2034,6 +2114,31 @@ function drawSolid(G, s) {
     }
     default: plain('#7a7680', '#9a96a0');
   }
+}
+
+// the inside of the terminal: a glass wall along the hall, stone-tile wall behind the food court, and the building's outside under the roof
+function drawTerminal(G) {
+  const M = G.M, t = G.t;
+  // hall: glass wall with mullions, runway behind, floor skirting
+  wb(-9, 0, 42, 6.4, '#8ec8ee'); wb(-9, 0, 42, 2.2, '#a8d8f4'); wb(-9, 0, 42, 0.5, '#7a8a7a');
+  for (let x = -6; x < 42; x += 4.4) { wb(x, 0, x + 0.22, 6.4, '#5a6070'); if (hsh(x) > 0.5) { wb(x + 0.8, 0.6, x + 3.0, 0.95, '#f4f6fa'); wb(x + 2.5, 0.95, x + 2.75, 1.4, '#e8423a'); } }
+  wb(-9, 1.9, 42, 2.0, '#5a6070'); wb(-9, 4.2, 42, 4.3, '#5a6070');
+  { const x = 36, by = 4.9; wb(x, by - 1.9, x + 4, by, '#1c1e26'); wb(x + 0.1, by - 1.8, x + 3.9, by - 0.1, '#2a2d38'); ptxt('DEPARTURES', Math.round(AX(x + 2)), Math.round(AY(by - 0.1)), '#ffd23a', { outline: false });
+    for (let i = 0; i < 3; i++) { wb(x + 0.2, by - 1.0 - i * 0.3, x + 1.5, by - 0.8 - i * 0.3, '#3a3e4c'); wb(x + 1.8, by - 1.0 - i * 0.3, x + 1.8 + (i === 1 ? 1.2 : 0.7 + (i % 2) * 0.4), by - 0.8 - i * 0.3, i === 1 ? '#7fe39a' : '#c8ccd6'); } }
+  // food court: a stone-tile wall with two shop fronts (ours: BOB'S and PANINI PETE'S), between the two escalators
+  wb(42, 0, 72, 9.2, '#d9d3c4'); for (let y = 0; y < 9.2; y += 0.8) for (let x = 42 + ((y / 0.8) % 2) * 0.6; x < 72; x += 1.2) wb(x, y, x + 1.1, y + 0.7, '#cfc8b8');
+  const shop = (x, w, col, name, food) => { wb(x, 3, x + w, 6.2, '#efe9df'); wb(x, 5.6, x + w, 6.2, col); wb(x, 5.5, x + w, 5.6, shade(col, -0.3)); ptxt(name, Math.round(AX(x + w / 2)), Math.round(AY(6.1)), '#fff6e0', { outline: false });
+    wb(x + 0.3, 3.3, x + w - 0.3, 5.3, '#8ec8ee'); wb(x + 0.3, 3.3, x + w - 0.3, 3.4, '#5a6070'); wb(x + w / 2 - 0.05, 3.3, x + w / 2 + 0.05, 5.3, '#5a6070'); food(x, w); };
+  shop(50, 4.4, '#e8423a', "BOB'S", (x, w) => { wb(x + 0.8, 4.0, x + 1.9, 4.5, '#e8b23a'); wb(x + 0.9, 4.2, x + 1.8, 4.4, '#c0392b'); wb(x + 2.5, 4.0, x + 3.6, 4.5, '#e8b23a'); wb(x + 2.6, 4.2, x + 3.5, 4.4, '#c0392b'); });
+  shop(55.6, 4.0, '#3fae55', 'PETES', (x, w) => { wb(x + 0.6, 4.0, x + 1.7, 4.3, '#e8b23a'); wb(x + 0.6, 4.3, x + 1.7, 4.6, '#c9a060'); wb(x + 2.3, 4.0, x + 3.4, 4.3, '#e8b23a'); wb(x + 2.3, 4.3, x + 3.4, 4.6, '#c9a060'); });
+  wb(42, 6.2, 72, 6.45, '#b8b0a4');   // a beam over the shop fronts
+  // a hanging plane model that sways over the top landing (decor in the reference too)
+  { const sx = 69 + Math.sin(t * 0.8) * 0.3; wb(sx, 7.8, sx + 0.05, 9.2, '#9a948a'); wb(sx - 0.9, 7.3, sx + 0.9, 7.75, '#f4f6fa'); wb(sx - 0.4, 7.75, sx + 0.3, 8.0, '#f4f6fa'); wb(sx + 0.6, 7.75, sx + 0.9, 8.2, '#e8423a'); }
+  // outside, under the roof: the terminal's white face with a dark window strip, then the gate block's glass
+  wb(72, 0, 104, 6, '#eceae4'); wb(72, 2.2, 104, 4.4, '#2a2d38'); for (let x = 73; x < 104; x += 2.5) wb(x, 2.4, x + 1.9, 4.2, '#8ec8ee'); wb(72, 0, 104, 0.4, '#b8b0a4');
+  wb(106.5, 0, 114, 5.2, '#f4f1ea'); for (let x = 107.2; x < 113.5; x += 1.6) wb(x, 0.6, x + 1.2, 4.4, '#8ec8ee');
+  // luggage piled inside the gate block
+  wb(108, 0, 109.2, 0.9, '#8a5a34'); wb(109.3, 0, 110.1, 1.3, '#3a6ab0'); wb(110.2, 0, 111.4, 0.7, '#c0392b'); wb(108.4, 0.9, 109.6, 1.6, '#c98e4a');
 }
 // what's under the floor of each place
 function drawUnder(G) {
@@ -2262,6 +2367,7 @@ function drawView(G, cam, vp, ppm) {
     for (let x = -6; x < 60; x += 2.2) if (x < 22 || x > 40) { wb(x, -0.5, x + 1.3, 1.1, '#3a86d8'); wb(x, 1.1, x + 1.3, 1.6, '#2a66b0'); wb(x + 0.95, -0.5, x + 1.3, 2.1, '#3a86d8'); wb(x + 0.95, 2.1, x + 1.3, 2.3, '#fff6e0'); }   // seat rows behind the aisle
     wb(24, -3, 38, -0.5, 'rgba(0,0,0,0)');
   }
+  if (G.M.theme === 'airport') drawTerminal(G);
   drawRide(G, false);
   for (const s of G.S) if (!s.ceil && s.style !== 'tile' && s.style !== 'tarmac') { if (AX(s.x1) > -HW - 4 && AX(s.x0) < HW + 4) drawSolid(G, s); }
   for (const s of G.S) if (s.style === 'tile' || s.style === 'tarmac') drawSolid(G, s);
