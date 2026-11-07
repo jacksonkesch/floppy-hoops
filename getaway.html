@@ -755,6 +755,11 @@ function loadSettings() {
   out.itemRate = [0, 1, 2].includes(+out.itemRate) ? +out.itemRate : 1;
   return out;
 }
+// time trial: best time and a ghost of that run, per map
+const TT_KEY = 'floppy-getaway-tt', GHOST_HZ = 30;
+function loadTT() { try { return JSON.parse(localStorage.getItem(TT_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function saveTT(o) { try { localStorage.setItem(TT_KEY, JSON.stringify(o)); } catch (e) { /* storage unavailable */ } }
+const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return (m ? m + ':' + (s < 10 ? '0' : '') : '') + s.toFixed(3); };
 function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
 const SET = loadSettings();
 const VOL = 0.8;
@@ -1146,8 +1151,8 @@ class Game {
   }
   newMatch(mode, demo = false) {
     this.mode = mode; this.demo = demo; this.paused = false; this.champ = null; this.round = 0; this.overT = 0;
-    const humans = mode === 'cpu' ? 1 : mode === '2p' ? 2 : 0, used = new Set();
-    this.P = CREW.map((c, i) => {
+    const humans = mode === 'cpu' || mode === 'tt' ? 1 : mode === '2p' ? 2 : 0, used = new Set();
+    this.P = (mode === 'tt' ? CREW.slice(0, 1) : CREW).map((c, i) => {
       const human = i < humans;
       const look = !human && SET.memes === 'on' && Math.random() < 0.45 ? memeLook(used) : makeLook(used);
       const p = new Dude(i, look, human);
@@ -1155,6 +1160,11 @@ class Game {
       return p;
     });
     const pool = SET.pools.maps.slice();
+    if (mode === 'tt') {   // one map at a time, in order; NEXT steps through them
+      const ids = MAPS.map(m => m.id).filter(id => pool.includes(id)), list = ids.length ? ids : MAPS.map(m => m.id);
+      this.ttIdx = ((this.ttIdx || 0) % list.length + list.length) % list.length; this.order = [list[this.ttIdx]]; this.ttList = list;
+      this.newRound(); return;
+    }
     this.order = []; while (pool.length) this.order.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     this.newRound();
   }
@@ -1170,7 +1180,7 @@ class Game {
     this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
     // item spots: one every ~12 m on solid ground
     this.spots = [];
-    if (SET.itemRate > 0) {
+    if (SET.itemRate > 0 && this.mode !== 'tt') {
       const gap = SET.itemRate === 2 ? 8 : 12;
       for (let x = M.cps[0] + 7; x < M.goal.x0 - 3; x += gap) {
         const s = this.floorAt(x); if (!s) continue;
@@ -1183,8 +1193,13 @@ class Game {
       p.reset(x, s ? s.top : 0); p.ground = s; p.cp = M.cps[0]; p.facing = 1; p.a = rand(-0.05, 0.05);
       if (p.bot) { p.bot.plan = null; p.bot.wait = rand(0.1, 0.6); }
     });
-    this.cams = this.mode === '2p' && !this.demo ? [{ p: this.P[0] }, { p: this.P[1] }] : [{ p: this.mode === 'cpu' && !this.demo ? this.P[0] : null }];
+    this.cams = this.mode === '2p' && !this.demo ? [{ p: this.P[0] }, { p: this.P[1] }] : [{ p: (this.mode === 'cpu' || this.mode === 'tt') && !this.demo ? this.P[0] : null }];
     for (const c of this.cams) this.aimCam(c, true);
+    this.ttT = 0; this.ttRec = []; this.ttNew = false; this.ttPrev = null; this.ghost = null;
+    if (this.mode === 'tt') {
+      const rec = loadTT()[M.id]; this.ttBest = rec ? rec.t : null;
+      if (rec && rec.g && rec.g.length >= 8) { const p0 = this.P[0], gd = new Dude(0, p0.look, false); gd.i = 9; gd.reset(p0.x, p0.y); this.ghost = { f: rec.g, d: gd }; }
+    }
   }
   // the highest still floor under x (where you stand / respawn)
   floorAt(x) {
@@ -1236,6 +1251,15 @@ class Game {
       if (this.stateT >= READY_T) { this.state = 'run'; this.stateT = 0; if (!this.demo) this.sfx.whistle(); }
     }
     this.rt += sdt;
+    if (this.mode === 'tt' && this.state === 'run') {   // the clock, the ghost of your best, and a recording of this run
+      this.ttT += sdt; const p = this.P[0], n = Math.floor(this.ttT * GHOST_HZ);
+      while (this.ttRec.length / 4 <= n) this.ttRec.push(Math.round(p.x * 50), Math.round(p.y * 50), Math.round(p.a * 100), (p.facing > 0 ? 1 : 0) + (p.grounded ? 2 : 0) + (p.alive ? 0 : 4));
+      if (this.ghost) {
+        const f = this.ghost.f, d = this.ghost.d, last = f.length / 4 - 1, u = Math.min(this.ttT * GHOST_HZ, last), i = Math.floor(u), j = Math.min(i + 1, last), k = u - i, q = (a, o) => f[a * 4 + o];
+        d.px = d.x; d.x = (q(i, 0) + (q(j, 0) - q(i, 0)) * k) / 50; d.y = (q(i, 1) + (q(j, 1) - q(i, 1)) * k) / 50; d.a = (q(i, 2) + (q(j, 2) - q(i, 2)) * k) / 100;
+        const fl = q(i, 3); d.facing = fl & 1 ? 1 : -1; d.grounded = !!(fl & 2); d.alive = !(fl & 4); d.done = u >= last;
+      }
+    }
     this.moveSolids(sdt);
     if (this.M.pack) for (const p of this.P) if (p.alive && !p.pack && !p.gone && p.x >= this.M.pack.x0 && p.y < 5) {   // strap on a chute
       p.pack = true; this.sfx.grab(); if (p.human) this.popup('CHUTE ON!', p.x, p.y + BH + 0.8, '#7fd7ff', 0.8, 0.8);
@@ -1271,9 +1295,9 @@ class Game {
     }
     if (this.state === 'away') {
       this.rideT += sdt;
-      const champ = this.champion();
+      const champ = this.mode === 'tt' ? this.P[0] : this.champion();
       if (this.stateT >= AWAY_T + (champ ? 0.8 : 0)) {
-        if (champ) { this.state = 'over'; this.stateT = 0; this.champ = champ; this.sfx.fanfare(); this.confetti(); }
+        if (champ) { this.state = 'over'; this.stateT = 0; this.champ = champ; if (this.mode !== 'tt' || this.ttNew) { this.sfx.fanfare(); this.confetti(); } else this.sfx.jingle(1); }
         else { this.round++; this.newRound(); }
       }
     }
@@ -1294,6 +1318,10 @@ class Game {
   }
   // someone climbed in: they score now, and the ride waits DEPART_T for anyone else
   getaway(p) {
+    if (this.mode === 'tt' && !this.demo) {   // a new record keeps this run as the ghost
+      const all = loadTT(), rec = all[this.M.id], t = this.ttT; this.ttPrev = rec ? rec.t : null;
+      if (!rec || t < rec.t) { all[this.M.id] = { t, g: this.ttRec.slice(0, 4 * GHOST_HZ * 300) }; saveTT(all); this.ttNew = true; this.ttBest = t; }
+    }
     p.gone = true; p.score++; p.aways = (p.aways || 0) + 1; p.trig = false; p.item = null;
     if (this.M.ride === 'chute') { p.gone = false; p.chute = 1; }
     if (!this.boarded.length) { this.departT = DEPART_T; this.winner = p; this.sfx.creak(); }
@@ -1305,7 +1333,7 @@ class Game {
   leave() {
     this.winners = this.boarded.slice(); this.state = 'away'; this.stateT = 0; this.rideT = 0;
     for (const q of this.P) { q.trig = false; if (q.bot) q.bot.plan = null; }
-    if (this.champion()) this.slowT = SLOWMO_T;
+    if (this.mode === 'tt' || this.champion()) this.slowT = SLOWMO_T;
     this.sfx.boom && this.sfx.thud && this.sfx.thud();
   }
   // the match winner: the one runner on top with enough getaways (a tie at the top plays on)
@@ -2139,6 +2167,7 @@ function drawView(G, cam, vp, zoom) {
   drawProps(G);
   drawGoalMark(G);
   drawSpots(G);
+  if (G.ghost && !G.ghost.d.done && G.state !== 'ready') { ctx.globalAlpha = 0.35; drawDude(G, G.ghost.d); ctx.globalAlpha = 1; }
   const order = G.P.slice().sort((a, b) => (a.human ? 1 : 0) - (b.human ? 1 : 0));
   for (const p of order) drawDude(G, p);
   drawRide(G, true);
@@ -2247,7 +2276,10 @@ function drawBanner(G) {
 function drawHUD(G) {
   const humans = G.P.filter(p => p.human), split = G.cams.length > 1;
   drawBanner(G);
-  drawScores(G, 3, 3, G.P);
+  if (G.mode === 'tt') {   // the clock
+    panel(124, 3, 72, 22); txt(fmtT(G.ttT || 0), 160, 11, 9, G.state === 'run' ? CREAM : '#ffd23a');
+    txt(G.ttBest != null ? 'BEST ' + fmtT(G.ttBest) : 'NO BEST YET', 160, 20.5, 4, '#8f86a0');
+  } else drawScores(G, 3, 3, G.P);
   drawProgress(G, 70, 172, 180);
   if (!split) {
     if (humans[0]) drawMine(G, humans[0], 3, 148);
@@ -2263,7 +2295,7 @@ function drawHUD(G) {
 }
 
 const MENU_ITEMS = [
-  { id: 'cpu', label: '1 PLAYER' }, { id: '2p', label: '2 PLAYERS' }, { id: 'cvc', label: 'CPU VS CPU' },
+  { id: 'cpu', label: '1 PLAYER' }, { id: '2p', label: '2 PLAYERS' }, { id: 'cvc', label: 'CPU VS CPU' }, { id: 'tt', label: 'TIME TRIAL' },
   { id: 'customize', label: 'CUSTOMIZE' }, { id: 'how', label: 'HOW TO PLAY' }, { id: 'switch', label: 'ALL GAMES' },
 ];
 const menuRect = i => ({ x: 14, y: 62 + i * 13 - 6, w: 102, h: 12 });
@@ -2302,11 +2334,22 @@ function drawHelp() {
   panel(28, 8, 264, 164, 0.92); txt('HOW TO PLAY', 160, 18, 9, '#ffd23a');
   HELP.forEach(([s, c], i) => { if (s) txt(s, 160, 31 + i * 8.6, 5, c); });
 }
-const OVER_BTN = [{ id: 'again', label: 'REMATCH', x: 92 }, { id: 'menu', label: 'MENU', x: 172 }];
+const OVER_BTN_VS = [{ id: 'again', label: 'REMATCH', x: 92 }, { id: 'menu', label: 'MENU', x: 172 }];
+const OVER_BTN_TT = [{ id: 'again', label: 'RETRY', x: 74, w: 52 }, { id: 'next', label: 'NEXT MAP', x: 134, w: 52 }, { id: 'menu', label: 'MENU', x: 194, w: 52 }];   // (three across, inside the 188-wide panel)
+const overBtns = () => G.mode === 'tt' ? OVER_BTN_TT : OVER_BTN_VS;
+function drawOverTT(G) {
+  panel(66, 22, 188, 136, 0.92);
+  txt('TIME TRIAL', 160, 34, 7, '#8f86a0'); txt(G.M.name, 160, 46, fitSize(G.M.name, 9, 176), '#7fe39a');
+  txt(fmtT(G.ttT), 160, 70, 18, G.ttNew ? '#ffd23a' : CREAM);
+  if (G.ttNew) { txt(Math.floor(G.t * 4) % 2 ? 'NEW RECORD!' : 'NEW RECORD! ', 160, 90, 9, '#ffd23a'); if (G.ttPrev != null) txt('OLD BEST ' + fmtT(G.ttPrev) + '  (-' + (G.ttPrev - G.ttT).toFixed(3) + ')', 160, 103, 5, '#c9bfd6'); }
+  else { txt('BEST ' + fmtT(G.ttBest), 160, 90, 8, '#c9bfd6'); txt('+' + (G.ttT - G.ttBest).toFixed(3) + ' OFF YOUR BEST', 160, 103, 5, '#ff8a7a'); }
+  txt('RACE YOUR GHOST: IT RUNS YOUR BEST LINE', 160, 117, 4, '#8f86a0');
+}
 function drawOver(G) {
   const c = G.champ; if (!c) return;
-  const k = clamp(G.overT * 3, 0, 1);
+  const k = clamp(G.overT * 3, 0, 1), OVER_BTN = overBtns();
   ctx.fillStyle = `rgba(10,8,16,${0.55 * k})`; ctx.fillRect(0, 0, ART_W, ART_H);
+  if (G.mode === 'tt') drawOverTT(G); else {
   panel(66, 22, 188, 136, 0.92);
   const name = crewName(G, c), line = c.human ? (G.mode === '2p' ? `${name} WINS!` : 'YOU WIN!') : `${name} WINS`;
   headIcon(c, 160, 40, 2);
@@ -2318,10 +2361,11 @@ function drawOver(G) {
     if (p === c) rr(72, y - 5, 176, 10, 'rgba(255,210,58,0.13)');
     headIcon(p, 82, y, 0.9); txt(crewName(G, p), 92, y + 0.5, fitSize(crewName(G, p), 6, 76), p.C.col, { align: 'left' });
     txt(String(p.score), 196, y + 0.5, 7, CREAM); txt(String(p.kos || 0), 232, y + 0.5, 7, CREAM); });
+  }
   OVER_BTN.forEach((b, i) => {
     const sel = G.overSel === i, ok = G.overT > OVER_HOLD;
-    rr(b.x - 1, 131, 58, 22, INK); rr(b.x, 132, 56, 20, sel && ok ? '#2f6bd8' : '#2a2534');
-    txt(b.label, b.x + 28, 142.5, 7, ok ? CREAM : '#6a6474');
+    const w = b.w || 56; rr(b.x - 1, 131, w + 2, 22, INK); rr(b.x, 132, w, 20, sel && ok ? '#2f6bd8' : '#2a2534');
+    txt(b.label, b.x + w / 2, 142.5, 7, ok ? CREAM : '#6a6474');
   });
 }
 function drawPause() {
@@ -2361,11 +2405,11 @@ function menuPick(i) {
   else if (m.id === 'switch') location.href = 'index.html';
   else startMode(m.id);
 }
-function overPick(i) { if (G.overT <= OVER_HOLD) return; G.sfx.click(); if (OVER_BTN[i].id === 'again') startMode(G.mode); else goTitle(); }
+function overPick(i) { if (G.overT <= OVER_HOLD) return; G.sfx.click(); const id = overBtns()[i].id; if (id === 'again') startMode(G.mode); else if (id === 'next') { G.ttIdx = (G.ttIdx || 0) + 1; startMode('tt'); } else goTitle(); }
 function keyFor(code) {
   const k = { KeyW: [0, 'L'], KeyE: [0, 'R'], KeyR: [0, 'F'], KeyI: [1, 'L'], KeyO: [1, 'R'], KeyP: [1, 'F'] }[code];
   if (k) return k;
-  if (G.mode === 'cpu') return { ArrowLeft: [0, 'L'], ArrowRight: [0, 'R'], ArrowUp: [0, 'F'], Space: [0, 'F'] }[code] || null;
+  if (G.mode === 'cpu' || G.mode === 'tt') return { ArrowLeft: [0, 'L'], ArrowRight: [0, 'R'], ArrowUp: [0, 'F'], Space: [0, 'F'] }[code] || null;
   return null;
 }
 const held = new Map();
@@ -2396,7 +2440,7 @@ addEventListener('keydown', e => {
   if (G.paused) { if (e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') togglePause(); else if (e.code === 'KeyQ') goTitle(); return; }
   if (G.state === 'over') {
     if (G.overT <= OVER_HOLD) return;
-    if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'Tab'].includes(e.code)) { e.preventDefault(); G.overSel = 1 - G.overSel; G.sfx.tick(0.6); }
+    if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'Tab'].includes(e.code)) { e.preventDefault(); const n = overBtns().length; G.overSel = (G.overSel + (['ArrowLeft', 'KeyA'].includes(e.code) ? n - 1 : 1)) % n; G.sfx.tick(0.6); }
     else if (e.code === 'Enter' || e.code === 'Space') overPick(G.overSel);
     else if (e.code === 'Escape') goTitle();
     return;
@@ -2420,7 +2464,7 @@ cv.addEventListener('pointerdown', e => {
   if (G.screen === 'how') { G.screen = 'title'; return; }
   if (G.screen === 'title') { MENU_ITEMS.forEach((m, i) => { if (hitRect(q, menuRect(i))) { G.sel = i; menuPick(i); } }); return; }
   if (G.paused) { togglePause(); return; }
-  if (G.state === 'over') { OVER_BTN.forEach((b, i) => { if (hitRect(q, { x: b.x, y: 132, w: 56, h: 20 })) { G.overSel = i; overPick(i); } }); return; }
+  if (G.state === 'over') { overBtns().forEach((b, i) => { if (hitRect(q, { x: b.x, y: 132, w: b.w || 56, h: 20 })) { G.overSel = i; overPick(i); } }); return; }
   if (G.touch && q.x > 296 && q.y < 20) { togglePause(); return; }
   const [side, act] = zoneFor(q.x); hold(side, act, 'ptr' + e.pointerId, true);
   try { cv.setPointerCapture(e.pointerId); } catch (err) { /* already released */ }
@@ -2472,7 +2516,7 @@ function loop(now) {
 goTitle();
 if (/[?&]debug\b/.test(location.search)) {
   window.floppy = G; window.floppySET = SET;
-  window.floppyFn = { startMode, goTitle, hold, keyFor, openMenu, closeMenu, render: () => render(G) };
+  window.floppyFn = { startMode, goTitle, hold, keyFor, openMenu, closeMenu, overPick, overBtns, render: () => render(G) };
   window.floppyStep = n => { for (let i = 0; i < n; i++) { if (G.state === 'over') G.overT += STEP; G.step(STEP); } render(G); };
 }
 requestAnimationFrame(loop);
