@@ -638,6 +638,7 @@ const BH = BODY_H;
 const HOP_V = 4.3 * BH, GRAV = 6 * BH, HOP_MAX = 52 * D2R, HOP_RATE = 140 * D2R, HOP_DEAD = 0.055, CROUCH_T = 0.085;
 const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.35;
 // standing: a loose spring keeps you upright (it wobbles); in the air you pitch toward the hop; landing tips you over
+const PACK_G = 1.6, PACK_V = 0.75;   // a parachute pack is heavy: more gravity, weaker hops
 const ZIP_V = 4 * BH, ZIP_GRAB = 0.55;
 const FOE_RANGE = 15, FOE_DMG = 34, FOE_AIM = 0.55, FOE_STUN = 4;   // the moon worker: 3 hits KO, a half-second red warning line, knocked out for 4 s
 const CAP_BOOM = { dmg: 100, kb: 14, splash: 3.4 };   // zipline ride speed (4 body heights a second) and how close your hands must get
@@ -707,7 +708,7 @@ const MAPS = [
       B(48, 49.5, 0.8, 'step', { bot: 0 }), B(49.5, 51, 1.6, 'step', { bot: 0 }), B(51, 52.5, 2.4, 'step', { bot: 0 }), B(52.5, 66, 3.2, 'mezz', { bot: 2.8 }),
       B(74, 102, 0, 'tarmac'), B(84, 85.2, 0.9, 'airstep', { bot: 0 }), B(85.2, 86.4, 1.8, 'airstep', { bot: 0 }), B(86.4, 87.6, 2.7, 'airstep', { bot: 0 })] },
   { id: 'plane', name: 'CLOUD FREIGHTER', theme: 'plane', ride: 'chute', killY: -4, x0: -7, x1: 70, cps: [0, 16, 40, 54],
-    goal: { x0: 63.5, x1: 74, y0: -4, y1: 3.5 }, rideX: 63,
+    goal: { x0: 63.5, x1: 74, y0: -4, y1: 3.5 }, rideX: 63, pack: { x0: 53, x1: 55 },   // (the chute rack: past it you wear one)
     solids: [B(-9, 24, 0, 'deck'), B(-9, 63, 9, 'ceil', { bot: 5.2, ceil: 1, plane: 1 }), B(6, 8.5, 1.4, 'cargo', { bot: 0 }), B(13, 15, 1.0, 'cargo', { bot: 0 }), B(15, 16.6, 2.0, 'cargo', { bot: 0 }),
       B(29, 32.4, 0.15, 'cart', { bot: -0.45, mv: t => ({ dx: Math.sin(t * 0.75) * 5, dy: 0 }) }),
       B(38, 60, 0, 'deck'), B(43, 46, 1.6, 'cargo', { bot: 0 }), B(50, 51.6, 1.0, 'cargo', { bot: 0 }),
@@ -809,13 +810,15 @@ class Dude {
     Object.assign(this, { x, y, px: x, py: y, vx: 0, vy: 0, a: 0, av: 0, airA: 0, grounded: true, ground: null,
       holdDir: 0, holdT: 0, crouch: 0, launchH: 0, launchDir: 1, down: 0, getup: 0, side: 1,
       alive: true, deadT: 0, how: '', imm: 0, hp: 100, item: null, ammo: 0, cd: 0, trig: false, shield: 0,
-      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, zip: null, zipV: 0, zipCool: 0 });
+      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0 });
   }
   get canAct() { return this.alive && !this.gone && this.down <= 0 && this.getup <= 0 && !this.zip; }
   head() { return { x: this.x + Math.sin(this.a) * BH * 0.92, y: this.y + Math.cos(this.a) * BH * 0.92 }; }
   mid() { return { x: this.x + Math.sin(this.a) * BH * 0.5, y: this.y + Math.cos(this.a) * BH * 0.5 }; }
   shoulder() { const k = SHOULDER_H; return { x: this.x + Math.sin(this.a) * k, y: this.y + Math.cos(this.a) * k }; }
   // you aim straight ahead, tilted with half your lean: lean back to aim up, forward to aim down
+  gk(G) { return (G.M.g || 1) * (this.pack ? PACK_G : 1); }
+  hopV() { return HOP_V * (this.pack ? PACK_V : 1); }
   aimAng() { return (this.facing > 0 ? 0 : Math.PI) - this.a * 0.5; }
   hand() { const s = this.shoulder(), g = this.aimAng(); return { x: s.x + Math.cos(g) * BODY.armLen, y: s.y + Math.sin(g) * BODY.armLen }; }
 
@@ -830,8 +833,9 @@ class Dude {
   }
   launch(G) {
     const th = hopAngle(this.launchH), phi = this.launchDir * th + LEAN_CARRY * this.a, s = this.ground;
-    this.vx = HOP_V * Math.sin(phi) + (s && s.vx ? s.vx : 0) + (s && s.belt ? s.belt : 0);
-    this.vy = HOP_V * Math.cos(phi) + (s && s.vy > 0 ? s.vy : 0);
+    const V = this.hopV();
+    this.vx = V * Math.sin(phi) + (s && s.vx ? s.vx : 0) + (s && s.belt ? s.belt : 0);
+    this.vy = V * Math.cos(phi) + (s && s.vy > 0 ? s.vy : 0);
     this.airA = phi * AIR_PITCH; this.grounded = false; this.ground = null; this.y += 0.01;
     if (th > 3 * D2R) this.facing = this.launchDir;
     this.squash = 0; G.sfx.jump(); G.dust(this.x, this.y, 4, 0.6);
@@ -952,7 +956,7 @@ class Dude {
   }
   airStep(G, dt) {
     if (this.tryZip(G)) return;
-    const g = GRAV * (G.M.g || 1);
+    const g = GRAV * this.gk(G);
     this.vy -= g * dt;
     this.av += (-AIR_K * (this.a - this.airA) - AIR_D * this.av) * dt; this.a += this.av * dt;
     this.holdT = 0;
@@ -1048,8 +1052,8 @@ class Bot {
   // fly a hop of hold time H toward dir from where p stands now; returns where it lands
   sim(G, H, dir) {
     const p = this.p, th = hopAngle(H), lean = LEAN_AT[clamp(Math.round(H * 100), 0, 50)] * dir, phi = dir * th + LEAN_CARRY * lean;
-    const g = GRAV * (G.M.g || 1), dt = 1 / 30, s0 = p.ground;
-    let x = p.x, y = p.y + 0.01, vx = HOP_V * Math.sin(phi) + (s0 && s0.vx ? s0.vx : 0) + (s0 && s0.belt ? s0.belt : 0), vy = HOP_V * Math.cos(phi);
+    const g = GRAV * p.gk(G), dt = 1 / 30, s0 = p.ground, V = p.hopV();
+    let x = p.x, y = p.y + 0.01, vx = V * Math.sin(phi) + (s0 && s0.vx ? s0.vx : 0) + (s0 && s0.belt ? s0.belt : 0), vy = V * Math.cos(phi);
     const t0 = G.rt + CROUCH_T + H, goal = G.M.goal;
     for (let t = 0; t < 6; t += dt) {
       vy -= g * dt; const nx = x + vx * dt, ny = y + vy * dt;
@@ -1216,6 +1220,9 @@ class Game {
     }
     this.rt += sdt;
     this.moveSolids(sdt);
+    if (this.M.pack) for (const p of this.P) if (p.alive && !p.pack && !p.gone && p.x >= this.M.pack.x0 && p.y < 5) {   // strap on a chute
+      p.pack = true; this.sfx.grab(); if (p.human) this.popup('CHUTE ON!', p.x, p.y + BH + 0.8, '#7fd7ff', 0.8, 0.8);
+    }
     for (const p of this.P) if (p.bot) p.bot.think(this, sdt);
     for (const p of this.P) p.step(this, sdt);
     this.crowd(sdt);
@@ -1736,6 +1743,14 @@ function drawProps(G) {
     } else txt('z', AX(f.x) + 6, AY(f.y + 1.2) - Math.floor(G.t * 2) % 2 * 3, 6, CREAM);
   }
 }
+// the chute rack on the freighter: a wall frame with packs hanging on it
+function drawPackRack(G, k) {
+  if (AX(k.x1) < -HW - 4 || AX(k.x0) > HW + 4) return;
+  wb(k.x0, 0, k.x0 + 0.15, 3.6, '#5a5f6a'); wb(k.x1 - 0.15, 0, k.x1, 3.6, '#5a5f6a'); wb(k.x0, 3.4, k.x1, 3.6, '#5a5f6a');
+  for (let i = 0; i < 3; i++) { const x = k.x0 + 0.35 + i * 0.6; wb(x, 2.3, x + 0.42, 3.3, '#3f6b3a'); wb(x + 0.05, 2.8, x + 0.37, 2.9, '#2b4a28'); wb(x + 0.17, 3.3, x + 0.25, 3.4, '#c9c2b6'); }
+  txt('CHUTES', AX((k.x0 + k.x1) / 2), AY(1.2), 5, '#c9c2b6');
+  ctx.globalAlpha = 0.25; wb(k.x0, 0, k.x1, 0.06, '#7fd7ff'); ctx.globalAlpha = 1;
+}
 // ziplines: a pole at each end and a sagging-free cable between; riders hang from a little trolley
 function drawZips(G) {
   for (const z of G.zips || []) {
@@ -2019,6 +2034,7 @@ function drawDude(G, p) {
   const splay = air ? 0.3 + fl * 0.4 * Math.sin(t * 22) : (p.crouch > 0 ? 0.25 : fl * 0.25 * Math.sin(t * 20));
   drawSpr(sp.legB, -d, -hip, -d * splay, flip); drawSpr(sp.leg, d, -hip, d * splay * 0.8, flip);
   ctx.translate(0, -hip);
+  if (p.pack && !p.chute) { const bx = -d * 5; rr(bx - 3, -BODY.torsoH * PPM + 1, 6, BODY.torsoH * PPM - 2, INK); rr(bx - 2, -BODY.torsoH * PPM + 2, 4, BODY.torsoH * PPM - 4, '#3f6b3a'); rr(bx - 2, -BODY.torsoH * PPM / 2, 4, 1, '#2b4a28'); }   // the chute pack
   drawSpr(sp.torso, 0, -BODY.torsoH * PPM / 2, 0, flip);
   const lag = clamp(-p.av * 0.05, -0.45, 0.45) + (p.hurt > 0 ? Math.sin(t * 30) * 0.2 : 0);
   drawSpr(sp.head, 0, -(HEAD_C - HIP_H) * PPM, lag, flip);
@@ -2101,6 +2117,7 @@ function drawView(G, cam, vp, zoom) {
   for (const s of G.S) if (s.style === 'tile' || s.style === 'tarmac') drawSolid(G, s);
   if (G.M.strip) { const st = G.M.strip; wb(st.x0, 0, st.x1, 0.04, '#e8423a'); wb(st.x0 - 0.2, 0, st.x0, 3.6, '#9a96a0'); wb(st.x1, 0, st.x1 + 0.2, 3.6, '#9a96a0'); wb(st.x0 - 0.2, 3.4, st.x1 + 0.2, 3.7, '#9a96a0'); txt('SECURITY', AX((st.x0 + st.x1) / 2), AY(4.1), 5, '#e8423a'); txt('NO ITEMS', AX((st.x0 + st.x1) / 2), AY(3.2), 4, '#fff6e0'); ctx.fillStyle = `rgba(255,80,80,${0.08 + 0.06 * Math.sin(G.t * 8)})`; ctx.fillRect(AX(st.x0), AY(3.4), (st.x1 - st.x0) * PPM, 3.4 * PPM); }
   drawZips(G);
+  if (G.M.pack) drawPackRack(G, G.M.pack);
   drawProps(G);
   drawGoalMark(G);
   drawSpots(G);
