@@ -636,7 +636,7 @@ const HEAD_C = BODY.legLen + BODY.torsoH + NECK + BODY.headR, BODY_H = HEAD_C + 
 const BH = BODY_H;
 // the hop law (measured from the real thing): launch speed never changes, a longer lean only tips the hop flatter
 const HOP_V = 4.3 * BH, GRAV = 6 * BH, HOP_MAX = 52 * D2R, HOP_RATE = 140 * D2R, HOP_DEAD = 0.055, CROUCH_T = 0.085;
-const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.35;
+const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.85, PHI_MAX = 80 * D2R;
 // standing: a loose spring keeps you upright (it wobbles); in the air you pitch toward the hop; landing tips you over
 const PACK_G = 1.6, PACK_V = 0.75;   // a parachute pack is heavy: more gravity, weaker hops
 const ZIP_V = 4 * BH, ZIP_GRAB = 0.55;
@@ -837,7 +837,9 @@ class Dude {
     this.crouch = CROUCH_T; this.launchH = H; this.launchDir = dir; this.squash = 0.6;
   }
   launch(G) {
-    const th = hopAngle(this.launchH), phi = this.launchDir * th + LEAN_CARRY * this.a, s = this.ground;
+    // the hold sets the launch angle (measured); only lean that didn't come from this hold (tipped over by a landing) flattens it more
+    const th = hopAngle(this.launchH), own = LEAN_AT[clamp(Math.round(this.launchH * 100), 0, 50)] * this.launchDir;
+    const phi = clamp(this.launchDir * th + LEAN_CARRY * (this.a - own), -PHI_MAX, PHI_MAX), s = this.ground;
     const V = this.hopV();
     this.vx = V * Math.sin(phi) + (s && s.vx ? s.vx : 0) + (s && s.belt ? s.belt : 0);
     this.vy = V * Math.cos(phi) + (s && s.vy > 0 ? s.vy : 0);
@@ -1057,7 +1059,7 @@ class Bot {
   constructor(p, level) { this.p = p; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal; this.plan = null; this.wait = rand(0.3, 0.9); this.seen = 0; this.stuck = 0; this.lastBest = -1e9; this.aimT = 0; }
   // fly a hop of hold time H toward dir from where p stands now; returns where it lands
   sim(G, H, dir) {
-    const p = this.p, th = hopAngle(H), lean = LEAN_AT[clamp(Math.round(H * 100), 0, 50)] * dir, phi = dir * th + LEAN_CARRY * lean;
+    const p = this.p, th = hopAngle(H), phi = dir * th;   // (bots hop from standing, so no extra lean carries in)
     const g = GRAV * p.gk(G), dt = 1 / 30, s0 = p.ground, V = p.hopV();
     let x = p.x, y = p.y + 0.01, vx = V * Math.sin(phi) + (s0 && s0.vx ? s0.vx : 0) + (s0 && s0.belt ? s0.belt : 0), vy = V * Math.cos(phi);
     const t0 = G.rt + CROUCH_T + H, goal = G.M.goal;
