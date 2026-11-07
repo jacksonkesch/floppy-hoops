@@ -2204,14 +2204,17 @@ function drawScores(G, x0, y0, list) {
     for (let i = 0; i < T; i++) { rr(x + 11 + i * 6, y + 2, 5, 5, INK); rr(x + 12 + i * 6, y + 3, 3, 3, i < p.score ? p.C.col : '#3a3446'); }
   });
 }
-// a strip along the bottom showing how far along everyone is
+// a strip along the top showing how far along everyone is: each racer's face rides it (yours on top)
 function drawProgress(G, x, y, w) {
   const M = G.M, a = M.cps[0], b = (M.goal.x0 + M.goal.x1) / 2, u = v => x + clamp((v - a) / (b - a), 0, 1) * w;
   rr(x - 1, y - 1, w + 2, 4, INK); rr(x, y, w, 2, '#3a3446'); for (const c of M.cps.slice(1)) rr(u(c), y - 1, 1, 4, '#8a8496');
-  rr(x + w - 1, y - 3, 4, 8, INK); rr(x + w, y - 2, 2, 6, '#7fe39a');
+  rr(x - 3, y - 3, 3, 8, INK); rr(x - 2, y - 2, 1, 6, '#c9bfd6');
+  rr(x + w, y - 4, 5, 10, INK); for (let i = 0; i < 4; i++) rr(x + w + 1 + (i % 2) * 2, y - 3 + i * 2, 2, 2, '#7fe39a');   // (the finish flag)
   for (const p of G.P.slice().sort((q, r) => (q.human ? 1 : 0) - (r.human ? 1 : 0))) {
-    const px = Math.round(u(p.gone ? b : p.x)); rr(px - 2, y - 3, 5, 5, INK); rr(px - 1, y - 2, 3, 3, p.alive || p.gone ? p.C.col : '#5a5464');
-    if (p.human) rr(px - 1, y + 4, 3, 1, p.C.col);
+    const px = Math.round(u(p.gone ? b : p.x)), live = p.alive || p.gone;
+    rr(px - 5, y - 4, 11, 10, INK); rr(px - 4, y - 3, 9, 8, live ? '#3a3044' : '#241e2c');
+    if (!live) ctx.globalAlpha = 0.45; headIcon(p, px + 0.5, y + 1, 1); ctx.globalAlpha = 1;
+    rr(px - 4, y + 6, 9, p.human ? 2 : 1, p.C.col);
   }
 }
 // an arrow on the edge of the view pointing at the getaway when it's off screen
@@ -2282,7 +2285,7 @@ function drawHUD(G) {
     panel(124, 3, 72, 22); txt(fmtT(G.ttT || 0), 160, 11, 9, G.state === 'run' ? CREAM : '#ffd23a');
     txt(G.ttBest != null ? 'BEST ' + fmtT(G.ttBest) : 'NO BEST YET', 160, 20.5, 4, '#8f86a0');
   } else drawScores(G, 3, 3, G.P);
-  drawProgress(G, 70, 172, 180);
+  if (G.state !== 'ready' || G.mode === 'tt') drawProgress(G, 64, G.mode === 'tt' ? 32 : 9, G.touch ? 220 : 236);
   if (!split) {
     if (humans[0]) drawMine(G, humans[0], 3, 148);
   } else { drawMine(G, G.P[0], 3, 148); drawMine(G, G.P[1], 283 - (G.P[1].item ? 0 : 30), 148); }
