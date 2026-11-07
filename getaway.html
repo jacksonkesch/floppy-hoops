@@ -638,6 +638,7 @@ const BH = BODY_H;
 const HOP_V = 4.3 * BH, GRAV = 6 * BH, HOP_MAX = 52 * D2R, HOP_RATE = 140 * D2R, HOP_DEAD = 0.055, CROUCH_T = 0.085;
 const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.35;
 // standing: a loose spring keeps you upright (it wobbles); in the air you pitch toward the hop; landing tips you over
+const ZIP_V = 4 * BH, ZIP_GRAB = 0.55;   // zipline ride speed (4 body heights a second) and how close your hands must get
 const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.2, TIP_K = 1.4;
 const TUMBLE_A = 100 * D2R, DOWN_T = 1.1, GETUP_T = 0.6, RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
 const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3;
@@ -675,6 +676,7 @@ const lift = (x0, x1, lo, hi, T, ph = 0) => B(x0, x1, lo, 'lift', { bot: lo - 0.
 const MAPS = [
   { id: 'harbor', name: 'HARBOR BAZAAR', theme: 'harbor', ride: 'van', killY: -2.2, water: -0.9, x0: -7, x1: 95, cps: [0, 22, 48, 73],
     goal: { x0: 84.2, x1: 87.5, y0: 0, y1: 2.6 }, rideX: 84,
+    zips: [[55.5, 5.5, 79, 2.6]],   // off the crate stack, over the water, down to the van
     solids: [B(-9, 17, 0, 'dock'), B(6, 8.4, 1.1, 'crate', { bot: 0 }), B(8.4, 10.2, 2.2, 'crate', { bot: 0 }), B(13, 14, 1.0, 'barrel', { bot: 0 }),
       B(20.5, 37, 0, 'dock'), B(25, 30, 2.5, 'awning', { bot: 2.25 }), B(33, 35, 1.4, 'crate', { bot: 0 }),
       B(39.5, 44.5, -0.3, 'boat', { bot: -1.6, mv: t => ({ dx: 0, dy: Math.sin(t * 1.7) * 0.22 }) }),
@@ -710,6 +712,7 @@ const MAPS = [
       B(60, 63, -0.5, 'ramp'), B(63, 66, -1.0, 'ramp')] },
   { id: 'meadow', name: 'LAUNCH MEADOW', theme: 'meadow', ride: 'rocket', killY: -2.5, water: -1, x0: -7, x1: 90, cps: [0, 16, 34, 52, 64],
     goal: { x0: 73, x1: 75.2, y0: 9.2, y1: 12 }, rideX: 75,
+    zips: [[24.5, 5.4, 36, 3.6], [41.5, 4.6, 51.5, 3.3], [59, 3.8, 70.5, 11.2]],   // three cables: over the pond, off the rock, up the gantry
     solids: [B(-9, 14, 0, 'grass'), B(14, 22, 1.2, 'grass'), B(22, 29, 2.2, 'grass'), B(33, 47, 0.5, 'grass'), B(37, 40, 1.6, 'hay', { bot: 0.5, bounce: 1 }),
       B(43, 44.5, 1.4, 'rock', { bot: 0.5 }), B(50.5, 92, 0, 'grass'), B(56, 57.5, 1.1, 'hay', { bot: 0 }),
       B(66, 71, 2.3, 'gantry', { bot: 2.0, oneway: 1 }), B(69, 74, 4.6, 'gantry', { bot: 4.3, oneway: 1 }), B(66, 71, 6.9, 'gantry', { bot: 6.6, oneway: 1 }),
@@ -802,9 +805,9 @@ class Dude {
     Object.assign(this, { x, y, px: x, py: y, vx: 0, vy: 0, a: 0, av: 0, airA: 0, grounded: true, ground: null,
       holdDir: 0, holdT: 0, crouch: 0, launchH: 0, launchDir: 1, down: 0, getup: 0, side: 1,
       alive: true, deadT: 0, how: '', imm: 0, hp: 100, item: null, ammo: 0, cd: 0, trig: false, shield: 0,
-      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0 });
+      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, zip: null, zipV: 0, zipCool: 0 });
   }
-  get canAct() { return this.alive && !this.gone && this.down <= 0 && this.getup <= 0; }
+  get canAct() { return this.alive && !this.gone && this.down <= 0 && this.getup <= 0 && !this.zip; }
   head() { return { x: this.x + Math.sin(this.a) * BH * 0.92, y: this.y + Math.cos(this.a) * BH * 0.92 }; }
   mid() { return { x: this.x + Math.sin(this.a) * BH * 0.5, y: this.y + Math.cos(this.a) * BH * 0.5 }; }
   shoulder() { const k = SHOULDER_H; return { x: this.x + Math.sin(this.a) * k, y: this.y + Math.cos(this.a) * k }; }
@@ -814,6 +817,7 @@ class Dude {
 
   // a lean key went down/up (dir -1 left, +1 right)
   press(G, dir, down) {
+    if (this.zip) return;   // (hands are busy on the zipline)
     if (down) { if (!this.holdDir) { this.holdDir = dir; this.holdT = 0; } return; }
     if (dir !== this.holdDir) return;
     const H = this.holdT; this.holdDir = 0; this.holdT = 0;
@@ -851,7 +855,8 @@ class Dude {
       return;
     }
     if (!this.alive) return this.deadStep(G, dt);
-    if (this.grounded) this.groundStep(G, dt); else this.airStep(G, dt);
+    if (this.zipCool > 0) this.zipCool -= dt;
+    if (this.zip) this.zipStep(G, dt); else if (this.grounded) this.groundStep(G, dt); else this.airStep(G, dt);
     if (this.x < G.M.x0) { this.x = G.M.x0; this.vx = Math.abs(this.vx) * 0.2; }
     if (this.x > G.M.x1) { this.x = G.M.x1; this.vx = -Math.abs(this.vx) * 0.2; }
     if (this.y < G.M.killY) this.die(G, 'fall');
@@ -911,7 +916,38 @@ class Dude {
     }
     this.x = nx;
   }
+  // a zipline: your hands lock on and it carries you to the far end, then lets go with the speed you had
+  zipStep(G, dt) {
+    const z = this.zip, ux = z.ux, uy = z.uy;
+    this.zipV = Math.min(ZIP_V, this.zipV + ZIP_V * 2.5 * dt);
+    this.x += ux * this.zipV * dt;
+    const cy = z.y0 + (this.x - z.x0) * z.k;
+    this.y = cy - BH * 0.97; this.vx = ux * this.zipV; this.vy = uy * this.zipV;
+    this.av += (-40 * (this.a + ux * 0.15) - 7 * this.av) * dt; this.a += this.av * dt;   // hang straight, trailing a touch
+    this.holdDir = 0; this.holdT = 0; this.crouch = 0;
+    if (this.x >= z.x1 - 0.25) this.unzip(G, 1);
+  }
+  unzip(G, fling = 0) {
+    if (!this.zip) return;
+    this.zip = null; this.zipCool = 0.7; this.grounded = false; this.ground = null; this.airA = 0;
+    if (fling) { this.vx *= 0.85; this.vy = Math.max(this.vy * 0.85, 0) + 1.2; } else { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); }
+  }
+  tryZip(G) {
+    if (this.zipCool > 0 || this.down > 0 || !G.zips) return false;
+    const h = this.head();
+    for (const z of G.zips) {
+      if (h.x < z.x0 || h.x > z.x1 - 1.5) continue;
+      const cy = z.y0 + (h.x - z.x0) * z.k;
+      if (Math.abs(h.y + 0.25 - cy) > ZIP_GRAB || Math.abs(this.a) > 1.3) continue;
+      this.zip = z; this.zipV = Math.max(2, Math.abs(this.vx)); this.x = h.x; this.av = 0;
+      this.holdDir = 0; this.crouch = 0; this.trig = false;
+      G.sfx.tick(0.5); G.sfx.spin(0.7); G.spark(h.x, cy, '#ffd23a', 5);
+      return true;
+    }
+    return false;
+  }
   airStep(G, dt) {
+    if (this.tryZip(G)) return;
     const g = GRAV * (G.M.g || 1);
     this.vy -= g * dt;
     this.av += (-AIR_K * (this.a - this.airA) - AIR_D * this.av) * dt; this.a += this.av * dt;
@@ -962,6 +998,7 @@ class Dude {
     if (!this.alive || this.gone || this.imm > 0) return false;
     if (this.shield > 0) { dmg = 0; kx *= 0.35; ky *= 0.35; G.spark(this.mid().x, this.mid().y, '#7fd7ff', 8); G.sfx.tick(1); }
     this.hp -= dmg; this.flail = 1; this.hurt = 0.6; this.holdDir = 0; this.crouch = 0;
+    if (this.zip && (dmg > 0 || Math.abs(kx) > 3)) this.unzip(G);   // (a shot knocks you off the cable)
     this.vx += kx; this.av += kx * 0.9 + (Math.random() - 0.5);
     if (this.grounded && (Math.abs(kx) > 3.5 || ky > 2.5)) { this.grounded = false; this.ground = null; this.vy = Math.max(this.vy, ky, 2 + Math.abs(kx) * 0.25); this.airA = this.a + Math.sign(kx) * 0.7; this.y += 0.02; }
     else if (!this.grounded) this.vy += ky;
@@ -970,7 +1007,7 @@ class Dude {
   }
   die(G, how, kx = 0, ky = 0, from = null) {
     if (!this.alive) return;
-    this.alive = false; this.how = how; this.deadT = RESPAWN_T; this.item = null; this.trig = false; this.holdDir = 0; this.crouch = 0; this.down = 0; this.getup = 0;
+    this.zip = null; this.alive = false; this.how = how; this.deadT = RESPAWN_T; this.item = null; this.trig = false; this.holdDir = 0; this.crouch = 0; this.down = 0; this.getup = 0;
     this.grounded = false; this.ground = null; this.spin = (Math.sign(kx) || (Math.random() < 0.5 ? -1 : 1)) * rand(5, 9);
     if (how === 'shot') {
       this.vx += kx * 0.4; this.vy = Math.max(this.vy, 4 + ky * 0.3);
@@ -1030,6 +1067,7 @@ class Bot {
   think(G, dt) {
     const p = this.p, L = this.L;
     if (!p.alive || p.gone || G.state === 'over') { p.trig = false; return; }
+    if (p.zip) { this.plan = null; this.wait = rand(0.1, 0.3); return; }   // (just ride it)
     this.items(G, dt);
     if (G.state !== 'run' || !p.grounded || !p.canAct || p.crouch > 0) { if (G.state !== 'run' || !p.grounded) this.plan = null; return; }
     if (this.plan) {   // leaning: let go when the planned time is up
@@ -1115,6 +1153,7 @@ class Game {
     const id = this.order[this.round % this.order.length];
     const M = this.M = MAP[id];
     this.S = M.solids.map(s => ({ ...s, x0b: s.x0, x1b: s.x1, topb: s.top, botb: s.bot, dx: 0, dy: 0, vx: 0, vy: 0, squish: 0 }));
+    this.zips = (M.zips || []).map(([x0, y0, x1, y1]) => { const L = Math.hypot(x1 - x0, y1 - y0); return { x0, y0, x1, y1, k: (y1 - y0) / (x1 - x0), ux: (x1 - x0) / L, uy: (y1 - y0) / L }; });
     this.rt = 0; this.moveSolids(0);
     this.state = 'ready'; this.stateT = 0; this.winner = null; this.boarded = []; this.winners = []; this.departT = 0; this.rideT = 0; this.timeScale = 1; this.slowT = 0;
     this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
@@ -1602,6 +1641,19 @@ const BACKDROP = {
 // ---- level pieces
 function outlineBox(x0, y0, x1, y1) { ctx.strokeStyle = INK; ctx.lineWidth = 1; const a = Math.round(AX(x0)) + 0.5, b = Math.round(AY(y1)) + 0.5; ctx.strokeRect(a, b, Math.round(AX(x1)) - a - 1 + 0.5, Math.round(AY(y0)) - b - 1 + 0.5); }
 function wheel(x, y, r = 0.32) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(AX(x), AY(y), r * PPM, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#8a8a96'; ctx.beginPath(); ctx.arc(AX(x), AY(y), r * PPM * 0.45, 0, Math.PI * 2); ctx.fill(); }
+// ziplines: a pole at each end and a sagging-free cable between; riders hang from a little trolley
+function drawZips(G) {
+  for (const z of G.zips || []) {
+    if (AX(z.x1) < -HW - 4 || AX(z.x0) > HW + 4) continue;
+    for (const [x, y] of [[z.x0, z.y0], [z.x1, z.y1]]) {
+      const f = G.floorAt(x), base = f ? f.top : y - 6;
+      wb(x - 0.12, base, x + 0.12, y + 0.35, '#4a4256'); wb(x - 0.3, y + 0.2, x + 0.3, y + 0.42, '#6a6276');
+    }
+    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(AX(z.x0), AY(z.y0 + 0.3)); ctx.lineTo(AX(z.x1), AY(z.y1 + 0.3)); ctx.stroke();
+    ctx.strokeStyle = '#c9c2b6'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(AX(z.x0), AY(z.y0 + 0.3)); ctx.lineTo(AX(z.x1), AY(z.y1 + 0.3)); ctx.stroke();
+  }
+  for (const p of G.P) if (p.zip) { const sh = p.shoulder(), hx = sh.x, hy = sh.y + BODY.armLen, cy = p.zip.y0 + (hx - p.zip.x0) * p.zip.k + 0.3; rr(AX(hx) - 3, AY(cy) - 1, 6, 4, '#ffd23a'); const gap = AY(hy) - AY(cy) - 3; if (gap > 0) rr(AX(hx) - 1, AY(cy) + 3, 2, gap, '#3b3f4a'); }
+}
 function drawSolid(G, s) {
   const { x0, x1, top } = s, bot = Math.max(s.bot, CAMY - HH / PPM - 1), M = G.M, t = G.t, w = x1 - x0;
   const plain = (body, lip, lipH = 0.18, depth = bot) => { wb(x0, depth, x1, top, body); wb(x0, top - lipH, x1, top, lip); outlineBox(x0, depth, x1, top); };
@@ -1863,7 +1915,8 @@ function drawDude(G, p) {
   const fl = p.flail, air = !p.grounded || !p.alive, sh = p.shoulder();
   // the back arm flops about
   const sw = -Math.PI / 2 - p.av * 0.12 + fl * Math.sin(t * 19) * 1.1 + (air ? d * 0.9 + Math.sin(t * 9) * 0.3 : 0) + (p.chute ? Math.PI * 0.95 : 0);
-  const bh = { x: sh.x - d * 0.05 + Math.cos(sw) * BODY.armLen, y: sh.y + Math.sin(sw) * BODY.armLen };
+  const swz = p.zip ? Math.PI / 2 + 0.12 * d + Math.sin(t * 7) * 0.05 : sw;
+  const bh = { x: sh.x - d * 0.05 + Math.cos(swz) * BODY.armLen, y: sh.y + Math.sin(swz) * BODY.armLen };
   limb(sp.armB, AX(sh.x - d * 0.05), AY(sh.y), AX(bh.x), AY(bh.y));
   ctx.save(); ctx.translate(fx, fy); ctx.rotate(p.a);
   const sq = p.squash * 0.14; if (sq) ctx.scale(1 + sq, 1 - sq);
@@ -1878,7 +1931,10 @@ function drawDude(G, p) {
   if (p.hurt > 0.05 || p.down > 0) { for (let i = 0; i < 3; i++) { const a = t * 6 + i * 2.1; rr(Math.cos(a) * 6 - 0.5, -(BODY_H - HIP_H) * PPM - 3 + Math.sin(a) * 2, 1.5, 1.5, '#ffe34a'); } }
   ctx.restore();
   // the front arm: holding your item out in front, or flopping like the other one
-  if (p.item && p.alive) {
+  if (p.zip) {   // both hands up on the trolley
+    const fw = Math.PI / 2 - 0.12 * d, fh = { x: sh.x + Math.cos(fw) * BODY.armLen, y: sh.y + Math.sin(fw) * BODY.armLen };
+    limb(sp.arm, AX(sh.x), AY(sh.y), AX(fh.x), AY(fh.y));
+  } else if (p.item && p.alive) {
     let g = p.aimAng(); if (p.swing > 0) g += d * (p.swing - 0.5) * -2.4;
     const hd = { x: sh.x + Math.cos(g) * BODY.armLen, y: sh.y + Math.sin(g) * BODY.armLen };
     limb(sp.arm, AX(sh.x), AY(sh.y), AX(hd.x), AY(hd.y));
@@ -1918,7 +1974,11 @@ function drawFx(G) {
   ctx.globalAlpha = 1;
   for (const q of G.proj) {
     if (q.kind === 'rocket') { drawSpr(itemSprite('rocket'), AX(q.x), AY(q.y), -Math.atan2(q.vy, q.vx), false, q.vx < 0, 0.6, 0.6); rr(AX(q.x - q.vx * 0.03) - 2, AY(q.y - q.vy * 0.03) - 2, 4, 4, '#ffd23a'); }
-    else { drawSpr(itemSprite('bomb'), AX(q.x), AY(q.y), q.spin); if (Math.floor(G.t * 10) % 2) rr(AX(q.x) - 1, AY(q.y) - 6, 2, 2, '#ff4a2a'); }
+    else {
+      drawSpr(itemSprite('bomb'), AX(q.x), AY(q.y), q.spin); if (Math.floor(G.t * 10) % 2) rr(AX(q.x) - 1, AY(q.y) - 6, 2, 2, '#ff4a2a');
+      // about to blow: it flashes white, faster and faster
+      if (q.t < 0.7 && Math.floor(G.t * (q.t < 0.3 ? 24 : 12)) % 2) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(AX(q.x), AY(q.y), 5, 0, Math.PI * 2); ctx.fill(); }
+    }
   }
   if (G.boomFx) { const b = G.boomFx; b.t -= G.dt; const k = 1 - b.t / 0.3; ctx.strokeStyle = `rgba(255,240,200,${1 - k})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(AX(b.x), AY(b.y), b.r * PPM * k, 0, Math.PI * 2); ctx.stroke(); if (b.t <= 0) G.boomFx = null; }
   for (const q of G.parts) { ctx.globalAlpha = clamp(q.t / q.T * 1.5, 0, 1); if (q.conf) { ctx.save(); ctx.translate(AX(q.x), AY(q.y)); ctx.rotate(q.t * 9); rr(-2, -1, 4, 2, q.col); ctx.restore(); } else rr(AX(q.x) - q.s / 2, AY(q.y) - q.s / 2, q.s, q.s, q.col); }
@@ -1945,6 +2005,7 @@ function drawView(G, cam, vp, zoom) {
   for (const s of G.S) if (!s.ceil && s.style !== 'tile' && s.style !== 'tarmac') { if (AX(s.x1) > -HW - 4 && AX(s.x0) < HW + 4) drawSolid(G, s); }
   for (const s of G.S) if (s.style === 'tile' || s.style === 'tarmac') drawSolid(G, s);
   if (G.M.strip) { const st = G.M.strip; wb(st.x0, 0, st.x1, 0.04, '#e8423a'); wb(st.x0 - 0.2, 0, st.x0, 3.6, '#9a96a0'); wb(st.x1, 0, st.x1 + 0.2, 3.6, '#9a96a0'); wb(st.x0 - 0.2, 3.4, st.x1 + 0.2, 3.7, '#9a96a0'); txt('SECURITY', AX((st.x0 + st.x1) / 2), AY(4.1), 5, '#e8423a'); txt('NO ITEMS', AX((st.x0 + st.x1) / 2), AY(3.2), 4, '#fff6e0'); ctx.fillStyle = `rgba(255,80,80,${0.08 + 0.06 * Math.sin(G.t * 8)})`; ctx.fillRect(AX(st.x0), AY(3.4), (st.x1 - st.x0) * PPM, 3.4 * PPM); }
+  drawZips(G);
   drawGoalMark(G);
   drawSpots(G);
   const order = G.P.slice().sort((a, b) => (a.human ? 1 : 0) - (b.human ? 1 : 0));
