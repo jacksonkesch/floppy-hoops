@@ -933,6 +933,7 @@ class Dude {
     this.y = cy - BH * 0.97; this.vx = ux * this.zipV; this.vy = uy * this.zipV;
     this.av += (-40 * (this.a + ux * 0.15) - 7 * this.av) * dt; this.a += this.av * dt;   // hang straight, trailing a touch
     this.holdDir = 0; this.holdT = 0; this.crouch = 0;
+    if ((this.buzzT = (this.buzzT || 0) - dt) <= 0 && G.heard(this.x, 10)) { this.buzzT = 0.11; G.sfx.hiss(0.12, this.human ? 0.07 : 0.035, 'bandpass', 1100 + this.zipV * 90, 1300 + this.zipV * 90, 4); }
     if (this.x >= z.x1 - 0.25) this.unzip(G, 1);
   }
   unzip(G, fling = 0) {
@@ -1191,6 +1192,7 @@ class Game {
     for (const s of this.S) if (!s.ceil && !s.mv && !s.oneway && s.style !== 'hull' && inX(s, x) && (!best || s.top > best.top)) best = s;
     return best;
   }
+  heard(x, r = 13) { return (this.cams || []).some(c => Math.abs(c.x - x) < r); }
   moveSolids(dt) {
     for (const s of this.S) {
       if (s.squish) s.squish = Math.max(0, s.squish - (dt || 0) * 4);
@@ -1198,7 +1200,22 @@ class Game {
       const o = s.mv(this.rt), nx0 = s.x0b + o.dx, ntop = s.topb + o.dy;
       s.dx = nx0 - s.x0; s.dy = ntop - s.top; s.vx = dt ? s.dx / dt : 0; s.vy = dt ? s.dy / dt : 0;
       s.x0 = nx0; s.x1 = s.x1b + o.dx; s.top = ntop; s.bot = s.botb + o.dy;
+      if (s.style === 'lift' && dt) {   // a bell when it stops at the top or bottom
+        const dir = Math.sign(s.dy); if (s.ldir && dir && dir !== s.ldir && this.heard((s.x0 + s.x1) / 2)) { this.sfx.tone('sine', 1319, 1319, 0.5, 0.07); this.sfx.tone('sine', 1047, 1047, 0.7, 0.06, 0.18); }
+        if (dir) s.ldir = dir;
+      }
     }
+  }
+  // the getaway's engine gets louder as the first human gets close (rotor whups for choppers, a rumble for the rest)
+  rideHum(dt) {
+    if (this.state !== 'run' || this.demo || this.M.ride === 'chute') return;
+    if ((this.humT = (this.humT || 0) - dt) > 0) return;
+    const g = this.M.goal, gx = (g.x0 + g.x1) / 2; let d = Infinity;
+    for (const p of this.P) if (p.human && p.alive && !p.gone) d = Math.min(d, Math.hypot(p.x - gx, p.y - g.y0));
+    const k = clamp(1 - d / 28, 0, 1); if (k <= 0) { this.humT = 0.3; return; }
+    const heli = this.M.ride === 'heli' || this.M.ride === 'chopper';
+    if (heli) { this.humT = 0.085; this.sfx.hiss(0.06, 0.05 + 0.2 * k, 'lowpass', 500, 160, 1); }
+    else { this.humT = 0.16; this.sfx.tone('sawtooth', 55 + 25 * k, 50 + 25 * k, 0.17, 0.012 + 0.04 * k); }
   }
   respawn(p) {
     const x = p.cp, s = this.floorAt(x), keep = p.score;
@@ -1225,6 +1242,7 @@ class Game {
     }
     for (const p of this.P) if (p.bot) p.bot.think(this, sdt);
     for (const p of this.P) p.step(this, sdt);
+    this.rideHum(sdt);
     this.crowd(sdt);
     this.stepItems(sdt);
     this.stepProj(sdt);
