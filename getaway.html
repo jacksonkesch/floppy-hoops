@@ -1753,6 +1753,80 @@ const AMBIENT = {
   rail: { kind: 'bird', n: 2, f: 0.1, y: -66, col: '#3a2a20' }, spire: { kind: 'bird', n: 3, f: 0.12, y: -56, col: INK },
   moon: { kind: 'star' }, alley: { kind: 'jet' },
 };
+// ---- tiny pixel people, the Hoops crowd look: 5-wide shirt, 3-wide head, a row of hair, an idle bob.
+// (x, y) is where the feet stand in view px; sc = 1 for far rows, 2 (with an INK outline) for people on the play floor.
+const SKIN = ['#d9b89a', '#c49a78', '#a47b5c', '#7d5a42'], HAIRC = ['#231812', '#4a2e1c', '#8a5a2e', '#d8b25a', '#1c1c24', '#b0442a'], PANTS = ['#2a2a3a', '#3a4a6a', '#5a4a3a', '#1c1c24'];
+function person(x, y, k, t, pal, o = {}) {
+  const r = i => hsh(k * 7.31 + i * 1.7), sc = o.sc || 1, ol = o.ol && sc > 1;
+  const shirt = o.shirt || pal[(r(1) * pal.length) | 0], skin = SKIN[(r(2) * 4) | 0], hair = HAIRC[(r(3) * 6) | 0], pants = PANTS[(r(5) * 4) | 0];
+  const bob = Math.sin(t * (1.4 + r(4)) + k) > 0.65 ? 1 : 0, Y = y - bob;
+  const R = (px, py, w, h, c) => rr(x + px * sc, Y + py * sc, w * sc, h * sc, c);
+  const O = (px, py, w, h) => ol && rr(x + px * sc - 1, Y + py * sc - 1, w * sc + 2, h * sc + 2, INK);
+  const cap = r(6) > 0.72, suit = o.suit, wave = o.prop === 'wave' || (o.prop === 'cheer' && bob), arm = Math.sin(t * 4 + k) > 0 ? 1 : 0;
+  // outline silhouette first, then the colours on top
+  if (ol) { O(1, -3, 1, 3); O(3, -3, 1, 3); O(0, -8, 5, 5); suit ? O(0, -12, 5, 4) : O(1, -11, 3, 4); if (wave) O(5, -11 - arm, 1, 5); if (o.prop === 'phone') O(5, -10, 1, 3); }
+  R(1, -3, 1, 3, pants); R(3, -3, 1, 3, pants); R(1, -1, 1, 1, INK); R(3, -1, 1, 1, INK);
+  R(0, -8, 5, 5, shirt);
+  if (o.prop === 'apron') R(1, -7, 3, 4, '#f4f1ea');
+  if (o.prop === 'vest') { R(0, -8, 5, 1, '#c8c8c8'); R(0, -6, 5, 1, '#c8c8c8'); }
+  if (suit) { R(0, -12, 5, 4, shirt); R(1, -11, 3, 2, '#e8c040'); R(2, -11, 1, 1, '#fff6e0'); R(-1, -8, 1, 4, '#9a96a0'); }
+  else {
+    R(1, -11, 3, 3, skin); R(cap ? 1 : 1, -12, 3, 1, cap ? pal[(r(7) * pal.length) | 0] : hair);
+    if (cap) R(4, -11, 1, 1, shade(pal[(r(7) * pal.length) | 0], -0.3)); else if (r(8) > 0.6) { R(1, -11, 1, 1, hair); R(3, -11, 1, 1, hair); }
+    if (sc > 1) R(r(9) > 0.5 ? 3 : 1, -10, 1, 1, INK);
+  }
+  if (wave) { R(5, -11 - arm, 1, 5, skin); }
+  else if (o.prop === 'phone') { R(5, -10, 1, 3, skin); R(5, -11, 1, 1, '#c8f0ff'); if (sc > 1) R(4, -11, 1, 1, 'rgba(200,240,255,0.45)'); }
+  else if (o.prop === 'cone') { R(5, -7, 1, 2, '#e8c080'); R(5, -8, 1, 1, r(10) > 0.5 ? '#ff9ac0' : '#fff6e0'); }
+  else if (o.prop === 'coffee') { R(5, -6, 1, 2, '#f4f1ea'); R(5, -7, 1, 1, '#8a5a34'); }
+  if (o.prop === 'bag') { if (ol) rr(x + 6 * sc - 1, Y - 6 * sc - 1, 4 * sc + 2, 6 * sc + 2, INK); R(6, -6, 4, 6, PANTS[(r(11) * 4) | 0]); R(7, -9, 1, 3, '#8a8a96'); R(9, -9, 1, 3, '#8a8a96'); R(7, -9, 3, 1, '#8a8a96'); R(6, -1, 1, 1, INK); R(9, -1, 1, 1, INK); }
+  if (o.prop === 'balloon') { const bx = Math.round(Math.sin(t * 1.3 + k) * 1.5); R(2, -20, 1, 9, INK); rr(x + 2 * sc + bx - 3, Y - 23 * sc / 2 - (sc > 1 ? 10 : 0), 7, 8, ['#e8423a', '#3a6ab0', '#f4d03f', '#2fa36b'][(r(12) * 4) | 0]); }
+  if (o.prop === 'camera' && Math.sin(t * 2.7 + k * 5) > 0.992) { ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(x + 5 * sc - 3, Y - 10 * sc - 3, 7, 7); ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x + 5 * sc - 7, Y - 10 * sc - 7, 15, 15); }
+  if (o.prop === 'dog') { R(6, -3, 6, 2, '#8a6a4a'); R(11, -4, 2, 2, '#8a6a4a'); R(6, -1, 1, 1, INK); R(10, -1, 1, 1, INK); R(12, -4, 1, 1, INK); R(5, -4, 1, 1 + arm, '#8a6a4a'); }
+}
+// bystanders stand on the real floors of the map, behind the racers (vendors inside the market stalls)
+const CROWD_PAL = {
+  harbor: ['#e8423a', '#3a6ab0', '#f4d03f', '#f4f1ea', '#2fa36b', '#ff8a2a', '#8a4ab0'],
+  alley: ['#2a2a3a', '#5a3a4a', '#8a7a6a', '#3a4a6a', '#b04a3a', '#4a4a5a', '#7a6a8a'],
+  spire: ['#f4f1ea', '#d8e4f0', '#3a4a6a', '#2a2a3a', '#7a8aa0', '#5a6a8a'],
+  airport: ['#8a7a9a', '#3a6ab0', '#e8e4dc', '#c0392b', '#2fa36b', '#f4d03f', '#5a5a6a'],
+  plane: ['#f0f020', '#ff8a2a'],
+  meadow: ['#ff7aa8', '#ffe34a', '#5ab8f0', '#f4f1ea', '#7ae06a', '#ff8a2a'],
+  moon: ['#f4f1ea', '#e8e4dc'],
+};
+const CROWD_PROPS = {
+  harbor: ['bag', 'cone', 'phone', null, null, 'camera'], alley: ['phone', 'dog', null, null, 'coffee'], spire: ['coffee', 'phone', null, null],
+  airport: ['bag', 'bag', 'phone', null, 'coffee'], plane: ['vest', 'vest', 'wave'], meadow: ['balloon', 'camera', 'cheer', 'cone', null, 'wave'], moon: ['wave', null, null],
+};
+const CROWD_GROUND = new Set(['dock', 'street', 'tile', 'tarmac', 'floor', 'grass', 'moon', 'deck', 'busfloor', 'mezz']);
+function buildCrowd(G) {
+  const M = G.M, out = [], pal = CROWD_PAL[M.theme], props = CROWD_PROPS[M.theme] || [null];
+  if (!pal) return out;
+  const gap = M.theme === 'spire' ? 2.4 : 1.7, dens = M.theme === 'plane' ? 0.3 : M.theme === 'moon' ? 0.4 : 0.6;
+  for (let x = M.x0 + 1.5; x < M.x1 - 1.5; x += gap) {
+    if (hsh(x * 3.7 + 11) > dens) continue;
+    const xx = x + (hsh(x * 1.3) - 0.5) * gap * 0.8, f = G.floorAt(xx);
+    if (!f || f.mv || f.k || !CROWD_GROUND.has(f.style)) continue;
+    out.push({ x: xx, y: topAt(f, xx), k: Math.round(x * 10), prop: props[(hsh(x * 9.1) * props.length) | 0], suit: M.theme === 'moon' });
+  }
+  for (const a of G.S) if (a.style === 'awning') { const mx = (a.x0 + a.x1) / 2 + 0.4, f = G.floorAt(mx); if (f) out.push({ x: mx, y: topAt(f, mx), k: Math.round(mx * 10) + 3, prop: 'apron', shirt: '#8a4ab0' }); }
+  return out;
+}
+function drawCrowd(G) {
+  if (G.crowdId !== G.M.id) { G.folks = buildCrowd(G); G.crowdId = G.M.id; }
+  const pal = CROWD_PAL[G.M.theme]; if (!pal) return;
+  for (const q of G.folks) { const x = AX(q.x); if (x < -HW - 20 || x > HW + 20) continue; person(Math.round(x) - 5, Math.round(AY(q.y)), q.k, G.t, pal, { sc: 2, ol: true, prop: q.prop, suit: q.suit, shirt: q.shirt }); }
+}
+// soft blobs under the racers so they sit on the floor instead of floating over it
+function drawShadows(G) {
+  for (const p of G.P) {
+    if (!p.alive || p.chute) continue;
+    const f = (p.grounded && p.ground) || G.floorAt(p.x); if (!f) continue;
+    const top = topAt(f, p.x), h = p.y - top; if (h < -0.1 || h > 6) continue;
+    const k = 1 - h / 6; ctx.fillStyle = `rgba(10,8,20,${(0.3 * k).toFixed(2)})`;
+    ctx.beginPath(); ctx.ellipse(AX(p.x), AY(top) + 1, (0.14 + 0.34 * k) * PPM, 2.5, 0, 0, 7); ctx.fill();
+  }
+}
 function drawAmbient(G) {
   const A = AMBIENT[G.M.theme]; if (!A) return;
   const t = G.t, W = HW * 2 + 60, wrapX = v => -HW - 30 + ((v % W) + W) % W;
@@ -1974,6 +2048,9 @@ function drawSolid(G, s) {
     wb(x0, top - lipH - 0.1, x1, top - lipH, shade(body, -0.22)); wb(x0, top - lipH, x1, top, lip);
     outlineBox(x0, depth, x1, top);
   };
+  if (DROP.has(s.style) && s.bot > CAMY - HH / PPM) {   // a banded drop shadow under anything box-like, so it sits in the scene
+    for (let i = 0; i < 3; i++) wb(x0 + 0.15, s.bot - 0.12 * (i + 1), x1 + 0.15, s.bot - 0.12 * i, `rgba(10,8,20,${[0.22, 0.13, 0.06][i]})`);
+  }
   switch (s.style) {
     case 'dock': {
       for (let x = x0 + 0.6; x < x1; x += 2.4) { wb(x, (M.water ?? -2) - 3, x + 0.35, top - 0.3, '#4a2e1a'); wb(x + 0.26, (M.water ?? -2) - 3, x + 0.35, top - 0.3, '#3a2212'); wb(x - 0.1, top - 0.95, x + 0.45, top - 0.8, '#5a3a22'); }
@@ -2173,6 +2250,74 @@ function drawSolid(G, s) {
       wb(x0 + 0.5, s.bot + 0.5, x0 + 1.3, top - 0.5, '#2a2834'); txt('BASE 7', AX((x0 + x1) / 2 + 0.6), AY((s.bot + top) / 2), 5, '#2a2834', { outline: false }); break;
     }
     default: plain('#7a7680', '#9a96a0');
+  }
+  dressSolid(G, s, bot);
+}
+const DROP = new Set(['crate', 'barrel', 'planter', 'bin', 'step', 'airstep', 'counter', 'desk', 'desk2', 'cart', 'cargo', 'hay', 'rock', 'acbox', 'vent', 'ac', 'cooler', 'car', 'cabin', 'cab', 'truck', 'boxcar', 'flatcar', 'tanker', 'loco', 'locab', 'busseat']);
+// extra texture on top of the base shapes: speckled asphalt and manholes, checkered tiles, cracked tarmac,
+// tread-plate floors, scalloped awnings with lanterns, market goods, office life, hanging gate signs
+function dressSolid(G, s, bot) {
+  const { x0, x1, top } = s, t = G.t, w = x1 - x0, M = G.M;
+  switch (s.style) {
+    case 'street': {
+      for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) { const r = hsh(x * 2.1 + 3); if (r > 0.72) wb(x, top - 0.5 - r * 1.6, x + 0.12, top - 0.44 - r * 1.6, r > 0.9 ? '#4a4856' : '#1e1c28'); }
+      for (let x = Math.ceil((x0 - 5) / 11) * 11 + 5; x < x1 - 1; x += 11) { ctx.fillStyle = '#1a1822'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.04), 0.55 * PPM, 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4a4856'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.04), 0.4 * PPM, 1.2, 0, 0, 7); ctx.fill(); }
+      outlineBox(x0, bot, x1, top); break;
+    }
+    case 'tile': {
+      for (let x = Math.ceil(x0); x < x1; x += 1) { if ((Math.floor(x) & 1) === 0) wb(x + 0.05, top - 0.3, Math.min(x1, x + 1), top, '#cfc8bb'); if (hsh(x * 1.9) > 0.55) wb(x + 0.15, top - 0.09, x + 0.55, top - 0.04, '#f8f6f0'); }
+      wb(x0, top - 0.35, x1, top - 0.3, '#a8a094'); outlineBox(x0, bot, x1, top); break;
+    }
+    case 'tarmac': {
+      for (let x = Math.ceil(x0 / 4) * 4; x < x1; x += 4) if (hsh(x * 0.7 + 1) > 0.5) { let y = top - 0.05; for (let i = 0; i < 5 && y > top - 0.35; i++) { const dx = (hsh(x + i) - 0.5) * 0.6; wb(x + dx, y - 0.07, x + dx + 0.06, y, '#2a2830'); y -= 0.07; } }
+      for (let x = Math.ceil(x0 / 9) * 9 + 2; x < x1; x += 9) { ctx.fillStyle = 'rgba(10,8,20,0.28)'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.06), 0.9 * PPM, 2, 0, 0, 7); ctx.fill(); }
+      outlineBox(x0, bot, x1, top); break;
+    }
+    case 'floor': {
+      for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) { const o = (Math.round(x * 2) & 1) * 0.1; wb(x + 0.1, top - 0.22 + o, x + 0.3, top - 0.18 + o, '#9a9488'); }
+      for (let x = Math.ceil(x0) + 0.5; x < x1; x += 2) { wb(x, top - 0.08, x + 0.08, top - 0.03, '#f4f1ea'); wb(x, top - 0.28, x + 0.08, top - 0.23, '#f4f1ea'); }
+      outlineBox(x0, bot, x1, top); break;
+    }
+    case 'awning': {
+      for (let i = 0, x = x0; x < x1; x += 0.5, i++) wb(x + 0.12, s.bot - 0.14, Math.min(x1, x + 0.38), s.bot, i % 2 ? '#fff6e0' : '#e8423a');
+      for (let i = 0; i < 3; i++) {   // paper lanterns swinging under the front edge
+        const lx = x0 + w * (0.2 + 0.3 * i) + Math.sin(t * 1.6 + i + x0) * 0.08, ly = s.bot - 0.55;
+        wb(lx - 0.02, ly + 0.3, lx + 0.02, s.bot, INK); wb(lx - 0.2, ly - 0.05, lx + 0.2, ly + 0.35, INK); wb(lx - 0.17, ly - 0.02, lx + 0.17, ly + 0.32, i === 1 ? '#f4d03f' : '#e8423a'); wb(lx - 0.17, ly + 0.14, lx + 0.17, ly + 0.17, 'rgba(255,246,224,0.5)');
+      }
+      txt(['FISH', 'FRUIT', 'RUGS', 'TEA', 'SPICE'][Math.round(hsh(x0 * 1.3) * 4)], AX((x0 + x1) / 2), AY(top - (top - s.bot) / 2), 4, '#2a1a1a', { outline: false }); break;
+    }
+    case 'counter': {   // goods piled on the stall
+      const cols = hsh(x0) > 0.5 ? ['#ff8a2a', '#e8423a', '#7ae06a'] : ['#9ad0e8', '#f4f1ea', '#c8a040'];
+      for (let i = 0; i < 3 && x0 + 0.5 + i * 0.9 < x1 - 0.4; i++) { const gx = x0 + 0.5 + i * 0.9; pcircle(Math.round(AX(gx)), Math.round(AY(top + 0.22)), 4, cols[i]); pcircle(Math.round(AX(gx - 0.18)), Math.round(AY(top + 0.12)), 3, cols[i]); pcircle(Math.round(AX(gx + 0.18)), Math.round(AY(top + 0.12)), 3, shade(cols[i], -0.15)); }
+      break;
+    }
+    case 'office': {   // the room above the slab: ceiling lights, a plant, a picture, a water cooler, people at desks
+      if (s.slab) break;
+      const H = 4.3;
+      for (let x = x0 + 1.5; x < x1 - 1; x += 3) { wb(x, top + H - 0.95, x + 1.2, top + H - 0.85, '#fff6e0'); ctx.fillStyle = 'rgba(255,246,224,0.05)'; ctx.beginPath(); ctx.moveTo(AX(x), AY(top + H - 0.95)); ctx.lineTo(AX(x + 1.2), AY(top + H - 0.95)); ctx.lineTo(AX(x + 2.4), AY(top)); ctx.lineTo(AX(x - 1.2), AY(top)); ctx.fill(); }
+      if (w > 4) { wb(x0 + 0.5, top, x0 + 0.9, top + 0.35, '#b85a3a'); pcircle(Math.round(AX(x0 + 0.7)), Math.round(AY(top + 0.65)), 4, '#3f9f4a'); pcircle(Math.round(AX(x0 + 0.5)), Math.round(AY(top + 0.5)), 3, '#2f8f3a'); wb(x1 - 1.1, top, x1 - 0.7, top + 0.9, '#9ad0e8'); wb(x1 - 1.05, top + 0.9, x1 - 0.75, top + 1.25, '#c8e8ff'); wb(x1 - 1.1, top, x1 - 0.7, top + 0.12, '#8a8692'); }
+      if (w > 3) { wb(x0 + w * 0.5 - 0.35, top + 2.3, x0 + w * 0.5 + 0.35, top + 2.85, '#c8a040'); wb(x0 + w * 0.5 - 0.28, top + 2.37, x0 + w * 0.5 + 0.28, top + 2.78, hsh(x0) > 0.5 ? '#5ab8f0' : '#e88a4a'); }
+      for (let x = x0 + 1.6; x < x1 - 2.4; x += 3.6) {
+        if (hsh(x * 2.2) < 0.3) continue;
+        person(Math.round(AX(x + 0.5)) - 5, Math.round(AY(top)), Math.round(x * 10), t, CROWD_PAL.spire, { sc: 2, ol: true, prop: hsh(x) > 0.6 ? 'coffee' : null });
+        wb(x - 0.2, top + 0.85, x + 1.4, top + 0.95, '#8a7a6a'); wb(x - 0.1, top, x, top + 0.85, '#6a5a4a'); wb(x + 1.2, top, x + 1.3, top + 0.85, '#6a5a4a');
+        wb(x + 0.2, top + 0.95, x + 0.8, top + 1.4, INK); wb(x + 0.25, top + 1.0, x + 0.75, top + 1.35, Math.sin(t * 7 + x) > -0.6 ? '#9fd0f0' : '#7ab0d8'); wb(x + 0.45, top + 0.95, x + 0.55, top + 1.0, '#5a5862');
+      }
+      break;
+    }
+    case 'ceil': {
+      if (s.plane) { for (let x = x0 + 2; x < x1; x += 4.4) { ctx.fillStyle = 'rgba(255,246,224,0.06)'; ctx.beginPath(); ctx.moveTo(AX(x - 0.3), AY(s.bot)); ctx.lineTo(AX(x + 0.9), AY(s.bot)); ctx.lineTo(AX(x + 2.4), AY(s.bot - 6)); ctx.lineTo(AX(x - 1.8), AY(s.bot - 6)); ctx.fill(); } break; }
+      for (let x = Math.ceil(x0 / 16) * 16 + 4, n = 1; x < x1 - 4; x += 16, n += 4) {   // hanging gate signs
+        wb(x + 0.3, s.bot - 0.8, x + 0.36, s.bot, '#5a5862'); wb(x + 2.6, s.bot - 0.8, x + 2.66, s.bot, '#5a5862');
+        wb(x, s.bot - 1.5, x + 3, s.bot - 0.8, INK); wb(x + 0.04, s.bot - 1.46, x + 2.96, s.bot - 0.84, '#1b3d86');
+        txt(`GATES ${n}-${n + 3}  >`, AX(x + 1.5), AY(s.bot - 1.15), 4, '#fff6e0', { outline: false });
+      }
+      break;
+    }
+    case 'boxcar': case 'tanker': case 'flatcar': {   // rivet rows
+      ctx.fillStyle = 'rgba(20,16,25,0.35)'; for (let x = x0 + 0.3; x < x1 - 0.1; x += 0.5) { ctx.fillRect(Math.round(AX(x)), Math.round(AY(s.bot + 0.25)), 1, 1); if (s.style !== 'flatcar') ctx.fillRect(Math.round(AX(x)), Math.round(AY(top - 0.3)), 1, 1); }
+      break;
+    }
   }
 }
 // what's under the floor of each place
@@ -2430,12 +2575,14 @@ function drawView(G, cam, vp, zoom) {
   }
   if (G.M.theme === 'airport') drawTerminal(G);
   drawRide(G, false);
+  drawCrowd(G);
   for (const s of G.S) if (!s.ceil && s.style !== 'tile' && s.style !== 'tarmac') { if (AX(s.x1) > -HW - 4 && AX(s.x0) < HW + 4) drawSolid(G, s); }
   for (const s of G.S) if (s.style === 'tile' || s.style === 'tarmac') drawSolid(G, s);
   if (G.M.strip) { const st = G.M.strip; wb(st.x0, 0, st.x1, 0.04, '#e8423a'); wb(st.x0 - 0.2, 0, st.x0, 3.6, '#9a96a0'); wb(st.x1, 0, st.x1 + 0.2, 3.6, '#9a96a0'); wb(st.x0 - 0.2, 3.4, st.x1 + 0.2, 3.7, '#9a96a0'); txt('SECURITY', AX((st.x0 + st.x1) / 2), AY(4.1), 5, '#e8423a'); txt('NO ITEMS', AX((st.x0 + st.x1) / 2), AY(3.2), 4, '#fff6e0'); ctx.fillStyle = `rgba(255,80,80,${0.08 + 0.06 * Math.sin(G.t * 8)})`; ctx.fillRect(AX(st.x0), AY(3.4), (st.x1 - st.x0) * PPM, 3.4 * PPM); }
   drawZips(G);
   if (G.M.pack) drawPackRack(G, G.M.pack);
   drawProps(G);
+  drawShadows(G);
   drawGoalMark(G);
   drawSpots(G);
   if (G.ghost && !G.ghost.d.done && G.state !== 'ready') { ctx.globalAlpha = 0.35; drawDude(G, G.ghost.d); ctx.globalAlpha = 1; }
