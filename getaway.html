@@ -1802,7 +1802,7 @@ const CROWD_GROUND = new Set(['dock', 'street', 'tile', 'tarmac', 'floor', 'gras
 function buildCrowd(G) {
   const M = G.M, out = [], pal = CROWD_PAL[M.theme], props = CROWD_PROPS[M.theme] || [null];
   if (!pal) return out;
-  const gap = M.theme === 'spire' ? 2.4 : 1.7, dens = M.theme === 'plane' ? 0.3 : M.theme === 'moon' ? 0.4 : 0.6;
+  const gap = M.theme === 'spire' ? 2.4 : 1.7, dens = M.theme === 'plane' ? 0.3 : M.theme === 'moon' ? 0.55 : M.theme === 'alley' ? 0.75 : 0.6;
   for (let x = M.x0 + 1.5; x < M.x1 - 1.5; x += gap) {
     if (hsh(x * 3.7 + 11) > dens) continue;
     const xx = x + (hsh(x * 1.3) - 0.5) * gap * 0.8, f = G.floorAt(xx);
@@ -1850,6 +1850,11 @@ const BACKDROP = {
     const sea = horizon(0.3) + 4;
     par(0.2, 90, (k, x) => { if (hsh(k) < 0.5) return; const y = sea; ctx.fillStyle = '#6e8fae'; ctx.fillRect(x, y - 30, 3, 30); ctx.fillRect(x - 10, y - 30, 30, 3); ctx.fillRect(x + 14, y - 30, 2, 12); });
     skyline(0.25, 4, '#7c9cbc', 4, 18, 14, 26, null, 3);
+    par(0.25, 760, (k, x) => {   // lighthouse on the headland
+      const y = Math.round(horizon(0.25) + 4), X = Math.round(x); rr(X - 3, y - 36, 9, 36, '#f4f1ea'); for (let i = 0; i < 3; i++) rr(X - 3, y - 30 + i * 10, 9, 4, '#e8423a');
+      rr(X - 4, y - 40, 11, 4, '#2a2d38'); rr(X - 2, y - 43, 7, 3, '#ffe9a0'); rr(X - 4, y - 45, 11, 2, '#2a2d38');
+      const a = G.t * 0.9; ctx.fillStyle = 'rgba(255,240,180,0.22)'; ctx.beginPath(); ctx.moveTo(X + 1, y - 41); ctx.lineTo(X + 1 + Math.cos(a) * 90 - Math.sin(a) * 7, y - 41 + Math.sin(a) * 30 + Math.cos(a) * 7); ctx.lineTo(X + 1 + Math.cos(a) * 90 + Math.sin(a) * 7, y - 41 + Math.sin(a) * 30 - Math.cos(a) * 7); ctx.fill();
+    });
     fog(sea - 44, sea + 2, '#c8ecff', 0.45);
     // the sea: deep far out, a bright waterline, sailboats drifting, glints
     const sg = ctx.createLinearGradient(0, sea, 0, sea + 60); sg.addColorStop(0, '#2f86c8'); sg.addColorStop(1, '#1d66a6'); ctx.fillStyle = sg; ctx.fillRect(-HW - 2, sea, HW * 2 + 4, HH * 2);
@@ -1874,7 +1879,8 @@ const BACKDROP = {
     skyline(0.15, -6, '#4a3a68', 30, 70, 16, 28, '#ffcf7a55', 1);
     fog(horizon(0.15) - 76, horizon(0.15) + 8, '#f08a5a', 0.35);
     skyline(0.35, 0, '#2c2440', 40, 90, 18, 30, '#ffd27a', 7);
-    // street lamps, shop fronts and buzzing neon close behind
+    // the far sidewalk the lamps and pedestrians stand on, then the lamps, shop fronts and buzzing neon
+    { const sy = Math.round(horizon(0.8)); rr(-HW - 2, sy, HW * 2 + 4, HH * 2, '#3a3646'); rr(-HW - 2, sy, HW * 2 + 4, 2, '#6a6678'); rr(-HW - 2, sy + 2, HW * 2 + 4, 1, '#2a2634'); par(0.8, 24, (k, x) => rr(x, sy + 3, 1, 6, '#2e2a3a')); }
     par(0.8, 60, (k, x) => {
       const y = horizon(0.8); ctx.fillStyle = '#1c1828'; ctx.fillRect(x, y - 44, 2, 44); ctx.fillRect(x, y - 44, 8, 2);
       ctx.fillStyle = '#ffe9a0'; ctx.fillRect(x + 6, y - 42, 4, 2); ctx.fillStyle = 'rgba(255,233,160,0.12)'; ctx.beginPath(); ctx.moveTo(x + 6, y - 40); ctx.lineTo(x - 6, y); ctx.lineTo(x + 22, y); ctx.fill();
@@ -1884,6 +1890,8 @@ const BACKDROP = {
         if (on) { ctx.fillStyle = c + '2e'; ctx.fillRect(X + 10, sy - 6, 34, 22); rr(X + 18, sy + 2, 18, 6, c + '55'); rr(X + 19, sy + 4, 16, 2, c); rr(X + 21, sy + 3, 3, 1, '#ffffff'); }
       }
     });
+    const walk = (dir, per, sp, seed) => par(0.8, per, (k, x) => { if (hsh(k + seed) < 0.55) return; const y = Math.round(horizon(0.8)) + (Math.sin(G.t * 9 + k) > 0 ? 0 : -1); person(Math.round(x), y, k * 3 + seed, G.t, CROWD_PAL.alley, { sc: 1, prop: ['phone', 'dog', 'coffee', null, null][((k % 5) + 5) % 5] }); }, G.t * sp * dir);
+    walk(1, 27, 9, 31); walk(-1, 33, 7, 57);
   },
   rail(G) {
     sky('#e88a4a', '#ffd88a'); sun(-109 - CAMX * PPM * 0.01, horizon(0.03) - 9, 11, '#fff0b0');
@@ -1897,6 +1905,18 @@ const BACKDROP = {
       rr(X, y - 40, 2, 40, '#5a3a22'); rr(X - 5, y - 38, 12, 2, '#5a3a22'); rr(X - 4, y - 40, 2, 2, '#9ad0e8'); rr(X + 4, y - 40, 2, 2, '#9ad0e8');
       ctx.strokeStyle = '#3a2a20'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X - 4, y - 38); ctx.quadraticCurveTo(X - 49, y - 30, X - 94, y - 38); ctx.stroke();
     }, run * 0.7);
+    par(0.4, 110, (k, x) => { if (hsh(k + 8) < 0.5) return; const y = Math.round(horizon(0.4) + 16), X = Math.round(x), c = hsh(k) > 0.5 ? '#5a3a2a' : '#e8e0d0'; rr(X, y - 4, 6, 3, c); rr(X + 5, y - 5, 2, 2, c); rr(X + 1, y - 1, 1, 1, INK); rr(X + 4, y - 1, 1, 1, INK); });
+    par(0.5, 340, (k, x) => {
+      const y = Math.round(horizon(0.5) + 20), X = Math.round(x);
+      if (hsh(k) > 0.5) {   // water tower
+        rr(X + 2, y - 30, 2, 30, '#5a3a22'); rr(X + 14, y - 30, 2, 30, '#5a3a22'); rr(X, y - 26, 18, 2, '#5a3a22'); rr(X, y - 14, 18, 2, '#5a3a22');
+        rr(X - 2, y - 46, 22, 16, '#8a5a34'); rr(X - 2, y - 46, 22, 2, '#a07048'); for (let i = 0; i < 4; i++) rr(X - 2, y - 44 + i * 4, 22, 1, '#6a4424');
+        ctx.fillStyle = '#6a3a2a'; ctx.beginPath(); ctx.moveTo(X - 4, y - 46); ctx.lineTo(X + 9, y - 56); ctx.lineTo(X + 22, y - 46); ctx.fill(); rr(X + 4, y - 40, 10, 6, '#f4f1ea'); txt('H2O', X + 9, y - 37, 4, '#6a4424', { outline: false });
+      } else {   // windmill, blades turning
+        rr(X + 6, y - 34, 2, 34, '#9a9a9a'); rr(X + 2, y - 2, 10, 2, '#9a9a9a'); rr(X + 3, y - 30, 1, 30, '#8a8a8a'); rr(X + 10, y - 30, 1, 30, '#8a8a8a'); rr(X + 4, y - 20, 6, 1, '#8a8a8a'); rr(X + 4, y - 10, 6, 1, '#8a8a8a');
+        ctx.save(); ctx.translate(X + 7, y - 35); ctx.rotate(G.t * 1.6 + k); ctx.fillStyle = '#d8d8d0'; for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.fillRect(2, -1, 9, 2); } ctx.restore(); rr(X + 6, y - 36, 2, 2, '#6a3a2a');
+      }
+    }, run * 0.5);
     par(1, 60, (k, x) => rr(x, horizon(0.7) + 22 + hsh(k) * 10, 20 + hsh(k + 1) * 30, 1, '#b8804a'), run * 0.7);
   },
   spire(G) {
@@ -1906,6 +1926,11 @@ const BACKDROP = {
     skyline(0.25, 180, '#7aa6cc', 80, 200, 18, 32, '#c8e6ff', 5);
     fog(horizon(0.25) - 20, horizon(0.25) + 180, '#d8f2ff', 0.35);
     clouds(0.3, 40, 'rgba(255,255,255,0.7)', G.t, 6, 5);
+    { const bx = Math.round(-HW - 60 + ((G.t * 7 - CAMX * PPM * 0.08) % (HW * 2 + 160) + HW * 2 + 160) % (HW * 2 + 160)), by = Math.round(-HH + 34 + Math.sin(G.t * 0.6) * 2);
+      ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(bx, by, 23, 8, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#d8dce4'; ctx.beginPath(); ctx.ellipse(bx, by, 22, 7, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#e8423a'; ctx.beginPath(); ctx.ellipse(bx, by, 22, 7, 0, 0.5, 2.6); ctx.fill(); rr(bx - 24, by - 6, 5, 4, '#e8423a'); rr(bx - 24, by + 2, 5, 4, '#e8423a');
+      rr(bx - 4, by + 7, 9, 3, '#3a3d46'); rr(bx - 3, by + 8, 2, 1, '#ffe9a0'); rr(bx + 1, by + 8, 2, 1, '#ffe9a0');
+      rr(bx + 26, by - 5, 1, 10, INK); rr(bx + 27, by - 4, 30, 8, '#fff6e0'); rr(bx + 27, by - 4, 30, 1, '#e8423a'); rr(bx + 27, by + 3, 30, 1, '#e8423a'); txt('FLOPPY AIR', bx + 42, by, 4, '#2b3350', { outline: false }); }
   },
   airport(G) {
     sky('#6ec8f4', '#dff2fb'); clouds(0.06, -30, '#ffffff', G.t, 2, 3);
@@ -1935,6 +1960,16 @@ const BACKDROP = {
     hills(0.3, 12, '#5aa84a', 14, 34, 5);
     par(0.3, 34, (k, x) => { if (hsh(k) < 0.6) return; tree(Math.round(x) + 1, Math.round(horizon(0.3) + 4), 20 + hsh(k + 2) * 10); });
     par(0.5, 16, (k, x) => { const y = Math.round(horizon(0.5) + 6), X = Math.round(x); rr(X, y - 9, 2, 9, '#a07848'); rr(X, y - 8, 16, 1, '#b8885a'); rr(X, y - 4, 16, 1, '#b8885a'); });
+    par(0.12, 190, (k, x) => {   // hot-air balloons
+      if (hsh(k + 2) < 0.4) return; const X = Math.round(x), y = Math.round(-HH + 30 + hsh(k) * 40 + Math.sin(G.t * 0.5 + k) * 3), c = ['#e8423a', '#3a6ab0', '#f4d03f', '#2fa36b'][((k % 4) + 4) % 4];
+      ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(X, y, 11, 0, 7); ctx.fill(); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(X, y, 10, 0, 7); ctx.fill(); ctx.fillStyle = '#fff6e0'; ctx.fillRect(X - 2, y - 10, 4, 20); ctx.fillStyle = shade(c, -0.25); ctx.fillRect(X + 5, y - 8, 3, 16);
+      rr(X - 4, y + 9, 8, 4, c); rr(X - 2, y + 13, 4, 2, INK); rr(X - 3, y + 15, 6, 4, '#8a5a34'); rr(X - 3, y + 15, 6, 1, '#b07a4a');
+    });
+    par(0.15, 60, (k, x) => { if (hsh(k + 4) < 0.55) return; const y = Math.round(horizon(0.15) + 6 - hsh(k) * 8), X = Math.round(x); rr(X, y - 3, 5, 3, '#f4f1ea'); rr(X + 1, y - 3, 2, 2, '#2a2a3a'); rr(X + 4, y - 4, 2, 2, '#f4f1ea'); });
+    par(0.5, 140, (k, x) => {   // picnic blankets with a basket
+      if (hsh(k + 6) < 0.5) return; const y = Math.round(horizon(0.5) + 8), X = Math.round(x), c = hsh(k) > 0.5 ? '#e8423a' : '#3a6ab0';
+      rr(X, y - 2, 22, 4, c); for (let i = 0; i < 4; i++) rr(X + 2 + i * 6, y - 2, 2, 4, '#fff6e0'); rr(X + 15, y - 7, 5, 5, '#b07a4a'); rr(X + 15, y - 8, 5, 1, '#8a5a34');
+    });
   },
   moon(G) {
     sky('#05040c', '#1a1830');
@@ -1946,6 +1981,18 @@ const BACKDROP = {
     ctx.save(); ctx.beginPath(); ctx.arc(ex, ey, 14, 0, 7); ctx.clip(); ctx.fillStyle = 'rgba(5,4,14,0.78)'; ctx.beginPath(); ctx.arc(ex + 9, ey - 2, 15, 0, 7); ctx.fill(); ctx.restore();
     hills(0.15, 4, '#3a3848', 16, 30, 3); hills(0.35, 10, '#55525e', 10, 22, 8);
     par(0.35, 70, (k, x) => { if (hsh(k + 5) < 0.5) return; const y = horizon(0.35) + 18 + hsh(k) * 8; ctx.fillStyle = '#6a6774'; ctx.beginPath(); ctx.ellipse(x, y, 12, 4, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#3e3c4a'; ctx.beginPath(); ctx.ellipse(x, y + 1, 9, 2.5, 0, 0, 7); ctx.fill(); });
+    par(0.2, 420, (k, x) => {   // the colony: three domes, a mast with a blinking light, a solar farm
+      const y = Math.round(horizon(0.2) + 8), X = Math.round(x);
+      for (const [dx, r] of [[0, 16], [28, 11], [-22, 9]]) { ctx.fillStyle = '#8a8896'; ctx.beginPath(); ctx.arc(X + dx, y, r, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#b8b6c2'; ctx.beginPath(); ctx.arc(X + dx - r * 0.25, y, r * 0.75, Math.PI, Math.PI * 1.5); ctx.fill(); ctx.fillStyle = '#ffe9a0'; for (let i = -1; i <= 1; i++) ctx.fillRect(X + dx + i * 5 - 1, y - r * 0.45, 2, 3); ctx.fillStyle = INK; ctx.fillRect(X + dx - r, y, r * 2, 1); }
+      rr(X + 10, y - 2, 16, 2, '#6a6874'); rr(X - 12, y - 2, 12, 2, '#6a6874');
+      rr(X + 44, y - 40, 1, 40, '#9a98a6'); rr(X + 40, y - 30, 9, 1, '#9a98a6'); rr(X + 42, y - 20, 5, 1, '#9a98a6'); if (Math.sin(G.t * 4) > 0.3) { rr(X + 43, y - 42, 3, 2, '#ff4040'); ctx.fillStyle = 'rgba(255,64,64,0.25)'; ctx.fillRect(X + 41, y - 44, 7, 6); }
+      for (let i = 0; i < 5; i++) { rr(X + 54 + i * 9, y - 7, 7, 5, '#2a3a6a'); rr(X + 54 + i * 9, y - 7, 7, 1, '#4a6ab0'); rr(X + 57 + i * 9, y - 2, 1, 2, '#9a98a6'); }
+    });
+    par(0.5, 260, (k, x) => {   // a rover crawling along on six wheels
+      const y = Math.round(horizon(0.5) + 10), X = Math.round(x + Math.sin(G.t * 0.3 + k) * 20);
+      rr(X, y - 8, 20, 5, '#d8d6e0'); rr(X, y - 8, 20, 1, '#f4f1ea'); rr(X + 14, y - 12, 5, 4, '#2a3a6a'); rr(X + 4, y - 11, 1, 3, '#9a98a6'); rr(X + 1, y - 12, 7, 1, '#2a3a6a');
+      for (let i = 0; i < 3; i++) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(X + 3 + i * 7, y - 1, 2.5, 0, 7); ctx.fill(); }
+    });
   },
 };
 
@@ -2023,6 +2070,11 @@ function drawTerminal(G) {
     wb(fx, fy, fx + 1.6, fy + 0.3, '#ffffff'); wb(fx, fy + 0.3, fx + 0.25, fy + 0.7, '#ffffff'); wb(fx + 0.5, fy - 0.1, fx + 1.0, fy, '#c9d2d8'); }
   for (let x = -6; x < 42; x += 4.4) { wb(x, 0, x + 0.22, 6.4, '#5a6070'); if (hsh(x) > 0.5) { wb(x + 0.8, 0.6, x + 3.0, 0.95, '#f4f6fa'); wb(x + 2.5, 0.95, x + 2.75, 1.4, '#e8423a'); } }
   wb(-9, 1.9, 42, 2.0, '#5a6070'); wb(-9, 4.2, 42, 4.3, '#5a6070');
+  for (let x = -3; x < 40; x += 8.8) {   // gate seating: people first, the bench in front hides their legs
+    for (let i = 0; i < 3; i++) if (hsh(x * 2 + i) > 0.35) person(Math.round(AX(x + 0.5 + i * 1.2)), Math.round(AY(0.42)) + 3, Math.round(x * 10 + i), t, CROWD_PAL.airport, { sc: 2, ol: true, prop: ['phone', 'coffee', null, 'bag'][(hsh(x + i * 3) * 4) | 0] });
+    wb(x, 0.45, x + 4.2, 0.95, '#3a6ab0'); wb(x, 0.9, x + 4.2, 0.95, '#5a8ad0'); for (let i = 0; i < 4; i++) wb(x + 0.05 + i * 1.05, 0.45, x + 1.0 + i * 1.05, 0.5, '#2a4a80');
+    wb(x + 0.2, 0, x + 0.32, 0.45, '#8a8692'); wb(x + 3.9, 0, x + 4.02, 0.45, '#8a8692'); outlineBox(x, 0.45, x + 4.2, 0.95);
+  }
   { const x = 29, by = 5.2; wb(x, by - 1.9, x + 4, by, '#1c1e26'); wb(x + 0.1, by - 1.8, x + 3.9, by - 0.1, '#2a2d38'); txt('DEPARTURES', AX(x + 2), AY(by - 0.4), 6, '#ffd23a', { outline: false });
     for (let i = 0; i < 3; i++) { wb(x + 0.2, by - 1.0 - i * 0.3, x + 1.5, by - 0.8 - i * 0.3, '#3a3e4c'); wb(x + 1.8, by - 1.0 - i * 0.3, x + 1.8 + (i === 1 ? 1.2 : 0.7 + (i % 2) * 0.4), by - 0.8 - i * 0.3, i === 1 ? '#7fe39a' : '#c8ccd6'); } }
   // food court: a stone-tile wall with two shop fronts (ours: BOB'S and PANINI PETE'S), between the two escalators
@@ -2571,7 +2623,17 @@ function drawView(G, cam, vp, zoom) {
   if (G.M.theme === 'plane') {   // the inside of the cargo hold, with the ramp end open to the sky
     wb(-9, -0.5, 63, 9, '#6a6e78'); for (let x = -9; x < 63; x += 2.2) wb(x, -0.5, x + 0.3, 9, '#5a5e68');
     for (let x = -7; x < 63; x += 6.6) { wb(x, 2.4, x + 1.2, 3.6, '#3a3d46'); wb(x + 0.15, 2.55, x + 1.05, 3.45, '#9fd0f0'); }
-    wb(24, -3, 38, -0.5, 'rgba(0,0,0,0)');
+    ctx.strokeStyle = 'rgba(30,32,40,0.5)'; ctx.lineWidth = 1;
+    for (let x = -7; x < 63; x += 6.6) {   // netting between the ribs
+      const a = AX(x + 0.3), b = AX(x + 5.9), y0 = AY(7.6), y1 = AY(4.2); ctx.beginPath();
+      for (let i = 0; i < 6; i++) { ctx.moveTo(a + (b - a) * i / 6, y0); ctx.lineTo(a + (b - a) * (i + 1) / 6, y1); ctx.moveTo(a + (b - a) * (i + 1) / 6, y0); ctx.lineTo(a + (b - a) * i / 6, y1); } ctx.stroke();
+    }
+    for (let x = -5; x < 62; x += 6.6) {   // jump seats with crew in orange vests, strapped in
+      if (hsh(x * 1.9) > 0.6) person(Math.round(AX(x + 0.3)) - 4, Math.round(AY(0.5)) + 3, Math.round(x * 7), G.t, CROWD_PAL.plane, { sc: 2, ol: true, prop: 'vest' });
+      wb(x - 0.3, 0.5, x + 1.1, 1.0, '#8a3a2a'); wb(x - 0.3, 0.95, x + 1.1, 1.0, '#b05a3a'); wb(x - 0.35, 0, x - 0.2, 0.5, '#3a3d46'); wb(x + 0.95, 0, x + 1.1, 0.5, '#3a3d46'); outlineBox(x - 0.3, 0.5, x + 1.1, 1.0);
+      wb(x + 1.1, 0.4, x + 1.25, 2.4, '#3a3d46'); wb(x + 0.5, 2.3, x + 1.25, 2.4, '#3a3d46'); wb(x + 0.5, 2.4, x + 0.6, 1.3, '#ffd23a');
+    }
+    for (let x = 24; x < 38; x += 0.8) wb(x, -0.5, x + 0.4, -0.35, '#ffd23a');
   }
   if (G.M.theme === 'airport') drawTerminal(G);
   drawRide(G, false);
