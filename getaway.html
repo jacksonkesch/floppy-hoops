@@ -1041,6 +1041,7 @@ class Dude {
     if (!this.alive || this.gone || this.imm > 0) return false;
     if (this.shield > 0) { dmg = 0; kx *= 0.35; ky *= 0.35; G.spark(this.mid().x, this.mid().y, '#7fd7ff', 8); G.sfx.tick(1); }
     this.hp -= dmg; this.flail = 1; this.hurt = 0.6; this.holdDir = 0; this.crouch = 0;
+    if (dmg > 0) G.stopT = Math.max(G.stopT, dmg >= 40 ? 0.06 : 0.025);
     if (this.zip && (dmg > 0 || Math.abs(kx) > 3)) this.unzip(G);   // (a shot knocks you off the cable)
     this.vx += kx; this.av += kx * 0.9 + (Math.random() - 0.5);
     if (this.grounded && (Math.abs(kx) > 3.5 || ky > 2.5)) { this.grounded = false; this.ground = null; this.vy = Math.max(this.vy, ky, 2 + Math.abs(kx) * 0.25); this.airA = this.a + Math.sign(kx) * 0.7; this.y += 0.02; }
@@ -1054,7 +1055,7 @@ class Dude {
     this.grounded = false; this.ground = null; this.spin = (Math.sign(kx) || (Math.random() < 0.5 ? -1 : 1)) * rand(5, 9);
     if (how === 'shot') {
       this.vx += kx * 0.4; this.vy = Math.max(this.vy, 4 + ky * 0.3);
-      G.sfx.crash(); G.addShake(2); G.popup(from && from !== this ? `${from.C.name} K.O. ${this.C.name}` : 'K.O.!', this.x, this.y + 2.6, from ? from.C.col : CREAM, 1.2, 1.0);
+      G.stopT = Math.max(G.stopT, 0.08); G.sfx.crash(); G.addShake(2); G.popup(from && from !== this ? `${from.C.name} K.O. ${this.C.name}` : 'K.O.!', this.x, this.y + 2.6, from ? from.C.col : CREAM, 1.2, 1.0);
       if (from && from !== this) from.kos = (from.kos || 0) + 1;
     } else { G.sfx.oof(); if (this.human || this.y > G.M.killY - 1) G.popup(pick(['BYE!', 'SPLASH!', 'WHOOPS!']), this.x, G.M.killY + 2.5, CREAM, 0.9, 0.9); }
     if (G.M.water != null && how === 'fall') G.splash(this.x, G.M.water);
@@ -1178,7 +1179,7 @@ class Game {
   constructor() {
     this.sfx = new Sfx(); this.screen = 'title'; this.state = 'ready'; this.stateT = 0; this.t = 0; this.rt = 0; this.dt = STEP;
     this.P = []; this.S = []; this.spots = []; this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
-    this.shake = 0; this.timeScale = 1; this.slowT = 0; this.mode = 'cvc'; this.demo = true; this.paused = false; this.round = 0;
+    this.shake = 0; this.timeScale = 1; this.slowT = 0; this.stopT = 0; this.mode = 'cvc'; this.demo = true; this.paused = false; this.round = 0;
     this.cams = []; this.M = MAPS[0]; this.winner = null; this.champ = null; this.rideT = 0;
   }
   newMatch(mode, demo = false) {
@@ -1208,7 +1209,7 @@ class Game {
     this.caps = (M.caps || []).map(c => ({ x: c.x, y: c.y, k: c.k, dead: false }));
     this.zips = (M.zips || []).map(([x0, y0, x1, y1]) => { const L = Math.hypot(x1 - x0, y1 - y0); return { x0, y0, x1, y1, k: (y1 - y0) / (x1 - x0), ux: (x1 - x0) / L, uy: (y1 - y0) / L }; });
     this.rt = 0; this.moveSolids(0);
-    this.state = 'ready'; this.stateT = 0; this.winner = null; this.boarded = []; this.winners = []; this.departT = 0; this.rideT = 0; this.timeScale = 1; this.slowT = 0;
+    this.state = 'ready'; this.stateT = 0; this.winner = null; this.boarded = []; this.winners = []; this.departT = 0; this.rideT = 0; this.timeScale = 1; this.slowT = 0; this.stopT = 0;
     this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
     // item spots: one every ~12 m on solid ground
     this.spots = [];
@@ -1275,7 +1276,9 @@ class Game {
   step(dt) {
     this.t += dt;
     if (this.slowT > 0) { this.slowT -= dt; this.timeScale = this.slowT > 0 ? SLOWMO : 1; }
-    const sdt = dt * this.timeScale; this.dt = sdt;
+    let sdt = dt * this.timeScale;
+    if (this.stopT > 0) { this.stopT -= dt; sdt = 0; }   // hit-stop: the world freezes for a couple of frames so a hit lands
+    this.dt = sdt;
     this.stateT += dt;
     if (this.state === 'ready') {
       const before = Math.ceil(READY_T - (this.stateT - dt) - 0.6), now = Math.ceil(READY_T - this.stateT - 0.6);
@@ -1728,6 +1731,27 @@ function hills(f, base, col, amp, per, seed = 0) {
   for (let x = -HW - 4; x <= HW + 4; x += 4) { const u = (x + off) / per; ctx.lineTo(x, y0 - amp * (0.6 * Math.sin(u + seed) + 0.4 * Math.sin(u * 2.3 + seed * 2))); }
   ctx.lineTo(HW + 2, HH + 2); ctx.closePath(); ctx.fill();
 }
+// a little life in the distance: birds, planes taxiing, a shooting star, a blinking jet (parallax, so they sit behind the level)
+const AMBIENT = {
+  harbor: { kind: 'bird', n: 4, f: 0.12, y: -62, col: '#f8f8fc' }, meadow: { kind: 'bird', n: 3, f: 0.1, y: -70, col: INK },
+  rail: { kind: 'bird', n: 2, f: 0.1, y: -66, col: '#3a2a20' }, spire: { kind: 'bird', n: 3, f: 0.12, y: -56, col: INK },
+  moon: { kind: 'star' }, alley: { kind: 'jet' },
+};
+function drawAmbient(G) {
+  const A = AMBIENT[G.M.theme]; if (!A) return;
+  const t = G.t, W = HW * 2 + 60, wrapX = v => -HW - 30 + ((v % W) + W) % W;
+  if (A.kind === 'bird') for (let i = 0; i < A.n; i++) {
+    const x = Math.round(wrapX(t * (8 + i * 2.5) + i * 131 - CAMX * PPM * A.f)), y = Math.round(horizon(A.f) + A.y + Math.sin(t * 0.6 + i * 1.7) * 5 + i * 8);
+    const w = Math.round(Math.sin(t * 7 + i * 2.1));   // flapping
+    rr(x - 2, y + w, 2, 1, A.col); rr(x, y, 1, 1, A.col); rr(x + 1, y + w, 2, 1, A.col);
+  } else if (A.kind === 'star') {
+    const c = Math.floor(t / 7), u = (t % 7) / 0.55;
+    if (u < 1) { const x0 = -HW + hsh(c) * HW * 2, y0 = -HH + 8 + hsh(c + 5) * 36; for (let k = 0; k < 5; k++) rr(Math.round(x0 + u * 70 - k * 3), Math.round(y0 + u * 28 - k * 1.2), 2, 1, k ? `rgba(255,240,200,${(0.5 - k * 0.1).toFixed(2)})` : '#fff4c0'); }
+  } else if (A.kind === 'jet') {
+    const x = Math.round(wrapX(t * 5 + 40)), y = Math.round(-HH + 16 + Math.sin(t * 0.3) * 3);
+    rr(x, y, 3, 1, '#9aa0b0'); rr(x - 1, y, 1, 1, Math.floor(t * 2) % 2 ? '#ff4a4a' : '#5a2020'); rr(x + 3, y, 1, 1, Math.floor(t * 2 + 1) % 2 ? '#ffffff' : '#606870');
+  }
+}
 const BACKDROP = {
   harbor(G) {
     sky('#58b4ec', '#c8ecff'); rr(HW * 0.4, -HH + 14 + horizon(0.05), 16, 16, '#fff3b0'); rr(HW * 0.4 - 2, -HH + 16 + horizon(0.05), 20, 12, '#fff3b0');
@@ -1862,6 +1886,11 @@ function drawTerminal(G) {
   const M = G.M, t = G.t;
   // hall: glass wall with mullions, runway behind, floor skirting
   wb(-9, 0, 42, 6.4, '#8ec8ee'); wb(-9, 0, 42, 2.2, '#a8d8f4'); wb(-9, 0, 42, 0.5, '#7a8a7a');
+  { const px = -9 + ((t * 1.4) % 51), py = 0.5;   // out on the apron: a jet taxiing past the glass
+    wb(px, py, px + 3.2, py + 0.55, '#f4f6f8'); wb(px + 2.7, py + 0.55, px + 3.0, py + 1.3, '#f4f6f8'); wb(px + 1.0, py - 0.1, px + 2.0, py + 0.15, '#c9d2d8'); wb(px + 0.25, py + 0.3, px + 0.5, py + 0.42, INK);
+    for (let k = 0; k < 5; k++) wb(px + 0.9 + k * 0.4, py + 0.3, px + 1.1 + k * 0.4, py + 0.42, '#5a9ac0');
+    const fx = 42 - ((t * 4 + 20) % 51), fy = 4.7 + Math.sin(t * 0.5) * 0.2;   // and one climbing out the other way
+    wb(fx, fy, fx + 1.6, fy + 0.3, '#ffffff'); wb(fx, fy + 0.3, fx + 0.25, fy + 0.7, '#ffffff'); wb(fx + 0.5, fy - 0.1, fx + 1.0, fy, '#c9d2d8'); }
   for (let x = -6; x < 42; x += 4.4) { wb(x, 0, x + 0.22, 6.4, '#5a6070'); if (hsh(x) > 0.5) { wb(x + 0.8, 0.6, x + 3.0, 0.95, '#f4f6fa'); wb(x + 2.5, 0.95, x + 2.75, 1.4, '#e8423a'); } }
   wb(-9, 1.9, 42, 2.0, '#5a6070'); wb(-9, 4.2, 42, 4.3, '#5a6070');
   { const x = 29, by = 5.2; wb(x, by - 1.9, x + 4, by, '#1c1e26'); wb(x + 0.1, by - 1.8, x + 3.9, by - 0.1, '#2a2d38'); txt('DEPARTURES', AX(x + 2), AY(by - 0.4), 6, '#ffd23a', { outline: false });
@@ -2293,6 +2322,18 @@ function drawFx(G) {
 }
 
 // ---- one camera's view of the world (split screen draws two)
+// with a gun in hand, whoever it's pointing at wears a dashed ring in your colour (so a shot behind you is never a surprise)
+function drawAimMarks(G) {
+  if (G.state !== 'run') return;
+  for (const p of G.P) {
+    if (!p.human || !p.alive || p.gone || !p.item) continue;
+    const d = ITEM[p.item]; if (!d.dmg || d.melee || d.proj === 'bomb') continue;
+    const o = p.tgt; if (!o || !o.alive || o.gone) continue;
+    const m = o.mid(), x = AX(m.x), y = AY(m.y), r = 12 + Math.sin(G.t * 9) * 1.5;
+    ctx.save(); ctx.strokeStyle = p.C.col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85; ctx.setLineDash([3, 3]); ctx.lineDashOffset = -G.t * 24;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  }
+}
 function drawView(G, cam, vp, zoom) {
   ctx.save();
   ctx.beginPath(); ctx.rect(vp.x, vp.y, vp.w, vp.h); ctx.clip();
@@ -2300,6 +2341,7 @@ function drawView(G, cam, vp, zoom) {
   ctx.translate(vp.x + vp.w / 2 + (sh ? rand(-sh, sh) : 0), vp.y + vp.h / 2 + (sh ? rand(-sh, sh) : 0)); ctx.scale(zoom, zoom);
   VZ = zoom; HW = vp.w / 2 / zoom; HH = vp.h / 2 / zoom; CAMX = cam.x; CAMY = cam.y;
   (BACKDROP[G.M.theme] || BACKDROP.harbor)(G);
+  drawAmbient(G);
   drawUnder(G);
   if (G.M.theme === 'plane') {   // the inside of the cargo hold, with the ramp end open to the sky
     wb(-9, -0.5, 63, 9, '#6a6e78'); for (let x = -9; x < 63; x += 2.2) wb(x, -0.5, x + 0.3, 9, '#5a5e68');
@@ -2319,6 +2361,7 @@ function drawView(G, cam, vp, zoom) {
   if (G.ghost && !G.ghost.d.done && G.state !== 'ready') { ctx.globalAlpha = 0.35; drawDude(G, G.ghost.d); ctx.globalAlpha = 1; }
   const order = G.P.slice().sort((a, b) => (a.human ? 1 : 0) - (b.human ? 1 : 0));
   for (const p of order) drawDude(G, p);
+  drawAimMarks(G);
   drawRide(G, true);
   drawWater(G);
   for (const s of G.S) if (s.ceil) drawSolid(G, s);
