@@ -625,7 +625,7 @@ const shortName = s => String(s || '').toUpperCase().replace(/[^A-Z0-9 !-]/g, ''
 // ================================================================ FLOPPY GETAWAY
 // Four floppy guys race across a level to the getaway ride. Nobody can walk: hold a lean key and you tip over that
 // way, let go and you hop. A quick tap hops straight up; a longer lean makes a flatter, longer hop and a harder,
-// wobblier landing (lean too long and you faceplant). Weapons float along the way: knock the others over, then get
+// wobblier landing. Weapons float along the way: knock the others over, then get
 // away first. First to 3 getaways wins. Side view, metres, y up; every level runs left to right.
 const PPM = 18, ART_W = 320, ART_H = 180;
 const STEP = 1 / 60, D2R = Math.PI / 180;
@@ -644,9 +644,9 @@ const ZIP_V = 4 * BH, ZIP_GRAB = 0.55;
 const FOE_RANGE = 15, FOE_DMG = 34, FOE_AIM = 0.55, FOE_STUN = 4;   // the moon worker: 3 hits KO, a half-second red warning line, knocked out for 4 s
 const CAP_BOOM = { dmg: 100, kb: 14, splash: 3.4 };   // zipline ride speed (4 body heights a second) and how close your hands must get
 const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.0, TIP_K = 0.3;
-// past TOPPLE_A the upright spring lets go and you slowly keel over (tap a key before you hit the floor to hop out of it)
-const TOPPLE_A = 46 * D2R, TOPPLE_G = 14, BRACE_MAX = 75 * D2R;   // (holding a key braces a lean up to BRACE_MAX)
-const TUMBLE_A = 100 * D2R, DOWN_T = 0.55, GETUP_T = 0.5, RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
+// you never fall over: the upright spring always stands you back up (holding a key braces a lean up to BRACE_MAX)
+const BRACE_MAX = 75 * D2R;
+const RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
 const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3, KILL_SLOW_T = 0.4;
 
 TEAM.GREEN = { jersey: '#2fa84f', dark: '#1a6431', light: '#7fe39a', num: '#ffffff', dir: 1 };
@@ -760,9 +760,9 @@ const DEFAULTS = { target: 3, level: 'normal', memes: 'on', itemRate: 1, turn: 1
   pools: { maps: MAPS.map(m => m.id), items: ITEMS.map(w => w.id) } };
 // noise: how far off a bot's lean time is; settle: how wobbly it'll hop from; react: seconds to notice a shot
 const CPU_LEVELS = {
-  easy: { noise: 0.35, settle: 6 * D2R, react: 0.3, cone: 14 * D2R, wait: [0.25, 0.7], dumb: 0.25 },
-  normal: { noise: 0.2, settle: 14 * D2R, react: 0.12, cone: 9 * D2R, wait: [0.05, 0.2], dumb: 0.08 },
-  hard: { noise: 0.08, settle: 18 * D2R, react: 0.06, cone: 5 * D2R, wait: [0, 0.08], dumb: 0 },
+  easy: { noise: 0.35, settle: 6 * D2R, react: 0.45, cone: 14 * D2R, err: 12 * D2R, wait: [0.25, 0.7], dumb: 0.25 },
+  normal: { noise: 0.2, settle: 14 * D2R, react: 0.2, cone: 9 * D2R, err: 6 * D2R, wait: [0.05, 0.2], dumb: 0.08 },
+  hard: { noise: 0.08, settle: 18 * D2R, react: 0.1, cone: 5 * D2R, err: 2.5 * D2R, wait: [0, 0.08], dumb: 0 },
 };
 function loadSettings() {
   let s = {};
@@ -840,19 +840,28 @@ class Dude {
   }
   reset(x, y) {
     Object.assign(this, { x, y, px: x, py: y, vx: 0, vy: 0, a: 0, av: 0, airA: 0, grounded: true, ground: null,
-      holdDir: 0, holdT: 0, crouch: 0, launchH: 0, launchDir: 1, down: 0, getup: 0, side: 1,
+      holdDir: 0, holdT: 0, crouch: 0, launchH: 0, launchDir: 1, tgt: null,
       alive: true, deadT: 0, how: '', imm: 0, hp: 100, item: null, ammo: 0, cd: 0, trig: false, shield: 0,
       facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0 });
   }
-  get canAct() { return this.alive && !this.gone && this.down <= 0 && this.getup <= 0 && !this.zip; }
+  get canAct() { return this.alive && !this.gone && !this.zip; }
   get sens() { return this.human ? SET.turn : 1; }   // (bots always lean at the measured rate)
   head() { return { x: this.x + Math.sin(this.a) * BH * 0.92, y: this.y + Math.cos(this.a) * BH * 0.92 }; }
   mid() { return { x: this.x + Math.sin(this.a) * BH * 0.5, y: this.y + Math.cos(this.a) * BH * 0.5 }; }
   shoulder() { const k = SHOULDER_H; return { x: this.x + Math.sin(this.a) * k, y: this.y + Math.cos(this.a) * k }; }
-  // you aim straight ahead, tilted with half your lean: lean back to aim up, forward to aim down
   gk(G) { return (G.M.g || 1) * (this.pack ? PACK_G : 1); }
   hopV() { return HOP_V * (this.pack ? PACK_V : 1); }
-  aimAng() { return (this.facing > 0 ? 0 : Math.PI) - this.a * 0.5; }
+  // weapons point at the closest other racer in reach (set each step); with nobody near, straight out the way you face
+  nearest(G) {
+    const d = this.item && ITEM[this.item], s = this.shoulder();
+    let best = null, bd = Math.max(10, (d && d.range || 20) + 1);
+    for (const q of G.P) { if (q === this || !q.alive || q.gone || q.chute || q.imm > 0) continue; const m = q.mid(), dist = Math.hypot(m.x - s.x, m.y - s.y); if (dist < bd) { best = q; bd = dist; } }
+    return best;
+  }
+  aimAng() {
+    if (this.tgt && this.tgt.alive && !this.tgt.gone) { const s = this.shoulder(), m = this.tgt.mid(); return Math.atan2(m.y - s.y, m.x - s.x); }
+    return (this.facing > 0 ? 0 : Math.PI) - this.a * 0.5;
+  }
   hand() { const s = this.shoulder(), g = this.aimAng(); return { x: s.x + Math.cos(g) * BODY.armLen, y: s.y + Math.sin(g) * BODY.armLen }; }
 
   // a lean key went down/up (dir -1 left, +1 right)
@@ -875,12 +884,6 @@ class Dude {
     if (th > 3 * D2R) this.facing = this.launchDir;
     this.squash = 0; G.sfx.jump(Math.min(1, Math.abs(phi) / PHI_MAX)); G.dust(this.x, this.y, 4, 0.6);
   }
-  tumble(G) {
-    this.side = Math.sign(this.a) || 1; this.down = DOWN_T; this.holdDir = 0; this.crouch = 0; this.flail = 1;
-    G.sfx.oof(); G.dust(this.x + this.side * 1, this.y, 8, 1.2); G.addShake(1.2);
-    if (this.human || Math.random() < 0.4) G.popup(pick(['SPLAT!', 'OOF!', 'FACEPLANT!', 'TIMBER!']), this.x + this.side, this.y + 1.6, CREAM, 0.9, 0.8);
-  }
-
   step(G, dt) {
     this.px = this.x; this.py = this.y;
     if (this.cd > 0) this.cd -= dt;
@@ -899,6 +902,8 @@ class Dude {
       return;
     }
     if (!this.alive) return this.deadStep(G, dt);
+    this.tgt = this.item && ITEM[this.item].dmg ? this.nearest(G) : null;
+    if (this.tgt && this.grounded && !this.holdDir && this.crouch <= 0 && !this.zip) this.facing = this.tgt.x < this.x ? -1 : 1;   // (standing still, you turn to face them)
     if (this.zipCool > 0) this.zipCool -= dt;
     if (this.zip) this.zipStep(G, dt); else if (this.grounded) this.groundStep(G, dt); else this.airStep(G, dt);
     if (this.x < G.M.x0) { this.x = G.M.x0; this.vx = Math.abs(this.vx) * 0.2; }
@@ -910,7 +915,7 @@ class Dude {
     const s = this.ground;
     if (s && s.dude) {
       const o = s.dude, h = o.head();
-      if (!o.alive || o.gone || o.down > 0 || Math.abs(this.x - h.x) > 0.5 || o.y + Math.cos(o.a) * BH < this.y - 0.6) return this.fall();
+      if (!o.alive || o.gone || Math.abs(this.x - h.x) > 0.5 || o.y + Math.cos(o.a) * BH < this.y - 0.6) return this.fall();
       this.x += o.x - o.px; this.y = o.y + Math.cos(o.a) * BH * 0.98;
     } else if (s) {
       this.x += s.dx || 0; if (s.belt) this.x += s.belt * dt; this.y = topAt(s, this.x);
@@ -922,29 +927,17 @@ class Dude {
     }
     if (s && !s.dude && !inX(s, this.x, 0.18)) return this.fall();
     let tgt = 0, w = UP_W, z = UP_Z;
-    if (this.down > 0) {
-      this.down -= dt; tgt = this.side * 1.5; w = 9; z = 0.9;
-      if (this.down <= 0) this.getup = GETUP_T;
-    } else if (this.getup > 0) {
-      this.getup -= dt; w = 6.5; z = 0.75;
-    } else if (this.crouch > 0) {
+    if (this.crouch > 0) {
       this.crouch -= dt; this.squash = 0.6; tgt = this.a; z = 1;   // (the crouch keeps whatever lean you had)
       if (this.crouch <= 0) { this.launch(G); return; }
     } else if (this.holdDir && G.state !== 'away' || this.holdDir && G.state === 'away') {
       // holding leans you further, never back up: a lean you landed with is braced, not undone (that's how you speed-jump)
       this.holdT += dt; const ramp = Math.min(LEAN_MAX, LEAN_RATE * this.holdT * this.sens), cur = this.a * this.holdDir;
       tgt = this.holdDir * (cur > ramp ? Math.min(cur, BRACE_MAX) : ramp); w = LEAN_W; z = LEAN_Z;
-      if (cur > BRACE_MAX) this.av += TOPPLE_G * Math.sin(this.a) * dt;
-    } else if (Math.abs(this.a) > TOPPLE_A) {   // leaning too far with nothing to brace: keel over
-      w = 1.2; z = 0.5; this.av += TOPPLE_G * Math.sin(this.a) * dt;
     }
     this.av += (-w * w * (this.a - tgt) - 2 * z * w * this.av) * dt; this.a += this.av * dt;
-    if (this.down <= 0 && this.getup <= 0 && Math.abs(this.a) > TUMBLE_A) this.tumble(G);
-    // the floor stops you at flat on your face/back: never tip through it
-    if (Math.abs(this.a) > FLAT_A) {   // (hitting the floor still tipping = a faceplant)
-      if (this.down <= 0 && this.getup <= 0 && this.alive) this.tumble(G);
-      this.a = Math.sign(this.a) * FLAT_A; if (this.av * this.a > 0) this.av *= -0.25;
-    }
+    // the floor stops you at flat on your face/back: never tip through it (the spring stands you back up)
+    if (Math.abs(this.a) > FLAT_A) { this.a = Math.sign(this.a) * FLAT_A; if (this.av * this.a > 0) this.av *= -0.25; }
     // standing still on solid ground at a checkpoint: that's where you come back if you fall
     if (s && !s.dude && !s.mv) { const cps = G.M.cps; for (let k = cps.length - 1; k >= 0; k--) if (this.x >= cps[k] - 0.5) { if (cps[k] > this.cp) this.cp = cps[k]; break; } }
   }
@@ -983,7 +976,7 @@ class Dude {
     if (fling) { this.vx *= 0.85; this.vy = Math.max(this.vy * 0.85, 0) + 1.2; } else { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); }
   }
   tryZip(G) {
-    if (this.zipCool > 0 || this.down > 0 || !G.zips) return false;
+    if (this.zipCool > 0 || !G.zips) return false;
     const h = this.head();
     for (const z of G.zips) {
       if (h.x < z.x0 || h.x > z.x1 - 1.5) continue;
@@ -1012,7 +1005,7 @@ class Dude {
         if (this.y >= was - 0.02 && ny <= st && st > bt) { best = s; bt = st; }
       }
       for (const o of G.P) {
-        if (o === this || !o.alive || o.gone || o.down > 0 || o.getup > 0) continue;
+        if (o === this || !o.alive || o.gone) continue;
         const h = o.head(), top = o.y + Math.cos(o.a) * BH * 0.98;
         if (Math.abs(this.x - h.x) < 0.34 && this.y >= top - 0.05 && ny <= top && top > bt) { best = { dude: o }; bt = top; }
       }
@@ -1037,12 +1030,11 @@ class Dude {
       G.sfx.boing(); G.dust(this.x, top, 5, 0.8); s.squish = 1; return;
     }
     this.y = top; this.grounded = true; this.ground = s;
-    this.av += this.vx * TIP_K * (this.down > 0 ? 0.2 : 1);
+    this.av += this.vx * TIP_K;
     this.vx = 0; this.vy = 0; this.squash = Math.min(1, impact / 11);
     if (s.dude) { s.dude.av += (Math.random() - 0.5) * 2; s.dude.squash = 0.6; if (Math.random() < 0.5) G.popup('HEADSTAND!', this.x, top + 2.3, CREAM, 0.8, 0.8); }
     G.sfx.thud(Math.min(1, impact / 9)); if (impact > 6) G.dust(this.x, top, 6, impact / 10);
     if (impact > 9 && this.human) G.addShake(Math.min(1.2, (impact - 9) * 0.25));   // a tiny jolt when you drop in from high up
-    if (this.down <= 0 && this.getup <= 0 && Math.abs(this.a) > TUMBLE_A) this.tumble(G);
   }
   // shot, stabbed or blown up: shoved by (kx, ky) m/s
   hit(G, from, dmg, kx, ky) {
@@ -1058,7 +1050,7 @@ class Dude {
   }
   die(G, how, kx = 0, ky = 0, from = null) {
     if (!this.alive) return;
-    this.zip = null; this.alive = false; this.how = how; this.deadT = RESPAWN_T; this.item = null; this.trig = false; this.holdDir = 0; this.crouch = 0; this.down = 0; this.getup = 0;
+    this.zip = null; this.alive = false; this.how = how; this.deadT = RESPAWN_T; this.item = null; this.trig = false; this.holdDir = 0; this.crouch = 0;
     this.grounded = false; this.ground = null; this.spin = (Math.sign(kx) || (Math.random() < 0.5 ? -1 : 1)) * rand(5, 9);
     if (how === 'shot') {
       this.vx += kx * 0.4; this.vy = Math.max(this.vy, 4 + ky * 0.3);
@@ -1089,7 +1081,7 @@ class Dude {
 
 // ---------------------------------------------------------------- a computer player
 // It plans each hop by trying every lean time and flying it forward through the level: it picks the one that gets
-// it furthest toward the getaway without dying (a too-long lean would faceplant it, so it mostly avoids those).
+// it furthest toward the getaway without dying (it also avoids landings on moving or edge-of-platform spots).
 class Bot {
   constructor(p, level) { this.p = p; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal; this.plan = null; this.wait = rand(0.3, 0.9); this.seen = 0; this.stuck = 0; this.lastBest = -1e9; this.aimT = 0; }
   // fly a hop of hold time H toward dir from where p stands now; returns where it lands
@@ -1137,7 +1129,7 @@ class Bot {
       if (r.dead) continue;
       let sc = r.goal ? 1000 : score(r.x, r.y);
       if (!r.goal) {
-        if (r.th > 37 * D2R && !(r.s && r.s.bounce)) sc -= 3.5;   // it'd keel over on landing
+        if (r.th > 37 * D2R && !(r.s && r.s.bounce)) sc -= 2;   // a long hop is harder to land cleanly
         if (r.edge < 0.35) sc -= 1.2;
         if (r.s && r.s.mv) sc -= 0.3;
         sc -= r.t * 0.4;
@@ -1161,17 +1153,20 @@ class Bot {
     if (!p.item || !p.canAct || G.state !== 'run' || p.cd > 0) return;
     const d = ITEM[p.item];
     if (d.id === 'medkit') { if (p.hp < 60) G.useItem(p); return; }
-    const foes = G.P.filter(o => o !== p && o.alive && !o.gone && o.imm <= 0);
+    // (bots only pick fights with racers ahead of them or right on their heels: turning round to snipe stragglers stalls the race)
+    const foes = G.P.filter(o => o !== p && o.alive && !o.gone && o.imm <= 0 && (o.x - p.x > -2 || Math.abs(o.x - p.x) < 5));
     if (d.id === 'swap') { if (G.P.some(o => o !== p && o.alive && !o.gone && o.x - p.x > 6)) G.useItem(p); return; }
     if (d.id === 'shield') { if (foes.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 14)) G.useItem(p); return; }
     const g = p.aimAng(), h = p.hand();
     let want = false;
+    if (p.tgt && !foes.includes(p.tgt)) return;   // (the gun's pointing at someone behind: hold fire)
     for (const o of foes) {
       const m = o.mid(), dx = m.x - h.x, dy = m.y - h.y, dist = Math.hypot(dx, dy);
       if (d.melee) { if (dist < d.range + 0.4 && dx * p.facing > -0.3) want = true; continue; }
       if (d.proj === 'bomb') { if (dist < 9 && dx * p.facing > 1) want = true; continue; }
-      const range = d.range || 30, off = Math.abs(wrap(Math.atan2(dy, dx) - g));
-      if (dist < range && off < L.cone + (d.splash ? 6 * D2R : 0) + (d.pellets ? 4 * D2R : 0)) want = true;
+      // bots pick fights on their own floor (or point blank): shooting up and down every level stalls the race
+      const range = Math.min(d.range || 30, d.id === 'sniper' ? 40 : 16), off = Math.abs(wrap(Math.atan2(dy, dx) - g));
+      if (dist < range && (Math.abs(dy) < 3.5 || dist < 5) && off < L.cone + (d.splash ? 6 * D2R : 0) + (d.pellets ? 4 * D2R : 0)) want = true;
     }
     if (want) { this.aimT += dt; if (this.aimT >= L.react) { G.useItem(p); p.trig = !!d.auto; this.aimT = d.auto ? this.aimT : 0; } }
     else this.aimT = 0;
@@ -1417,7 +1412,7 @@ class Game {
     if (!p.item || p.cd > 0 || !p.canAct || p.gone) return;
     const d = ITEM[p.item];
     p.cd = d.cd || 0.4;
-    const g = p.aimAng(), h = p.hand(), dx = Math.cos(g), dy = Math.sin(g);
+    const g = p.aimAng() + (p.bot && p.tgt ? gauss() * p.bot.L.err : 0), h = p.hand(), dx = Math.cos(g), dy = Math.sin(g);   // (bots wobble their aim a little, more on easy)
     if (d.id === 'medkit') { p.hp = 100; p.heal = 1; this.spark(p.mid().x, p.mid().y, '#ff7a7a', 10); this.sfx.grab(); }
     else if (d.id === 'shield') { p.shield = d.dur; this.sfx.spin(1); }
     else if (d.id === 'swap') {   // trade places with the closest racer ahead (or behind, if you're leading)
@@ -1440,9 +1435,9 @@ class Game {
       for (const o of this.P) {
         if (o === p || !o.alive || o.gone) continue;
         const m = o.mid(), ddx = m.x - h.x, ddy = m.y - h.y, dist = Math.hypot(ddx, ddy);
-        if (dist < d.range + 0.3 && ddx * p.facing > -0.4 && dist < bd) { best = o; bd = dist; }
+        if (dist < d.range + 0.3 && dist < bd) { best = o; bd = dist; }
       }
-      if (best && best.hit(this, p, d.dmg, p.facing * d.kb, 2.5)) { this.sfx.smash(); this.spark(best.mid().x, best.mid().y, '#ff4a4a', 8); this.addShake(1.2); }
+      if (best && best.hit(this, p, d.dmg, (Math.sign(best.x - p.x) || p.facing) * d.kb, 2.5)) { this.sfx.smash(); this.spark(best.mid().x, best.mid().y, '#ff4a4a', 8); this.addShake(1.2); }
     } else if (d.proj) {
       const sp = d.proj === 'rocket' ? 20 : 9.5;
       this.proj.push({ kind: d.proj, x: h.x + dx * 0.3, y: h.y + dy * 0.3, vx: dx * sp + (d.proj === 'bomb' ? p.vx * 0.5 : 0), vy: dy * sp + (d.proj === 'bomb' ? 4 : 0),
@@ -2231,7 +2226,7 @@ function drawDude(G, p) {
   const lag = clamp(-p.av * 0.05, -0.45, 0.45) + (p.hurt > 0 ? Math.sin(t * 30) * 0.2 : 0);
   drawSpr(F(sp.head), 0, -(HEAD_C - HIP_H) * PPM, lag, flip);
   if (!p.alive) { rr(-4 * d - 1, -(HEAD_C - HIP_H) * PPM - 2, 2, 2, INK); rr(-1 * d - 1, -(HEAD_C - HIP_H) * PPM - 2, 2, 2, INK); }   // x_x
-  if (p.hurt > 0.05 || p.down > 0) { for (let i = 0; i < 3; i++) { const a = t * 6 + i * 2.1; rr(Math.cos(a) * 6 - 0.5, -(BODY_H - HIP_H) * PPM - 3 + Math.sin(a) * 2, 1.5, 1.5, '#ffe34a'); } }
+  if (p.hurt > 0.05) { for (let i = 0; i < 3; i++) { const a = t * 6 + i * 2.1; rr(Math.cos(a) * 6 - 0.5, -(BODY_H - HIP_H) * PPM - 3 + Math.sin(a) * 2, 1.5, 1.5, '#ffe34a'); } }
   ctx.restore();
   // the front arm: holding your item out in front, or flopping like the other one
   if (p.zip) {   // both hands up on the trolley
@@ -2493,7 +2488,7 @@ const HELP = [
   ['HOLD A LEAN KEY: YOU TIP OVER THAT WAY.', '#ffd23a'],
   ['LET GO: YOU HOP THE WAY YOU ARE LEANING.', '#ffd23a'],
   ['QUICK TAP = LITTLE HOP. LONG HOLD = BIG HOP.', '#ffd23a'],
-  ['HOLD TOO LONG AND YOU FALL ON YOUR FACE.', '#ff8a7a'],
+  ['YOUR GUN AIMS ITSELF AT WHOEVER IS CLOSEST.', '#ff8a7a'],
   ['', ''],
   ['P1: W / E LEAN   R ITEM', '#ff8a8f'],
   ['P2: I / O LEAN   P ITEM', '#8ab8ff'],
