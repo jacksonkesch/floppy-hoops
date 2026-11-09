@@ -1044,6 +1044,7 @@ class Dude {
     if (!this.alive) return;
     this.zip = null; this.alive = false; this.how = how; this.deadT = RESPAWN_T; this.item = null; this.trig = false; this.holdDir = 0; this.crouch = 0;
     this.grounded = false; this.ground = null; this.spin = (Math.sign(kx) || (Math.random() < 0.5 ? -1 : 1)) * rand(5, 9);
+    G.hypeT = 1.6; G.hypeX = this.x; G.hypeAll = false;
     if (how === 'shot') {
       this.vx += kx * 0.4; this.vy = Math.max(this.vy, 4 + ky * 0.3);
       G.stopT = Math.max(G.stopT, 0.08); G.sfx.crash(); G.addShake(2); G.popup(from && from !== this ? `${from.C.name} K.O. ${this.C.name}` : 'K.O.!', this.x, this.y + 2.6, from ? from.C.col : CREAM, 1.2, 1.0);
@@ -1300,6 +1301,7 @@ class Game {
     for (const t of this.tracers) t.t -= sdt;
     this.tracers = this.tracers.filter(t => t.t > 0);
     for (const q of this.parts) { q.t -= sdt; q.vy -= (q.g ?? 9) * sdt; q.x += q.vx * sdt; q.y += q.vy * sdt; }
+    if (this.hypeT > 0) this.hypeT -= dt;
     this.parts = this.parts.filter(q => q.t > 0);
     for (const q of this.pops) { q.t -= dt; q.y += dt * 0.8; }
     this.pops = this.pops.filter(q => q.t > 0);
@@ -1358,6 +1360,7 @@ class Game {
   // the ride leaves with everyone who made it
   leave() {
     this.winners = this.boarded.slice(); this.state = 'away'; this.stateT = 0; this.rideT = 0;
+    this.hypeT = 3; this.hypeAll = true;
     for (const q of this.P) { q.trig = false; if (q.bot) q.bot.plan = null; }
     if (this.mode === 'tt' || this.champion()) this.slowT = SLOWMO_T;
     this.sfx.thud(1.4);
@@ -1759,10 +1762,11 @@ const SKIN = ['#d9b89a', '#c49a78', '#a47b5c', '#7d5a42'], HAIRC = ['#231812', '
 function person(x, y, k, t, pal, o = {}) {
   const r = i => hsh(k * 7.31 + i * 1.7), sc = o.sc || 1, ol = o.ol && sc > 1;
   const shirt = o.shirt || pal[(r(1) * pal.length) | 0], skin = SKIN[(r(2) * 4) | 0], hair = HAIRC[(r(3) * 6) | 0], pants = PANTS[(r(5) * 4) | 0];
-  const bob = Math.sin(t * (1.4 + r(4)) + k) > 0.65 ? 1 : 0, Y = y - bob;
+  const bob = o.hype ? (Math.sin(t * 9 + k * 2.3) > 0 ? 2 : 0) : (Math.sin(t * (1.4 + r(4)) + k) > 0.65 ? 1 : 0), Y = y - bob;
   const R = (px, py, w, h, c) => rr(x + px * sc, Y + py * sc, w * sc, h * sc, c);
   const O = (px, py, w, h) => ol && rr(x + px * sc - 1, Y + py * sc - 1, w * sc + 2, h * sc + 2, INK);
-  const cap = r(6) > 0.72, suit = o.suit, wave = o.prop === 'wave' || (o.prop === 'cheer' && bob), arm = Math.sin(t * 4 + k) > 0 ? 1 : 0;
+  const cap = r(6) > 0.72, suit = o.suit, wave = o.hype || o.prop === 'wave' || (o.prop === 'cheer' && bob), arm = o.hype ? 2 : (Math.sin(t * 4 + k) > 0 ? 1 : 0);
+  if (o.hype) { if (ol) O(-1, -11 - arm, 1, 5); R(-1, -11 - arm, 1, 5, skin); }
   // outline silhouette first, then the colours on top
   if (ol) { O(1, -3, 1, 3); O(3, -3, 1, 3); O(0, -8, 5, 5); suit ? O(0, -12, 5, 4) : O(1, -11, 3, 4); if (wave) O(5, -11 - arm, 1, 5); if (o.prop === 'phone') O(5, -10, 1, 3); }
   R(1, -3, 1, 3, pants); R(3, -3, 1, 3, pants); R(1, -1, 1, 1, INK); R(3, -1, 1, 1, INK);
@@ -1815,7 +1819,11 @@ function buildCrowd(G) {
 function drawCrowd(G) {
   if (G.crowdId !== G.M.id) { G.folks = buildCrowd(G); G.crowdId = G.M.id; }
   const pal = CROWD_PAL[G.M.theme]; if (!pal) return;
-  for (const q of G.folks) { const x = AX(q.x); if (x < -HW - 20 || x > HW + 20) continue; person(Math.round(x) - 5, Math.round(AY(q.y)), q.k, G.t, pal, { sc: 2, ol: true, prop: q.prop, suit: q.suit, shirt: q.shirt }); }
+  const hype = G.hypeT > 0;
+  for (const q of G.folks) {
+    const x = AX(q.x); if (x < -HW - 20 || x > HW + 20) continue;
+    person(Math.round(x) - 5, Math.round(AY(q.y)), q.k, G.t, pal, { sc: 2, ol: true, prop: q.prop, suit: q.suit, shirt: q.shirt, hype: hype && (G.hypeAll || Math.abs(q.x - G.hypeX) < 9) });
+  }
 }
 // soft blobs under the racers so they sit on the floor instead of floating over it
 function drawShadows(G) {
@@ -2312,6 +2320,13 @@ function dressSolid(G, s, bot) {
   const { x0, x1, top } = s, t = G.t, w = x1 - x0, M = G.M;
   switch (s.style) {
     case 'street': {
+      if (M.theme === 'alley') {   // rain-slick: everything above glints back off the asphalt
+        wb(x0, top - 1.6, x1, top, 'rgba(14,12,24,0.35)');
+        const NE = ['#ff4fa0', '#4fe0ff', '#ffe04f', '#7fff6a', '#ffcf7a'];
+        for (let x = Math.ceil(x0 / 1.5) * 1.5; x < x1; x += 1.5) { const r = hsh(x * 1.3 + 9); if (r < 0.45) continue; const c = NE[((r * 37) | 0) % 5]; ctx.fillStyle = c + '22'; ctx.fillRect(Math.round(AX(x)), Math.round(AY(top)), 3, Math.round(6 + r * 14)); ctx.fillStyle = c + '44'; ctx.fillRect(Math.round(AX(x)) + 1, Math.round(AY(top)), 1, Math.round(3 + r * 8)); }
+        for (const c of G.S) if (c.style === 'car' && c.bot === top && c.x1 > x0 && c.x0 < x1) { ctx.fillStyle = (c.col || '#888') + '33'; ctx.fillRect(Math.round(AX(c.x0)), Math.round(AY(top)), Math.round((c.x1 - c.x0) * PPM), Math.round(1.0 * PPM)); }
+        drawMirror(G, top, 0.22, () => ctx.rect(Math.round(AX(x0)), Math.round(AY(top)), Math.round(w * PPM), Math.round((top - bot) * PPM)));
+      }
       for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) { const r = hsh(x * 2.1 + 3); if (r > 0.72) wb(x, top - 0.5 - r * 1.6, x + 0.12, top - 0.44 - r * 1.6, r > 0.9 ? '#4a4856' : '#1e1c28'); }
       for (let x = Math.ceil((x0 - 5) / 11) * 11 + 5; x < x1 - 1; x += 11) { ctx.fillStyle = '#1a1822'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.04), 0.55 * PPM, 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4a4856'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.04), 0.4 * PPM, 1.2, 0, 0, 7); ctx.fill(); }
       outlineBox(x0, bot, x1, top); break;
@@ -2390,6 +2405,7 @@ function drawWater(G) {
   const g = ctx.createLinearGradient(0, y, 0, y + 70);
   g.addColorStop(0, meadow ? 'rgba(80,170,230,0.84)' : 'rgba(40,135,210,0.84)'); g.addColorStop(1, meadow ? 'rgba(20,80,150,0.94)' : 'rgba(10,50,110,0.94)');
   ctx.fillStyle = g; ctx.fillRect(-HW - 2, y, HW * 2 + 4, HH * 2 + 4);
+  drawMirror(G, M.water, 0.32, () => ctx.rect(-HW - 2, y, HW * 2 + 4, HH - y + 2));   // racers mirrored on the surface
   ctx.fillStyle = 'rgba(225,246,255,0.9)'; ctx.fillRect(-HW - 2, y, HW * 2 + 4, 1);
   const sc = CAMX * PPM;
   for (let r = 0; r < 4; r++) {   // glints drifting at different speeds, fainter with depth
@@ -2500,6 +2516,14 @@ function drawGoalMark(G) {
 }
 
 // ---- the floppy guys
+let MIRROR = false;
+// the racers upside down under a reflective surface: yw is the surface height, clip() sets the view-space region it covers
+function drawMirror(G, yw, alpha, clip) {
+  ctx.save(); ctx.beginPath(); clip(); ctx.clip();
+  ctx.translate(0, 2 * Math.round(AY(yw))); ctx.scale(1, -1); ctx.globalAlpha = alpha; MIRROR = true;
+  for (const p of G.P) if (p.alive && !p.chute && p.y >= yw - 0.3 && p.y - yw < 7) drawDude(G, p);
+  MIRROR = false; ctx.restore();
+}
 function drawDude(G, p) {
   if (p.gone) return;
   if (!p.alive && p.y < G.M.killY - 3) return;
@@ -2507,7 +2531,7 @@ function drawDude(G, p) {
   const blink = p.imm > 0 && p.alive && Math.floor(t * 12) % 2;
   ctx.save(); if (blink) ctx.globalAlpha = 0.45;
   // a shadow on whatever's under you
-  if (p.alive) { const s = p.grounded && p.ground && !p.ground.dude ? p.ground : G.floorAt(p.x); if (s && p.y >= s.top - 0.05) { const h = p.y - s.top, k = clamp(1 - h / 5, 0.3, 1); ctx.fillStyle = `rgba(0,0,0,${0.28 * k})`; ctx.fillRect(Math.round(fx - 6 * k), Math.round(AY(s.top) - 1), Math.round(12 * k), 2); } }
+  if (p.alive && !MIRROR) { const s = p.grounded && p.ground && !p.ground.dude ? p.ground : G.floorAt(p.x); if (s && p.y >= s.top - 0.05) { const h = p.y - s.top, k = clamp(1 - h / 5, 0.3, 1); ctx.fillStyle = `rgba(0,0,0,${0.28 * k})`; ctx.fillRect(Math.round(fx - 6 * k), Math.round(AY(s.top) - 1), Math.round(12 * k), 2); } }
   if (p.chute) {   // a parachute
     const cx = AX(p.x), cy = AY(p.y + BH + 1.8), k = p.chute;
     ctx.fillStyle = '#e8423a'; ctx.beginPath(); ctx.ellipse(cx, cy, 30 * k, 14 * k, 0, Math.PI, 0); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke();
@@ -2561,7 +2585,7 @@ function drawDude(G, p) {
   if (p.heal > 0) for (let i = 0; i < 3; i++) { const y = AY(p.y + 1 + (1 - p.heal) * 2 + i * 0.5), x = AX(p.x + (i - 1) * 0.5); rr(x - 1, y - 3, 2, 6, '#ff5a5f'); rr(x - 3, y - 1, 6, 2, '#ff5a5f'); }
   ctx.restore();
   // who's who: a colored tag over every head
-  if (p.alive && !p.chute) {
+  if (p.alive && !p.chute && !MIRROR) {
     const h = p.head(), x = AX(h.x), y = AY(h.y) - 13;
     const tag = p.human ? (G.mode === '2p' ? `P${p.i + 1}` : 'YOU') : '';
     ctx.fillStyle = p.C.col; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.lineTo(x, y + 3); ctx.fill();
@@ -2655,7 +2679,56 @@ function drawView(G, cam, vp, zoom) {
   drawWater(G);
   for (const s of G.S) if (s.ceil) drawSolid(G, s);
   drawFx(G);
+  drawFore(G);
   ctx.restore();
+}
+// the near layer in front of the action (a parallax factor over 1 so it slides past faster), plus the air: pollen,
+// steam, blown paper, dust in the light, and a soft vignette so the picture has edges
+const FORE_INK = 'rgba(16,14,26,0.88)';
+const VIG = { c: null, w: 0, h: 0 };
+function drawFore(G) {
+  const th = G.M.theme, t = G.t, B = HH + 1;
+  if (th === 'meadow') {   // a bank of tall grass and flowers right in front
+    par(1.3, 9, (k, x) => { const h = 5 + hsh(k) * 9, X = Math.round(x), sw = Math.round(Math.sin(t * 1.6 + k) * 1.5); ctx.fillStyle = hsh(k + 2) > 0.5 ? '#2f7a30' : '#3a8f38'; ctx.beginPath(); ctx.moveTo(X, B); ctx.lineTo(X + 2, B); ctx.lineTo(X + 1 + sw, B - h); ctx.fill(); if (hsh(k + 4) > 0.8) rr(X + sw, B - h - 2, 3, 3, hsh(k + 6) > 0.5 ? '#ff7aa8' : '#ffe34a'); });
+    for (let i = 0; i < 7; i++) {   // dandelion seeds and a couple of butterflies
+      const u = ((t * (6 + i * 1.3) + i * 97) % (HW * 2 + 40)), x = Math.round(-HW - 20 + u), y = Math.round(-HH + 30 + hsh(i * 3) * (HH * 1.4) + Math.sin(t * 1.1 + i) * 6);
+      if (i < 5) { rr(x, y, 1, 1, 'rgba(255,255,255,0.8)'); rr(x - 1, y - 1, 3, 1, 'rgba(255,255,255,0.35)'); rr(x, y - 2, 1, 1, 'rgba(255,255,255,0.35)'); }
+      else { const f = Math.sin(t * 14 + i) > 0 ? 1 : 2, c = i === 5 ? '#ffa030' : '#80c0ff'; rr(x - f, y, f, 2, c); rr(x + 1, y, f, 2, c); rr(x, y, 1, 2, INK); }
+    }
+  } else if (th === 'harbor') {   // mooring posts and rope loops, a little spray
+    par(1.35, 230, (k, x) => { const X = Math.round(x); rr(X, B - 30, 7, 30, FORE_INK); rr(X - 1, B - 32, 9, 3, FORE_INK); ctx.strokeStyle = FORE_INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X + 7, B - 24); ctx.quadraticCurveTo(X + 40, B - 4, X + 70, B - 28); ctx.stroke(); });
+  } else if (th === 'alley') {   // bollards, a hydrant, a leaning bike; steam curling out of the manholes
+    par(1.3, 170, (k, x) => { const X = Math.round(x), v = hsh(k + 1); if (v < 0.4) { rr(X, B - 16, 5, 16, FORE_INK); rr(X - 1, B - 18, 7, 3, FORE_INK); } else if (v < 0.7) { rr(X, B - 22, 7, 22, FORE_INK); rr(X - 3, B - 15, 13, 3, FORE_INK); rr(X + 1, B - 25, 5, 3, FORE_INK); } else { ctx.strokeStyle = FORE_INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X, B - 7, 7, 0, 7); ctx.moveTo(X + 20, B); ctx.arc(X + 20, B - 7, 7, 0, 7); ctx.moveTo(X, B - 7); ctx.lineTo(X + 8, B - 20); ctx.lineTo(X + 20, B - 7); ctx.stroke(); } });
+    for (let x = Math.ceil((CAMX - HW / PPM - 5) / 11) * 11 + 5; x < CAMX + HW / PPM + 5; x += 11) {
+      const f = G.floorAt(x); if (!f || f.style !== 'street') continue;
+      for (let i = 0; i < 3; i++) { const u = ((t * 0.35 + i / 3 + hsh(x)) % 1), r = 3 + u * 7; ctx.fillStyle = `rgba(200,200,220,${(0.16 * (1 - u)).toFixed(2)})`; ctx.beginPath(); ctx.arc(AX(x) + Math.sin(t + i * 2 + x) * 4 * u, AY(f.top) - 4 - u * 26, r, 0, 7); ctx.fill(); }
+    }
+  } else if (th === 'rail') {   // fence posts whipping past, dust streaks
+    par(1.5, 70, (k, x) => { const X = Math.round(x); rr(X, B - 14, 3, 14, 'rgba(50,30,20,0.85)'); ctx.strokeStyle = 'rgba(50,30,20,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X + 3, B - 11); ctx.lineTo(X + 70, B - 9); ctx.moveTo(X + 3, B - 6); ctx.lineTo(X + 70, B - 4); ctx.stroke(); });
+    for (let i = 0; i < 6; i++) { const u = (t * (90 + i * 20) + i * 131) % (HW * 2 + 60), x = Math.round(HW + 30 - u), y = Math.round(-HH + 40 + hsh(i * 5) * HH * 1.3); rr(x, y, 10 + i * 3, 1, 'rgba(255,225,170,0.35)'); }
+  } else if (th === 'spire') {   // wind-blown paper
+    for (let i = 0; i < 4; i++) { const u = (t * (26 + i * 7) + i * 173) % (HW * 2 + 60), x = Math.round(HW + 30 - u), y = Math.round(-HH + 20 + hsh(i * 7) * HH * 1.5 + Math.sin(t * 3 + i) * 8), f = Math.round(Math.sin(t * 6 + i) * 2); rr(x, y, 3 + f, 2, '#f4f1ea'); }
+    shafts(G, 0.05);
+  } else if (th === 'airport') { shafts(G, 0.07); motes(G, 12); }
+  else if (th === 'plane') {   // wind tearing past the open ramp
+    for (let i = 0; i < 8; i++) { const u = (t * (160 + i * 30) + i * 97) % 90, x = AX(40 - u / PPM * 1.3), y = Math.round(-HH + 10 + hsh(i * 3) * HH * 1.8); if (x > AX(22)) rr(x, y, 12 + i * 2, 1, `rgba(255,255,255,${(0.5 - u / 200).toFixed(2)})`); }
+  } else if (th === 'moon') {   // boulders in front, a satellite crossing
+    par(1.3, 210, (k, x) => { const X = Math.round(x), w = 14 + hsh(k) * 16, h = 8 + hsh(k + 1) * 8; ctx.fillStyle = 'rgba(22,20,32,0.9)'; ctx.beginPath(); ctx.ellipse(X, B, w, h, 0, Math.PI, 0); ctx.fill(); });
+    const u = (t * 4) % (HW * 2 + 80), sx = Math.round(-HW - 40 + u), sy = Math.round(-HH + 14 + Math.sin(u * 0.01) * 6); rr(sx - 4, sy, 3, 2, '#3a6ab0'); rr(sx + 2, sy, 3, 2, '#3a6ab0'); rr(sx - 1, sy, 3, 2, '#c8c8d0'); if (Math.floor(t * 2) % 2) rr(sx, sy - 1, 1, 1, '#ff6a6a');
+  }
+  // vignette
+  if (!VIG.c || VIG.w !== HW || VIG.h !== HH) {   // the vignette is baked once per viewport size
+    const c = VIG.c || (VIG.c = document.createElement('canvas')), w = Math.ceil(HW * 2 + 4), h = Math.ceil(HH * 2 + 4); c.width = w; c.height = h; VIG.w = HW; VIG.h = HH;
+    const g = c.getContext('2d'), vg = g.createRadialGradient(w / 2, h / 2, HH * 0.9, w / 2, h / 2, HW * 1.15); vg.addColorStop(0, 'rgba(8,6,16,0)'); vg.addColorStop(1, 'rgba(8,6,16,0.28)'); g.fillStyle = vg; g.fillRect(0, 0, w, h);
+  }
+  ctx.drawImage(VIG.c, -HW - 2, -HH - 2);
+}
+function shafts(G, a) {   // slanted light coming in through the glass
+  ctx.fillStyle = `rgba(255,250,230,${a})`; const sc = -(CAMX * PPM * 0.6) % 150;
+  for (let x = -HW - 150 + sc; x < HW + 150; x += 150) { ctx.beginPath(); ctx.moveTo(x, -HH - 2); ctx.lineTo(x + 34, -HH - 2); ctx.lineTo(x - 26, HH + 2); ctx.lineTo(x - 60, HH + 2); ctx.fill(); }
+}
+function motes(G, n) {   // dust drifting in the light
+  for (let i = 0; i < n; i++) { const x = Math.round(-HW + ((hsh(i * 3) * HW * 2 + G.t * (3 + i) - CAMX * PPM * 0.6) % (HW * 2) + HW * 2) % (HW * 2)), y = Math.round(-HH + hsh(i * 5) * HH * 2 + Math.sin(G.t * 0.8 + i) * 4); rr(x, y, 1, 1, `rgba(255,255,255,${(0.25 + 0.25 * Math.sin(G.t * 2 + i * 1.3)).toFixed(2)})`); }
 }
 
 
