@@ -513,7 +513,7 @@ class Sfx {
   board(i) { this.tone('sine', 130, 70, 0.15, 0.45 * i); this.hiss(0.09, 0.2 * i, 'lowpass', 1100); }
   thud(i) { this.tone('sine', 110, 60, 0.08, 0.25 * i); }
   swish() { this.hiss(0.32, 0.4, 'bandpass', 2600, 7000, 0.9); }
-  jump() { this.tone('square', 210, 330, 0.06, 0.03); }
+  jump(k = 0.4) { this.tone('square', 190 + 90 * k, 300 + 160 * k, 0.06, 0.03); this.hiss(0.1 + 0.12 * k, 0.05 + 0.1 * k, 'bandpass', 900 + 1400 * k, 2200 + 2600 * k, 1.2); }   // the hop whoosh, higher and longer the further you lean
   boing() { this.tone('sine', 160, 540, 0.2, 0.22); this.tone('triangle', 80, 270, 0.2, 0.12); }
   grab() { this.tone('triangle', 660, 880, 0.05, 0.1); }
   steal() { this.tone('square', 880, 440, 0.12, 0.06); }
@@ -647,7 +647,7 @@ const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.0, TIP_K = 0.
 // past TOPPLE_A the upright spring lets go and you slowly keel over (tap a key before you hit the floor to hop out of it)
 const TOPPLE_A = 46 * D2R, TOPPLE_G = 14, BRACE_MAX = 75 * D2R;   // (holding a key braces a lean up to BRACE_MAX)
 const TUMBLE_A = 100 * D2R, DOWN_T = 0.55, GETUP_T = 0.5, RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
-const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3;
+const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3, KILL_SLOW_T = 0.4;
 
 TEAM.GREEN = { jersey: '#2fa84f', dark: '#1a6431', light: '#7fe39a', num: '#ffffff', dir: 1 };
 TEAM.GOLD = { jersey: '#e8b322', dark: '#9a6f10', light: '#ffe27a', num: '#141019', dir: 1 };
@@ -660,9 +660,9 @@ const CREW = [
 const ITEMS = [
   { id: 'pistol', name: 'PISTOL', ammo: 4, dmg: 40, kb: 3.5, cd: 0.3, range: 24, w: 3 },
   { id: 'smg', name: 'SMG', ammo: 28, dmg: 15, kb: 1.4, cd: 0.075, range: 18, spread: 4, auto: true, w: 2 },
-  { id: 'shotgun', name: 'SHOTGUN', ammo: 3, dmg: 100, kb: 12, cd: 0.6, range: 10, pellets: 6, spread: 9, w: 2 },
-  { id: 'sniper', name: 'SNIPER', ammo: 2, dmg: 100, kb: 16, cd: 0.9, range: 70, pierce: true, w: 1.5 },
-  { id: 'knife', name: 'KNIFE', ammo: 2, dmg: 50, kb: 7, cd: 0.35, range: 1.6, melee: true, w: 2 },
+  { id: 'shotgun', name: 'SHOTGUN', ammo: 3, dmg: 100, kb: 12, cd: 0.8, range: 10, pellets: 6, spread: 9, w: 2 },
+  { id: 'sniper', name: 'SNIPER', ammo: 2, dmg: 100, kb: 16, cd: 1.0, range: 70, pierce: true, w: 1.5 },
+  { id: 'knife', name: 'KNIFE', ammo: 2, dmg: 50, kb: 7, cd: 0.4, range: 1.6, melee: true, w: 2 },
   { id: 'rocket', name: 'ROCKET', ammo: 1, dmg: 100, kb: 18, cd: 0.5, splash: 3.6, proj: 'rocket', w: 1.5 },
   { id: 'bomb', name: 'BOMB', ammo: 1, dmg: 100, kb: 15, cd: 0.4, splash: 3.2, proj: 'bomb', w: 1.5 },
   { id: 'shield', name: 'SHIELD', ammo: 1, dur: 5, w: 1.5 },
@@ -873,7 +873,7 @@ class Dude {
     this.vy = V * Math.cos(phi) + (s && s.vy > 0 ? s.vy : 0);
     this.airA = phi * AIR_PITCH; this.grounded = false; this.ground = null; this.y += 0.01;
     if (th > 3 * D2R) this.facing = this.launchDir;
-    this.squash = 0; G.sfx.jump(); G.dust(this.x, this.y, 4, 0.6);
+    this.squash = 0; G.sfx.jump(Math.min(1, Math.abs(phi) / PHI_MAX)); G.dust(this.x, this.y, 4, 0.6);
   }
   tumble(G) {
     this.side = Math.sign(this.a) || 1; this.down = DOWN_T; this.holdDir = 0; this.crouch = 0; this.flail = 1;
@@ -1041,6 +1041,7 @@ class Dude {
     this.vx = 0; this.vy = 0; this.squash = Math.min(1, impact / 11);
     if (s.dude) { s.dude.av += (Math.random() - 0.5) * 2; s.dude.squash = 0.6; if (Math.random() < 0.5) G.popup('HEADSTAND!', this.x, top + 2.3, CREAM, 0.8, 0.8); }
     G.sfx.thud(Math.min(1, impact / 9)); if (impact > 6) G.dust(this.x, top, 6, impact / 10);
+    if (impact > 9 && this.human) G.addShake(Math.min(1.2, (impact - 9) * 0.25));   // a tiny jolt when you drop in from high up
     if (this.down <= 0 && this.getup <= 0 && Math.abs(this.a) > TUMBLE_A) this.tumble(G);
   }
   // shot, stabbed or blown up: shoved by (kx, ky) m/s
@@ -1517,8 +1518,10 @@ class Game {
       if (!o.alive || o.gone) continue;
       const m = o.mid(), dx = m.x - x, dy = m.y - y + 0.4, dist = Math.hypot(dx, dy);
       if (dist > d.splash) continue;
-      const f = 1 - dist / d.splash, n = Math.max(0.3, dist);
+      const f = 1 - dist / d.splash, n = Math.max(0.3, dist), was = o.alive;
       o.hit(this, owner, d.dmg * Math.min(1, f * 1.4), dx / n * d.kb * f, Math.max(dy / n, 0.4) * d.kb * f * 0.8);
+      // blown up by a rocket or bomb: a beat of slow motion so the ragdoll reads (like the original)
+      if (was && !o.alive && d.proj && this.state === 'run') this.slowT = Math.max(this.slowT, KILL_SLOW_T);
     }
   }
   // ---- props that shoot back or blow up
@@ -1692,6 +1695,12 @@ function itemSprite(id) {
   const [w, h, f] = D, [c, g] = mk(w, h);
   f((x, y, ww, hh, col) => { g.fillStyle = col; g.fillRect(x, y, ww, hh); });
   return (ITEM_SPR[id] = { c: outline(c), ox: id === 'bomb' || id === 'shield' || id === 'medkit' || id === 'swap' ? Math.floor(w / 2) + 1 : 2, oy: Math.floor(h / 2) + 1 });
+}
+const FLASH_SPR = new WeakMap();
+function flashSpr(s) {   // a solid cream copy of a sprite, for the brief white flash when you're hit
+  let f = FLASH_SPR.get(s);
+  if (!f) { const c = document.createElement('canvas'); c.width = s.c.width; c.height = s.c.height; const x = c.getContext('2d'); x.drawImage(s.c, 0, 0); x.globalCompositeOperation = 'source-in'; x.fillStyle = '#fff6e0'; x.fillRect(0, 0, c.width, c.height); f = { c, ox: s.ox, oy: s.oy }; FLASH_SPR.set(s, f); }
+  return f;
 }
 function drawSpr(s, x, y, a = 0, flipX = false, flipY = false, sx = 1, sy = 1) {
   ctx.save(); ctx.translate(x, y); if (a) ctx.rotate(a); if (sx !== 1 || sy !== 1) ctx.scale(sx, sy); if (flipX || flipY) ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
@@ -2214,12 +2223,13 @@ function drawDude(G, p) {
   const sq = p.squash * 0.14; if (sq) ctx.scale(1 + sq, 1 - sq);
   const hip = HIP_H * PPM;
   const splay = air ? 0.3 + fl * 0.4 * Math.sin(t * 22) : (p.crouch > 0 ? 0.25 : fl * 0.25 * Math.sin(t * 20));
-  drawSpr(sp.legB, -d, -hip, -d * splay, flip); drawSpr(sp.leg, d, -hip, d * splay * 0.8, flip);
+  const F = p.alive && p.hurt > 0.52 ? flashSpr : (q => q);   // just hit: the whole body flashes white for a few frames
+  drawSpr(F(sp.legB), -d, -hip, -d * splay, flip); drawSpr(F(sp.leg), d, -hip, d * splay * 0.8, flip);
   ctx.translate(0, -hip);
   if (p.pack && !p.chute) { const bx = -d * 5; rr(bx - 3, -BODY.torsoH * PPM + 1, 6, BODY.torsoH * PPM - 2, INK); rr(bx - 2, -BODY.torsoH * PPM + 2, 4, BODY.torsoH * PPM - 4, '#3f6b3a'); rr(bx - 2, -BODY.torsoH * PPM / 2, 4, 1, '#2b4a28'); }   // the chute pack
-  drawSpr(sp.torso, 0, -BODY.torsoH * PPM / 2, 0, flip);
+  drawSpr(F(sp.torso), 0, -BODY.torsoH * PPM / 2, 0, flip);
   const lag = clamp(-p.av * 0.05, -0.45, 0.45) + (p.hurt > 0 ? Math.sin(t * 30) * 0.2 : 0);
-  drawSpr(sp.head, 0, -(HEAD_C - HIP_H) * PPM, lag, flip);
+  drawSpr(F(sp.head), 0, -(HEAD_C - HIP_H) * PPM, lag, flip);
   if (!p.alive) { rr(-4 * d - 1, -(HEAD_C - HIP_H) * PPM - 2, 2, 2, INK); rr(-1 * d - 1, -(HEAD_C - HIP_H) * PPM - 2, 2, 2, INK); }   // x_x
   if (p.hurt > 0.05 || p.down > 0) { for (let i = 0; i < 3; i++) { const a = t * 6 + i * 2.1; rr(Math.cos(a) * 6 - 0.5, -(BODY_H - HIP_H) * PPM - 3 + Math.sin(a) * 2, 1.5, 1.5, '#ffe34a'); } }
   ctx.restore();
@@ -2669,7 +2679,7 @@ function loop(now) {
   try {
     const rdt = Math.min(0.05, (now - last) / 1000); last = now; acc += rdt;
     let n = 0;
-    while (acc >= STEP && n < 5) { G.sel = G.sel || 0; if (G.state === 'over') G.overT += STEP; if (!G.paused && !G.menuOpen) G.step(STEP); acc -= STEP; n++; }
+    while (acc >= STEP && n < 5) { G.sel = G.sel || 0; if (G.state === 'over') G.overT += STEP; if (!G.paused && !G.menuOpen && !G.freeze) G.step(STEP); acc -= STEP; n++; }   // (G.freeze: the ?debug harnesses step the sim themselves)
     if (n === 5) acc = 0;
     render(G);
   } catch (err) {
