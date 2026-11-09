@@ -72,6 +72,7 @@
     <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button></div></div>
     <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button data-v="off">OFF</button><button data-v="on">ON</button></div></div>
     <div class="row"><span class="lbl">ITEMS</span><div class="seg" data-key="itemRate"><button data-v="0">NONE</button><button data-v="1">SOME</button><button data-v="2">LOTS</button></div></div>
+    <div class="row"><span class="lbl">TURN SPEED</span><div class="seg" data-key="turn"><button data-v="0.6">SLOW</button><button data-v="1">NORMAL</button><button data-v="1.4">FAST</button></div></div>
     <div class="modes-head"><span class="lbl">MIX</span></div>
     <p class="note">Every round picks a place from the ones switched on here, and item spots hand out what's switched on. Tap to switch things on or off.</p>
     <div class="group"><h3>PLACES</h3><div class="chips" data-pool="maps"></div></div>
@@ -497,14 +498,14 @@ class Sfx {
     if (!this.ok) return;
     const c = this.ctx, t = c.currentTime + when, o = c.createOscillator(), g = c.createGain();
     o.type = type; o.frequency.setValueAtTime(f0, t); if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol || 0), t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(out || this.master); o.start(t); o.stop(t + dur + 0.03);
   }
   hiss(dur, vol, type, f0, f1, q = 1, when = 0, out) {
     if (!this.ok) return;
     const c = this.ctx, t = c.currentTime + when, s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
     s.buffer = this.noise; f.type = type; f.Q.value = q; f.frequency.setValueAtTime(f0, t); if (f1) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol || 0), t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(f).connect(g).connect(out || this.master); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.03);
   }
   bounce(i) { this.tone('sine', 170, 52, 0.13, 0.55 * i); this.hiss(0.03, 0.12 * i, 'highpass', 2500); }
@@ -636,14 +637,16 @@ const HEAD_C = BODY.legLen + BODY.torsoH + NECK + BODY.headR, BODY_H = HEAD_C + 
 const BH = BODY_H;
 // the hop law (measured from the real thing): launch speed never changes, a longer lean only tips the hop flatter
 const HOP_V = 4.3 * BH, GRAV = 6 * BH, HOP_MAX = 52 * D2R, HOP_RATE = 140 * D2R, HOP_DEAD = 0.055, CROUCH_T = 0.085;
-const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.85, PHI_MAX = 80 * D2R;
+const LEAN_MAX = 62 * D2R, LEAN_RATE = 210 * D2R, LEAN_W = 7, LEAN_Z = 0.55, LEAN_CARRY = 0.8, PHI_MAX = 80 * D2R;
 // standing: a loose spring keeps you upright (it wobbles); in the air you pitch toward the hop; landing tips you over
 const PACK_G = 1.6, PACK_V = 0.75;   // a parachute pack is heavy: more gravity, weaker hops
 const ZIP_V = 4 * BH, ZIP_GRAB = 0.55;
 const FOE_RANGE = 15, FOE_DMG = 34, FOE_AIM = 0.55, FOE_STUN = 4;   // the moon worker: 3 hits KO, a half-second red warning line, knocked out for 4 s
 const CAP_BOOM = { dmg: 100, kb: 14, splash: 3.4 };   // zipline ride speed (4 body heights a second) and how close your hands must get
-const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.2, TIP_K = 1.4;
-const TUMBLE_A = 100 * D2R, DOWN_T = 1.1, GETUP_T = 0.6, RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
+const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.0, TIP_K = 0.3;
+// past TOPPLE_A the upright spring lets go and you slowly keel over (tap a key before you hit the floor to hop out of it)
+const TOPPLE_A = 46 * D2R, TOPPLE_G = 14, BRACE_MAX = 75 * D2R;   // (holding a key braces a lean up to BRACE_MAX)
+const TUMBLE_A = 100 * D2R, DOWN_T = 0.55, GETUP_T = 0.5, RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
 const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3;
 
 TEAM.GREEN = { jersey: '#2fa84f', dark: '#1a6431', light: '#7fe39a', num: '#ffffff', dir: 1 };
@@ -753,7 +756,7 @@ const POOLS = { maps: MAPS, items: ITEMS };
 
 // ---------------------------------------------------------------- settings
 const SETTINGS_KEY = 'floppy-getaway-settings-v1';
-const DEFAULTS = { target: 3, level: 'normal', memes: 'on', itemRate: 1, muted: 0,
+const DEFAULTS = { target: 3, level: 'normal', memes: 'on', itemRate: 1, turn: 1, muted: 0,
   pools: { maps: MAPS.map(m => m.id), items: ITEMS.map(w => w.id) } };
 // noise: how far off a bot's lean time is; settle: how wobbly it'll hop from; react: seconds to notice a shot
 const CPU_LEVELS = {
@@ -774,6 +777,7 @@ function loadSettings() {
   if (!CPU_LEVELS[out.level]) out.level = 'normal';
   out.memes = out.memes === 'off' ? 'off' : 'on';
   out.itemRate = [0, 1, 2].includes(+out.itemRate) ? +out.itemRate : 1;
+  out.turn = [0.6, 1, 1.4].includes(+out.turn) ? +out.turn : 1;   // how fast a held key leans you (the original's Turn Sensitivity)
   return out;
 }
 // time trial: best time and a ghost of that run, per map
@@ -785,6 +789,7 @@ function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringi
 const SET = loadSettings();
 const VOL = 0.8;
 const SPLIT_Z = 0.72;   // split-screen zoom: each half sees a bit more
+const AWAY_ZOOM = { rocket: 0.5, pod: 0.8, heli: 0.7, chopper: 0.7, jet: 0.72, van: 0.85, train: 0.85 };   // camera pull-back for the getaway shot
 const FLAT_A = 1.56;   // lying flat on the ground (rad)
 const DEPART_T = 2.4;   // once someone climbs in, the ride waits this long for anyone else (they all score)
 
@@ -819,7 +824,7 @@ const LEAN_AT = (() => {
   for (let i = 0; i <= 50; i++) {
     const H = i * 0.01; let a = 0, av = 0; const dt = 1 / 240;
     for (let t = 0; t < H; t += dt) { const tg = Math.min(LEAN_MAX, LEAN_RATE * t); av += (-LEAN_W * LEAN_W * (a - tg) - 2 * LEAN_Z * LEAN_W * av) * dt; a += av * dt; }
-    for (let t = 0; t < CROUCH_T; t += dt) { av += (-UP_W * UP_W * a - 2 * UP_Z * UP_W * av) * dt; a += av * dt; }
+    for (let t = 0; t < CROUCH_T; t += dt) { av += (-2 * 1 * UP_W * av) * dt; a += av * dt; }
     out.push(a);
   }
   return out;
@@ -840,6 +845,7 @@ class Dude {
       facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0 });
   }
   get canAct() { return this.alive && !this.gone && this.down <= 0 && this.getup <= 0 && !this.zip; }
+  get sens() { return this.human ? SET.turn : 1; }   // (bots always lean at the measured rate)
   head() { return { x: this.x + Math.sin(this.a) * BH * 0.92, y: this.y + Math.cos(this.a) * BH * 0.92 }; }
   mid() { return { x: this.x + Math.sin(this.a) * BH * 0.5, y: this.y + Math.cos(this.a) * BH * 0.5 }; }
   shoulder() { const k = SHOULDER_H; return { x: this.x + Math.sin(this.a) * k, y: this.y + Math.cos(this.a) * k }; }
@@ -860,7 +866,7 @@ class Dude {
   }
   launch(G) {
     // the hold sets the launch angle (measured); only lean that didn't come from this hold (tipped over by a landing) flattens it more
-    const th = hopAngle(this.launchH), own = LEAN_AT[clamp(Math.round(this.launchH * 100), 0, 50)] * this.launchDir;
+    const Hs = this.launchH * this.sens, th = hopAngle(Hs), own = LEAN_AT[clamp(Math.round(Hs * 100), 0, 50)] * this.launchDir;
     const phi = clamp(this.launchDir * th + LEAN_CARRY * (this.a - own), -PHI_MAX, PHI_MAX), s = this.ground;
     const V = this.hopV();
     this.vx = V * Math.sin(phi) + (s && s.vx ? s.vx : 0) + (s && s.belt ? s.belt : 0);
@@ -922,10 +928,15 @@ class Dude {
     } else if (this.getup > 0) {
       this.getup -= dt; w = 6.5; z = 0.75;
     } else if (this.crouch > 0) {
-      this.crouch -= dt; this.squash = 0.6;
+      this.crouch -= dt; this.squash = 0.6; tgt = this.a; z = 1;   // (the crouch keeps whatever lean you had)
       if (this.crouch <= 0) { this.launch(G); return; }
     } else if (this.holdDir && G.state !== 'away' || this.holdDir && G.state === 'away') {
-      this.holdT += dt; tgt = this.holdDir * Math.min(LEAN_MAX, LEAN_RATE * this.holdT); w = LEAN_W; z = LEAN_Z;
+      // holding leans you further, never back up: a lean you landed with is braced, not undone (that's how you speed-jump)
+      this.holdT += dt; const ramp = Math.min(LEAN_MAX, LEAN_RATE * this.holdT * this.sens), cur = this.a * this.holdDir;
+      tgt = this.holdDir * (cur > ramp ? Math.min(cur, BRACE_MAX) : ramp); w = LEAN_W; z = LEAN_Z;
+      if (cur > BRACE_MAX) this.av += TOPPLE_G * Math.sin(this.a) * dt;
+    } else if (Math.abs(this.a) > TOPPLE_A) {   // leaning too far with nothing to brace: keel over
+      w = 1.2; z = 0.5; this.av += TOPPLE_G * Math.sin(this.a) * dt;
     }
     this.av += (-w * w * (this.a - tgt) - 2 * z * w * this.av) * dt; this.a += this.av * dt;
     if (this.down <= 0 && this.getup <= 0 && Math.abs(this.a) > TUMBLE_A) this.tumble(G);
@@ -1125,7 +1136,7 @@ class Bot {
       if (r.dead) continue;
       let sc = r.goal ? 1000 : score(r.x, r.y);
       if (!r.goal) {
-        if (r.th > 30 * D2R && !(r.s && r.s.bounce)) sc -= 3.5;   // it'd faceplant
+        if (r.th > 37 * D2R && !(r.s && r.s.bounce)) sc -= 3.5;   // it'd keel over on landing
         if (r.edge < 0.35) sc -= 1.2;
         if (r.s && r.s.mv) sc -= 0.3;
         sc -= r.t * 0.4;
@@ -1359,7 +1370,7 @@ class Game {
     this.winners = this.boarded.slice(); this.state = 'away'; this.stateT = 0; this.rideT = 0;
     for (const q of this.P) { q.trig = false; if (q.bot) q.bot.plan = null; }
     if (this.mode === 'tt' || this.champion()) this.slowT = SLOWMO_T;
-    this.sfx.boom && this.sfx.thud && this.sfx.thud();
+    this.sfx.thud(1.4);
   }
   // the match winner: the one runner on top with enough getaways (a tie at the top plays on)
   champion() {
@@ -1585,11 +1596,15 @@ class Game {
       if (Math.abs(gy - ty) > 2) ty += (clamp(gy, ty - 3.2, ty + 3.2) - ty) * k;
     }
     if (!f.alive && f.deadT < RESPAWN_T - 0.8) { tx = f.cp + 2.6; const s = this.floorAt(f.cp); ty = (s ? topAt(s, f.cp) : 0) + 2; }
+    else if (!f.grounded && f.alive) { const s = this.floorAt(f.x); if (s) { const fl = topAt(s, f.x), hh = (split ? ART_H / SPLIT_Z : ART_H) / PPM / 2; ty = Math.min(ty, fl + hh - 0.6); } }
     if (this.state === 'away' || this.state === 'over') {
       const g = M.goal, w = this.winner || this.champ;
-      if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.5 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' || M.ride === 'pod' ? Math.min(4, this.rideFx().dy * 0.5) : 0); }
+      if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.65 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' || M.ride === 'pod' ? Math.min(4, this.rideFx().dy * 0.5) : 0) + (M.ride === 'rocket' ? 0.5 : 0); }
     }
-    const halfW = (split ? (ART_W / 2 - 1) / SPLIT_Z : ART_W) / PPM / 2;
+    const leaving = this.state === 'away' || this.state === 'over';
+    const tz = leaving ? (AWAY_ZOOM[M.ride] || 1) : 1;   // (pull back while the ride leaves)
+    if (snap || c.z == null) c.z = tz; else c.z += (tz - c.z) * (1 - Math.exp(-2.2 * dt));
+    const halfW = (split ? (ART_W / 2 - 1) / SPLIT_Z : ART_W) / c.z / PPM / 2;
     tx = clamp(tx, M.x0 - 2 + halfW, M.x1 + 2 - halfW);
     if (snap || c.x == null) { c.x = tx; c.y = ty; return; }
     const k = 1 - Math.exp(-4 * dt);
@@ -1625,13 +1640,15 @@ function txt(str, x, y, size, col, opt = {}) {
 }
 function fitSize(str, size, maxW) { ctx.font = `400 ${size}px Silkscreen, monospace`; const w = ctx.measureText(str).width; return w > maxW ? size * maxW / w : size; }
 function wobblyWord(w, cx, y, size, col, deep, t) {
-  ctx.font = `700 ${size}px Silkscreen, monospace`;
-  const ws = [...w].map(ch => ctx.measureText(ch).width), tot = ws.reduce((a, b) => a + b, 0);
+  ctx.font = `400 ${size}px Silkscreen, monospace`;
+  const ws = [...w].map(ch => ctx.measureText(ch).width + 1), tot = ws.reduce((a, b) => a + b, 0);
   let x = cx - tot / 2;
   [...w].forEach((ch, i) => {
     const yy = y + Math.sin(t * 3 + i * 0.7) * 2, r = Math.sin(t * 2.3 + i) * 0.08;
     ctx.save(); ctx.translate(x + ws[i] / 2, yy); ctx.rotate(r);
-    txt(ch, 0, 2, size, deep, { outline: false, bold: true }); txt(ch, 0, 0, size, col, { bold: true });
+    // (the bold face melts W and A into blocks at this size, so: regular face, struck twice, over a deep drop)
+    txt(ch, 0, 3, size, deep, { outline: false }); txt(ch, 1, 3, size, deep, { outline: false });
+    txt(ch, 0, 0, size, col, { ow: 1 }); txt(ch, 1, 0, size, col, { outline: false });
     ctx.restore(); x += ws[i];
   });
 }
@@ -1760,14 +1777,14 @@ const BACKDROP = {
     sky('#5aa8e8', '#e0f2ff'); clouds(0.2, 20, '#ffffff', G.t, 90, 2); clouds(0.4, 60, 'rgba(255,255,255,0.8)', G.t, 160, 7);
   },
   meadow(G) {
-    sky('#5ab8f0', '#d8f4ff'); rr(-HW * 0.6, horizon(0.04) - 70, 18, 18, '#fff3b0'); clouds(0.08, -60, '#ffffff', G.t, 3);
+    sky('#5ab8f0', '#d8f4ff'); rr(HW * 0.72, horizon(0.04) - 84, 18, 18, '#fff3b0'); clouds(0.08, -60, '#ffffff', G.t, 3);
     hills(0.15, 6, '#7ec86a', 20, 50, 2); hills(0.3, 12, '#5aa84a', 14, 34, 5);
     par(0.3, 34, (k, x) => { if (hsh(k) < 0.6) return; const y = horizon(0.3) + 4; rr(x, y - 14, 3, 10, '#6a4a2a'); rr(x - 5, y - 24, 13, 12, '#3f8f3a'); });
   },
   moon(G) {
     sky('#05040c', '#1a1830');
     par(0.02, 37, (k, x) => { for (let i = 0; i < 3; i++) rr(x + hsh(k * 3 + i) * 37, -HH + hsh(k * 7 + i) * HH * 1.6, 1, 1, hsh(k + i) > 0.8 ? '#ffe9a0' : '#d8d8f0'); });
-    const ex = 70 - CAMX * PPM * 0.03, ey = horizon(0.03) - 80;
+    const ex = -HW + 34 - CAMX * PPM * 0.03, ey = horizon(0.03) - 62;
     ctx.fillStyle = '#3a7ae0'; ctx.beginPath(); ctx.arc(ex, ey, 14, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#4ac06a'; ctx.fillRect(ex - 8, ey - 6, 7, 5); ctx.fillRect(ex + 2, ey + 1, 6, 7); ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(ex - 10, ey - 10, 8, 2); ctx.fillRect(ex + 2, ey + 9, 7, 2);
     hills(0.15, 4, '#3a3848', 16, 30, 3); hills(0.35, 10, '#55525e', 10, 22, 8);
@@ -1843,7 +1860,7 @@ function drawTerminal(G) {
   wb(-9, 0, 42, 6.4, '#8ec8ee'); wb(-9, 0, 42, 2.2, '#a8d8f4'); wb(-9, 0, 42, 0.5, '#7a8a7a');
   for (let x = -6; x < 42; x += 4.4) { wb(x, 0, x + 0.22, 6.4, '#5a6070'); if (hsh(x) > 0.5) { wb(x + 0.8, 0.6, x + 3.0, 0.95, '#f4f6fa'); wb(x + 2.5, 0.95, x + 2.75, 1.4, '#e8423a'); } }
   wb(-9, 1.9, 42, 2.0, '#5a6070'); wb(-9, 4.2, 42, 4.3, '#5a6070');
-  { const x = 36, by = 4.9; wb(x, by - 1.9, x + 4, by, '#1c1e26'); wb(x + 0.1, by - 1.8, x + 3.9, by - 0.1, '#2a2d38'); txt('DEPARTURES', AX(x + 2), AY(by - 0.4), 6, '#ffd23a', { outline: false });
+  { const x = 29, by = 5.2; wb(x, by - 1.9, x + 4, by, '#1c1e26'); wb(x + 0.1, by - 1.8, x + 3.9, by - 0.1, '#2a2d38'); txt('DEPARTURES', AX(x + 2), AY(by - 0.4), 6, '#ffd23a', { outline: false });
     for (let i = 0; i < 3; i++) { wb(x + 0.2, by - 1.0 - i * 0.3, x + 1.5, by - 0.8 - i * 0.3, '#3a3e4c'); wb(x + 1.8, by - 1.0 - i * 0.3, x + 1.8 + (i === 1 ? 1.2 : 0.7 + (i % 2) * 0.4), by - 0.8 - i * 0.3, i === 1 ? '#7fe39a' : '#c8ccd6'); } }
   // food court: a stone-tile wall with two shop fronts (ours: BOB'S and PANINI PETE'S), between the two escalators
   wb(42, 0, 72, 9.2, '#d9d3c4'); for (let y = 0; y < 9.2; y += 0.8) for (let x = 42 + ((y / 0.8) % 2) * 0.6; x < 72; x += 1.2) wb(x, y, x + 1.1, y + 0.7, '#cfc8b8');
@@ -2140,6 +2157,8 @@ function drawRide(G, front) {
       for (let y = 0; y < 13; y += 1.2) { wb(65.8, y, 66, y + 1.2, '#8a2a1a'); wb(74.6, y, 74.8, y + 1.2, '#8a2a1a'); ctx.strokeStyle = '#8a2a1a'; ctx.beginPath(); ctx.moveTo(AX(66), AY(y)); ctx.lineTo(AX(74.6), AY(y + 1.2)); ctx.stroke(); }
       ctx.translate(fx.dx * PPM, -fx.dy * PPM);
       wb(x0, 0.5, x1, 19, '#f4f6fa'); wb(x0, 4, x1, 5, '#e8423a'); wb(x0, 14, x1, 14.6, '#2f6bd8'); txt('FLOPPY', AX(cx), AY(10.8), 7, '#2a2834', { outline: false });
+      wb(x0, 18.2, x1, 19, '#c9ccd6'); wb(x0 + 0.3, 2.2, x1 - 0.3, 2.5, '#c9ccd6'); wb(x0 + 0.3, 7.6, x1 - 0.3, 7.9, '#c9ccd6');   // (hull seams)
+      for (const py of [8.9, 16.6]) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(AX(cx), AY(py), 0.75 * PPM, 0, 7); ctx.fill(); ctx.fillStyle = '#9fd8ff'; ctx.beginPath(); ctx.arc(AX(cx), AY(py), 0.55 * PPM, 0, 7); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.fillRect(AX(cx - 0.35), AY(py + 0.35), 3, 3); }   // (portholes)
       ctx.fillStyle = '#e8423a'; ctx.beginPath(); ctx.moveTo(AX(x0), AY(19)); ctx.lineTo(AX(cx), AY(23)); ctx.lineTo(AX(x1), AY(19)); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(AX(x0), AY(4)); ctx.lineTo(AX(x0 - 1.5), AY(0.3)); ctx.lineTo(AX(x0), AY(1.4)); ctx.fill(); ctx.beginPath(); ctx.moveTo(AX(x1), AY(4)); ctx.lineTo(AX(x1 + 1.5), AY(0.3)); ctx.lineTo(AX(x1), AY(1.4)); ctx.fill();
       outlineBox(x0, 0.5, x1, 19); wb(x0, g.y0, x0 + 0.8, g.y1, '#2a2834'); if (inside) drawCrew(B, AX(x0 + 0.4), AY(g.y0 + 1.2));
@@ -2220,7 +2239,14 @@ function drawDude(G, p) {
     const fh = { x: sh.x + Math.cos(fw) * BODY.armLen, y: sh.y + Math.sin(fw) * BODY.armLen };
     limb(sp.arm, AX(sh.x), AY(sh.y), AX(fh.x), AY(fh.y));
   }
-  if (p.shield > 0) { const m = p.mid(), k = p.shield < 1 ? (Math.floor(t * 10) % 2 ? 0.2 : 0.5) : 0.45; ctx.strokeStyle = `rgba(127,215,255,${k + 0.3})`; ctx.fillStyle = `rgba(127,215,255,${k * 0.4})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(AX(m.x), AY(m.y), 1.35 * PPM, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+  if (p.shield > 0) {
+    const m = p.mid(), low = p.shield < 1.2, k = low ? (Math.floor(t * 10) % 2 ? 0.25 : 0.6) : 0.5, cx = AX(m.x), cy = AY(m.y), R = (1.3 + Math.sin(t * 6) * 0.04) * PPM;
+    ctx.fillStyle = `rgba(127,215,255,${(k * 0.45).toFixed(2)})`; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(214,244,255,${(k + 0.35).toFixed(2)})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,255,255,${(k + 0.2).toFixed(2)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, R - 3, -2.4, -1.5); ctx.stroke();   // (the highlight)
+    const left = clamp(p.shield / ITEM.shield.dur, 0, 1);   // the rim ticks down like a fuse
+    ctx.strokeStyle = '#7fd7ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, R + 1.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
+  }
   if (p.heal > 0) for (let i = 0; i < 3; i++) { const y = AY(p.y + 1 + (1 - p.heal) * 2 + i * 0.5), x = AX(p.x + (i - 1) * 0.5); rr(x - 1, y - 3, 2, 6, '#ff5a5f'); rr(x - 3, y - 1, 6, 2, '#ff5a5f'); }
   ctx.restore();
   // who's who: a colored tag over every head
@@ -2329,11 +2355,14 @@ function drawProgress(G, x, y, w) {
   rr(x - 1, y - 1, w + 2, 4, INK); rr(x, y, w, 2, '#3a3446'); for (const c of M.cps.slice(1)) rr(u(c), y - 1, 1, 4, '#8a8496');
   rr(x - 3, y - 3, 3, 8, INK); rr(x - 2, y - 2, 1, 6, '#c9bfd6');
   rr(x + w, y - 4, 5, 10, INK); for (let i = 0; i < 4; i++) rr(x + w + 1 + (i % 2) * 2, y - 3 + i * 2, 2, 2, '#7fe39a');   // (the finish flag)
-  for (const p of G.P.slice().sort((q, r) => (q.human ? 1 : 0) - (r.human ? 1 : 0))) {
+  const taken = [];
+  for (const p of G.P.slice().sort((q, r) => (q.human ? 1 : 0) - (r.human ? 1 : 0) || q.x - r.x)) {
     const px = Math.round(u(p.gone ? b : p.x)), live = p.alive || p.gone;
-    rr(px - 5, y - 4, 11, 10, INK); rr(px - 4, y - 3, 9, 8, live ? '#3a3044' : '#241e2c');
-    if (!live) ctx.globalAlpha = 0.45; headIcon(p, px + 0.5, y + 1, 1); ctx.globalAlpha = 1;
-    rr(px - 4, y + 6, 9, p.human ? 2 : 1, p.C.col);
+    let lift = 0; while (taken.some(q => Math.abs(q.x - px) < 10 && q.lift === lift)) lift++;   // (bump up a row if someone's already there)
+    taken.push({ x: px, lift }); const yy = y + lift * 8;   // (down, away from the scoreboard)
+    rr(px - 5, yy - 4, 11, 10, INK); rr(px - 4, yy - 3, 9, 8, live ? p.T.jersey : '#241e2c');
+    if (!live) ctx.globalAlpha = 0.45; headIcon(p, px + 0.5, yy + 1, 1); ctx.globalAlpha = 1;
+    rr(px - 4, yy + 5, 9, 2, live ? p.T.dark : '#241e2c'); if (p.human) { rr(px - 1, yy - 7, 3, 3, INK); rr(px, yy - 6, 1, 1, CREAM); }
   }
 }
 // an arrow on the edge of the view pointing at the getaway when it's off screen
@@ -2368,8 +2397,8 @@ function drawBanner(G) {
     const k = 1 - Math.pow(1 - clamp(t * 3.2, 0, 1), 3), ox = (k - 1) * 200;
     const full = MAP_TAG[G.M.ride] || 'GET TO THE GETAWAY', cut = full.indexOf(' THE ');
     const verb = cut > 0 ? full.slice(0, cut + 4) : 'GET TO THE', tag = cut > 0 ? full.slice(cut + 5) : full;
-    const lead = [...G.P].sort((a, b) => b.score - a.score)[0], two = true, Y = 3;
-    // (mirrored into the top-right corner: clear of the scoreboard and of every racer's name tag)
+    const lead = [...G.P].sort((a, b) => b.score - a.score)[0], two = true, Y = 31;
+    // (mirrored into the top-right corner, just under the scoreboard: clear of it and of every racer's name tag)
     ctx.save(); if (two) { ctx.translate(320 - ox, 0); ctx.scale(-1, 1); } else ctx.translate(ox, 0);
     ctx.fillStyle = INK; ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(156, Y); ctx.lineTo(142, Y + 38); ctx.lineTo(0, Y + 38); ctx.fill();
     ctx.fillStyle = 'rgba(28,22,34,0.94)'; ctx.beginPath(); ctx.moveTo(0, Y + 1); ctx.lineTo(154, Y + 1); ctx.lineTo(141, Y + 37); ctx.lineTo(0, Y + 37); ctx.fill();
@@ -2381,13 +2410,13 @@ function drawBanner(G) {
     txt(verb, tx + (two ? 10 : 0), Y + 18, fitSize(verb, 8, 100), '#7fe39a', { align: 'left' });
     txt(tag + '!!!', tx + (two ? 10 : 0), Y + 29, fitSize(tag + '!!!', 10, 100), '#ff4d4d', { align: 'left' });
     ctx.restore();
-    const mids = G.cams.length > 1 ? [80, 240] : [160], cy = 52;
+    const mids = G.cams.length > 1 ? [80, 240] : [160], cy = 92;
     if (!G.demo) { const n = 3 - Math.floor(t / (READY_T / 3.2)); if (n >= 1) { const f = (t / (READY_T / 3.2)) % 1; for (const x of mids) txt(String(n), x, cy, Math.round((mids.length > 1 ? 20 : 26) - f * 8), CREAM); } }
-  } else if (st === 'run' && t < 0.6 && !G.demo) { const two = G.cams.length > 1; for (const x of two ? [80, 240] : [160]) txt('GO!', x, 52, Math.round((two ? 22 : 30) + t * 20), '#7fe39a'); }
+  } else if (st === 'run' && t < 0.6 && !G.demo) { const two = G.cams.length > 1; for (const x of two ? [80, 240] : [160]) txt('GO!', x, 92, Math.round((two ? 22 : 30) + t * 20), '#7fe39a'); }
   else if (st === 'run' && G.boarded.length && !G.demo) {   // the ride is waiting: hurry!
     const w = G.boarded[0], n = Math.max(1, Math.ceil(G.departT)), s = `${crewName(G, w)} GOT IN!`;
-    panel(96, 26, 128, 23, 0.8); txt(s, 160, 33, fitSize(s, 7, 120), w.C.col);
-    txt(`LEAVING IN ${n}`, 160, 43, 6, Math.floor(G.t * 6) % 2 ? '#ffd23a' : CREAM);
+    panel(96, 48, 128, 23, 0.8); txt(s, 160, 55, fitSize(s, 7, 120), w.C.col);   // (under the progress strip)
+    txt(`LEAVING IN ${n}`, 160, 65, 6, Math.floor(G.t * 6) % 2 ? '#ffd23a' : CREAM);
   }
   else if (st === 'away' && G.winners.length) {
     const W = G.winners, k = clamp(t * 5, 0, 1), names = W.map(w => crewName(G, w)).join(' + ');
@@ -2400,11 +2429,12 @@ function drawBanner(G) {
 function drawHUD(G) {
   const humans = G.P.filter(p => p.human), split = G.cams.length > 1;
   drawBanner(G);
+  if (G.state === 'over' && G.champ) return;   // (the results panel has its own table)
   if (G.mode === 'tt') {   // the clock
     panel(124, 3, 72, 22); txt(fmtT(G.ttT || 0), 160, 11, 9, G.state === 'run' ? CREAM : '#ffd23a');
     txt(G.ttBest != null ? 'BEST ' + fmtT(G.ttBest) : 'NO BEST YET', 160, 20.5, 4, '#8f86a0');
   } else drawScores(G, 3, 3, G.P);
-  if (G.state !== 'ready' || G.mode === 'tt') drawProgress(G, 70, G.mode === 'tt' ? 32 : 38, 180);
+  if (G.state === 'run') drawProgress(G, 70, G.mode === 'tt' ? 32 : 38, 180);
   if (!split) {
     if (humans[0]) drawMine(G, humans[0], 3, 148);
   } else { drawMine(G, G.P[0], 3, 148); drawMine(G, G.P[1], 283 - (G.P[1].item ? 0 : 30), 148); }
@@ -2441,8 +2471,8 @@ function drawTitle(G) {
     }
     txt(m.label, r.x + r.w / 2 + 2, r.y + r.h / 2 + 0.5, 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
-  txt('4 FLOPPY GUYS. 1 WAY OUT.', 65, 148, 8, '#b9c3dd', { ow: 0.7 });
-  txt('ARROWS OR W/S + ENTER', 65, 166, 8, '#7d88a8', { ow: 0.6 });
+  txt('4 FLOPPY GUYS. 1 WAY OUT.', 65, 148, fitSize('4 FLOPPY GUYS. 1 WAY OUT.', 8, 108), '#b9c3dd', { ow: 0.7 });
+  txt('ARROWS OR W/S + ENTER', 65, 166, fitSize('ARROWS OR W/S + ENTER', 8, 108), '#7d88a8', { ow: 0.6 });
   // what's on: the place the demo race is running through
   txt('NOW PLAYING', 222, 163, 8, CREAM, { ow: 0.8 }); txt(G.M.name, 222, 172, 8, ORANGE, { ow: 0.8 });
 }
@@ -2513,9 +2543,9 @@ function render(G) {
   ctx.setTransform(S, 0, 0, S, OX, OY); ctx.imageSmoothingEnabled = false;
   if (G.cams.length > 1) {
     const vps = [{ x: 0, y: 0, w: ART_W / 2 - 1, h: ART_H }, { x: ART_W / 2 + 1, y: 0, w: ART_W / 2 - 1, h: ART_H }];
-    G.cams.forEach((c, i) => { drawView(G, c, vps[i], SPLIT_Z); drawHurt(c.p, vps[i]); drawGoalArrow(G, c, vps[i], SPLIT_Z); });
+    G.cams.forEach((c, i) => { drawView(G, c, vps[i], SPLIT_Z * (c.z || 1)); drawHurt(c.p, vps[i]); drawGoalArrow(G, c, vps[i], SPLIT_Z * (c.z || 1)); });
     rr(ART_W / 2 - 1, 0, 2, ART_H, INK);
-  } else { const vp = { x: 0, y: 0, w: ART_W, h: ART_H }; drawView(G, G.cams[0], vp, 1); drawHurt(G.cams[0].p, vp); drawGoalArrow(G, G.cams[0], vp, 1); }
+  } else { const vp = { x: 0, y: 0, w: ART_W, h: ART_H }; const z = G.cams[0].z || 1; drawView(G, G.cams[0], vp, z); drawHurt(G.cams[0].p, vp); drawGoalArrow(G, G.cams[0], vp, z); }
   ctx.setTransform(S, 0, 0, S, OX, OY);
   if (G.screen === 'title') drawTitle(G);
   else if (G.screen === 'how') drawHelp();
