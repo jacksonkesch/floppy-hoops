@@ -334,6 +334,7 @@ function openFrame(href) {
     d.open();
     try { w.history.replaceState(null, '', href); } catch (e) { /* the page still runs */ }
     d.write(html); d.close();
+    if (V.onFrame) V.onFrame(w);   // the locked artifact listens for its lock key inside the game too
     // a game heading home navigates its frame away: that means back to the picker
     w.addEventListener('pagehide', () => { if (frame === f) closeFrame(); });
     try { w.focus(); } catch (e) { /* fine */ }
