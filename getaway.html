@@ -744,15 +744,22 @@ const MAPS = [
       B(-9, 84, 12.6, 'hull', { bot: 10.2, ceil: 1, nofloor: 1 }), B(76, 90, 12.6, 'hull', { bot: -2.2, nofloor: 1 })],
     route: RT([-9, 8, 0], [8, 10.5, 1.2], [10.5, 13, 2.2], [13, 15.5, 0], [15.5, 17.5, 1.2], [17.5, 26.8, 0], [26.8, 28.8, 1.4], [28.8, 30.8, 2.8], [30.8, 32.8, 4.2],
       [32.8, 40, 5.6], [40, 41.2, 6.5], [41.2, 46, 5.6], [46, 47.2, 6.5], [47.2, 52, 5.6], [52, 53.2, 6.5], [53.2, 70, 5.6], [70, 76, -8]) },
-  { id: 'meadow', name: 'LAUNCH PAD', theme: 'meadow', ride: 'rocket', killY: -4, water: -1.6, x0: -7, x1: 92, cps: [0, 17, 32, 57, 68],
-    goal: { x0: 76.8, x1: 79, y0: 12, y1: 15 }, rideX: 79,
-    zips: [[37, 12.6, 56.5, 10.6]],   // off the fuel silo, across to the launch tower
-    solids: [B(-9, 67, 0, 'road'), ...car(8, '#ffc93a'),
-      ...tower(30, [[16, 2], [18.5, 4], [21, 6], [23.5, 8]]), B(30, 42, 9.6, 'silo', { bot: 0 }), crate(34, 35.6, 10.7, 9.6),
-      ...tower(67, [[55, 2], [55, 4], [55, 6], [55, 8], [58, 10], [61, 12]]), B(67, 77.4, 12.0, 'bridge', { bot: 11.4 }),
-      B(79, 85.4, 34, 'hull', { bot: -40, nofloor: 1 })],
+  { id: 'meadow', name: 'LAUNCH PAD', theme: 'meadow', ride: 'rocket', killY: -4, water: -1.6, x0: -7, x1: 122, cps: [0, 17, 32, 51, 81, 98],
+    goal: { x0: 104.6, x1: 107, y0: 17, y1: 20 }, rideX: 107,
+    zips: [[63.4, 19.0, 81, 15.7]],   // off the engine-bay deck, down to the service tower
+    caps: [{ x: 84.6, y: 13, k: 'barrel' }, { x: 92.2, y: 17, k: 'barrel' }, { x: 93.4, y: 17, k: 'barrel' }],
+    solids: [B(-9, 31, 0, 'road'), ...car(8, '#ffc93a'),
+      ...tower(30, [[16, 2], [18.5, 4], [21, 6], [23.5, 8]]),
+      // the fuel tank, climbed up the steel ledges bolted to its side (the top one is flush with its roof: no wall to hop up)
+      ...[[32, 10], [33.1, 12], [34.2, 14], [35.3, 16], [36.4, 18]].map(([x0, y]) => B(x0, 37.5, y, 'ledge', { bot: y - 0.3, oneway: 1 })),
+      B(37.5, 47.5, 18, 'silo', { bot: -3 }), crate(42, 43.6, 19.1, 18),
+      // the engine bay: a deck under a test stage's nozzles, so hops have to stay low
+      B(50.5, 64, 16, 'gfloor', { bot: 15.6 }), B(54, 59.6, 34, 'stage', { bot: 19.5 }),
+      ...tower(97, [[80, 13], [86, 15], [88.5, 17]]), B(97, 106.8, 17.0, 'bridge', { bot: 16.4 }),
+      B(107, 113.4, 40, 'hull', { bot: -40, nofloor: 1 })],
     route: RT([-9, 8, 0], [8, 9, 1.0], [9, 11.1, 1.65], [11.1, 12.2, 1.0], [12.2, 16, 0], [16, 18.5, 2], [18.5, 21, 4], [21, 23.5, 6], [23.5, 30, 8],
-      [30, 34, 9.6], [34, 35.6, 10.7], [35.6, 42, 9.6], [56.5, 58, 8], [58, 61, 10], [61, 77.4, 12]) },
+      [32, 33.1, 10], [33.1, 34.2, 12], [34.2, 35.3, 14], [35.3, 36.4, 16], [36.4, 37.5, 18], [37.5, 42, 18], [42, 43.6, 19.1], [43.6, 47.5, 18],
+      [50.5, 63.4, 16], [81, 86, 13], [86, 88.5, 15], [88.5, 106.8, 17]) },
   { id: 'moon', name: 'MOON BASE', theme: 'moon', ride: 'pod', killY: -9, g: 0.35, x0: -7, x1: 148, cps: [0, 34, 70, 111],
     goal: { x0: 136.5, x1: 139.5, y0: 0, y1: 8 }, rideX: 136, stop: 139.3,
     foes: [{ x: 106.2, y: 2.4 }], caps: [{ x: 86, y: 0 }, { x: 125, y: 0 }],
@@ -1756,7 +1763,8 @@ class Game {
     else if (!f.grounded && f.alive) { const s = this.floorBelow(f.x, f.y + 0.1); if (s) { const fl = topAt(s, f.x), hh = (split ? ART_H / SPLIT_Z : ART_H) / PPM / 2; ty = Math.min(ty, fl + hh - 0.6); } }
     if (this.state === 'away' || this.state === 'over') {
       const g = M.goal, w = this.winner || this.champ;
-      if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.65 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' || M.ride === 'pod' ? Math.min(4, this.rideFx().dy * 0.5) : 0) + (M.ride === 'rocket' ? 0.5 : 0); }
+      if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.65 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' ? Math.min(4, this.rideFx().dy * 0.5) : M.ride === 'pod' ? Math.min(12, this.rideFx().dy * 0.7) : 0) + (M.ride === 'rocket' ? 0.5 : 0); }
+      if (M.ride === 'rocket' && !(w && w.chute)) { tx = M.rideX + 2.2; ty = g.y0 - 7 + Math.min(18, this.rideFx().dy * 0.75); }   // (frame the pad, so the lift-off and its smoke are in shot)
     }
     const leaving = this.state === 'away' || this.state === 'over';
     const tz = leaving ? (AWAY_ZOOM[M.ride] || 1) : 1;   // (pull back while the ride leaves)
@@ -2423,12 +2431,30 @@ const LOOK = {
   },
   seat(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#3f6fd0', { lip: '#7fa2ee' }); mass(x0, top, x0 + 0.34, top + 0.9, '#3f6fd0', { lip: '#fff6e0', foot: 0, side: 0 }); },
   // ---- launch pad ----
+  ledge(s) {   // a grated steel ledge bolted to the fuel tank, braced back to its wall
+    const { x0, x1, top, bot } = s;
+    seg(x0 + 0.25, bot, x1, bot - 1.2, '#6b7180', 2);
+    mass(x0, bot, x1, top, '#b5bac6', { lip: '#ffd23a', side: 0, foot: 0 }); for (let x = x0 + 0.35; x < x1 - 0.1; x += 0.35) rib(x, bot + 0.04, top - 0.1, '#7c8291');
+  },
+  stage(s, G) {   // a test stage on its stand: the nozzles hang low over the engine-bay deck
+    const { x0, x1, top, bot } = s, m = (x0 + x1) / 2, W = '#eceef3';
+    mass(x0, bot + 2.4, x1, top, W, { lip: '#ffffff', top: 0 }); wb(x1 - 1.1, bot + 2.5, x1 - 0.05, top, '#d3d7e0'); wb(x0 + 0.4, bot + 2.5, x0 + 0.7, top, '#ffffff');
+    stripes(x0 + 0.05, bot + 6.2, x1 - 0.05, bot + 6.8, '#23202b', W, 0.7); wb(x0 + 0.05, bot + 2.4, x1 - 0.05, bot + 3.0, ORANGE);
+    txt('S-1', px(m), py(bot + 9.6), 9, '#9aa0ad', { outline: false });
+    mass(x0 + 0.15, bot + 1.7, x1 - 0.15, bot + 2.4, '#5d6373', { lip: '#8d93a0', top: 1 });   // the thrust plate
+    for (const n of [x0 + 0.95, m, x1 - 0.95]) {
+      shape([[n - 0.45, bot + 1.7], [n + 0.45, bot + 1.7], [n + 0.85, bot], [n - 0.85, bot]], '#3a3d48'); wb(n - 0.7, bot, n + 0.7, bot + 0.18, '#23202b');
+      const k = (G.t * 0.55 + n * 0.37) % 1; ctx.globalAlpha = 0.45 * (1 - k); disc(n, bot - 0.2 - k * 1.1, 0.25 + k * 0.45, '#ffffff', null); ctx.globalAlpha = 1;   // a little cold vapour off the bells
+    }
+    stripes(x0 + 0.15, bot + 1.55, x1 - 0.15, bot + 1.7, '#ffd23a', '#23202b', 0.35);
+  },
   gfloor(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#9aa0ad', { lip: '#dadde5', side: 0 }); for (let x = x0 + 0.5; x < x1 - 0.2; x += 0.5) rib(x, bot + 0.06, top - 0.12, '#6b7180'); },
   silo(s) {
     const { x0, x1, top, bot } = s, m = (x0 + x1) / 2; contact(x0, x1, bot);
     mass(x0, bot, x1, top, '#4a4f5e', { lip: '#9097aa', top: 3 });
     wb(x0 + 1.3, bot + 0.15, x0 + 2.5, top - 0.3, '#5c6274'); wb(x1 - 2.4, bot + 0.15, x1 - 0.12, top - 0.3, '#3d414e');   // light and shade so it reads as a round tank
-    seam(x0 + 0.1, x1 - 0.1, top - 3.2, '#353946'); seam(x0 + 0.1, x1 - 0.1, top - 6.4, '#353946');
+    for (let y = top - 3.2; y > bot + 1.8; y -= 3.2) { seam(x0 + 0.1, x1 - 0.1, y, '#353946'); seam(x0 + 0.1, x1 - 0.1, y - 0.06, '#5c6274'); }
+    if (top - bot > 9) { const dy = top - 5.0; shape([[m, dy + 0.9], [m + 0.9, dy], [m, dy - 0.9], [m - 0.9, dy]], '#ffd23a'); txt('!', px(m), py(dy - 0.05), 8, '#23202b', { outline: false }); }
     stripes(x0 + 0.06, bot + 0.9, x1 - 0.06, bot + 1.5, '#ffd23a', '#23202b', 0.6);
     txt('FUEL', px(m), py(top - 1.7), 9, '#c9cdd8', { outline: false });
     rib(x0 + 0.5, bot + 1.5, top - 0.2, '#c9cdd8'); rib(x0 + 1.0, bot + 1.5, top - 0.2, '#c9cdd8');
@@ -2561,18 +2587,32 @@ const SCENE = {
     ctx.lineTo(px(70), py(10.2)); ctx.fill();
   } },
   meadow: { back(G) {
-    const R = '#c2584c', RD = '#9b4138';
-    // mission control, way back from the pad
-    wb(44, 0, 53, 3.4, '#e3dccb'); wb(44, 3.1, 53, 3.4, '#f1ecdf'); along(45, 52, 1.9, x => wb(x, 1.5, x + 1.2, 2.4, '#9fd0e6')); wb(52.3, 0, 53, 3.4, '#cfc7b3');
+    const R = '#c2584c', RD = '#9b4138', ST = '#8d93a0';
+    // mission control, back behind the start line
+    wb(-5, 0, 4, 3.4, '#e3dccb'); wb(-5, 3.1, 4, 3.4, '#f1ecdf'); along(-4, 3, 1.9, x => wb(x, 1.5, x + 1.2, 2.4, '#9fd0e6')); wb(3.3, 0, 4, 3.4, '#cfc7b3');
+    wb(0.4, 3.4, 0.55, 6.2, ST); disc(0.48, 6.3, 0.5, '#e9ebf1');   // its dish
     // red steel under the gantry floors: legs, then cross-braces between them
     const legs = (L, base = 0) => {
       for (const [x, h] of L) wb(x, base, x + 0.3, h, R);
       for (let i = 0; i + 1 < L.length; i++) { const [a, ha] = L[i], [b, hb] = L[i + 1], top = Math.min(ha, hb) - 0.3; for (let y = base; y + 1.9 <= top + 0.01; y += 2) { seg(a + 0.15, y + 0.1, b + 0.15, y + 1.9, RD, 2); seg(a + 0.15, y + 1.9, b + 0.15, y + 0.1, RD, 2); } }
     };
     legs([[16.2, 2], [18.7, 4], [21.2, 6], [23.7, 8], [26.6, 8], [29.5, 8]]);
-    legs([[55.2, 7.7], [58.2, 9.7], [61.2, 11.7], [66.5, 11.7]]);
-    // the launch island the rocket stands on (the water is still open between it and the gantry)
-    mass(78.8, -3, 92, 0.5, '#9a9ca6', { lip: '#d3d5dc', top: 3 }); stripes(78.8, 0.02, 92, 0.3, '#ffd23a', '#23202b', 0.6);
+    legs([[50.8, 15.6], [54.1, 15.6], [57.3, 15.6], [60.5, 15.6], [63.5, 15.6]], -1.6);   // the engine-bay deck
+    for (const x of [53.1, 60.2]) { wb(x, 15.6, x + 0.35, 31, R); wb(x - 0.1, 30.6, x + 0.45, 31, RD); }   // the stand holding the test stage
+    wb(53.3, 26.4, 60.4, 26.8, RD); wb(53.3, 22.6, 54, 23.0, RD); wb(59.6, 22.6, 60.4, 23.0, RD);
+    legs([[80.2, 12.7], [86.2, 14.7], [88.7, 16.7], [92.7, 16.7], [96.6, 16.7]], -1.6);   // the service tower
+    // the tower's top: two masts with a hammerhead crane reaching out over the access arm
+    wb(88.7, 16.7, 89, 25, R); wb(96.6, 16.7, 96.9, 25, R);
+    for (const [a, b] of [[17.0, 21.0], [21.0, 25.0]]) { seg(88.85, a, 96.75, b, RD, 2); seg(88.85, b, 96.75, a, RD, 2); }
+    wb(86.4, 25, 103.6, 25.5, RD); wb(86.4, 25.5, 88.2, 26.6, '#6b7180'); seg(92.8, 25.5, 92.8, 27.4, ST, 1); seg(92.8, 27.4, 87.2, 25.5, ST, 1); seg(92.8, 27.4, 103.4, 25.5, ST, 1);
+    seg(102.4, 25, 102.4, 22.3, '#4a4f5c', 1); wb(102.1, 21.9, 102.7, 22.3, '#ffd23a');   // the hook
+    seg(96.75, 24, 106.6, 18, ST, 1); seg(96.75, 22.4, 103.2, 18.4, ST, 1);   // stays holding the access arm up
+    // a fuel line from the tank's foot out to the pad, low over the water
+    wb(47.5, -0.9, 106, -0.6, '#b9bec9'); along(50, 104, 6, x => wb(x, -1.6, x + 0.3, -0.6, ST));
+    // the launch island and the mount the rocket stands on, with its flame trench
+    mass(104.4, -3, 121, 0.5, '#9a9ca6', { lip: '#d3d5dc', top: 3 }); stripes(104.4, 0.02, 121, 0.3, '#ffd23a', '#23202b', 0.6);
+    mass(105.2, 0.5, 115.2, 5.5, '#b4b6be', { lip: '#d3d5dc' }); wb(107.6, 0.5, 112.8, 3.9, '#2a2d35'); shape([[107.6, 0.5], [112.8, 0.5], [110.2, 2.6]], '#6b7180');
+    stripes(105.2, 5.2, 115.2, 5.5, '#ffd23a', '#23202b', 0.5);
   } },
   moon: { back(G) {
     const A = '#8c8799', D = '#75707f';
@@ -2675,20 +2715,20 @@ const RIDE = {
     shape([[130.9, y + 1.1], [136.4, y + 1.1], [134.9, y + 0.7], [130.0, y + 0.7]], D);   // wing
   },
   chute(G, c) { if (!c.away) txt('JUMP!', px((c.g.x0 + c.g.x1) / 2), py(8.7 + Math.sin(c.t * 5) * 0.15), 9, '#ffd23a'); },   // no vehicle: the way out is the hole
-  rocket(G, c) {   // the map's hull solid is the rocket's body
-    const x0 = 79, x1 = 85.4, cx = 82.2, R = '#e8463c', W = '#f1f2f6';
-    if (c.away) flame(cx, 0.7, 2.6, c.t);
-    shape([[x0 + 0.1, 6.2], [x0 - 1.7, 1.5], [x0 - 1.7, 0.5], [x0 + 0.1, 1.7]], R); shape([[x1 - 0.1, 6.2], [x1 + 1.7, 1.5], [x1 + 1.7, 0.5], [x1 - 0.1, 1.7]], R);
-    for (const n of [80.5, 82.2, 83.9]) shape([[n - 0.5, 1.7], [n + 0.5, 1.7], [n + 0.8, 0.6], [n - 0.8, 0.6]], '#4a4f5c');
-    shell([[x0, 1.6], [x0, 19], [x0 + 0.1, 23.4, cx, 25.6], [x1 - 0.1, 23.4, x1, 19], [x1, 1.6]], W, () => {
-      wb(x1 - 1.2, 1.6, x1, 19, '#d3d7e0'); wb(x0 + 0.5, 1.6, x0 + 0.85, 19, '#ffffff');
-      wb(x0, 19, x1, 26, R); wb(x1 - 1.2, 19, x1, 26, '#bf362e'); wb(x0, 18.3, x1, 19, ORANGE);
-      stripes(x0, 9.4, x1, 10.0, '#23202b', W, 0.8); stripes(x0, 10.0, x1, 10.6, W, '#23202b', 0.8);
-      wb(x0, 3.4, x1, 4.2, ORANGE); wb(x0, 1.6, x1, 2.0, '#8d93a0');
+  rocket(G, c) {   // the map's hull solid is the rocket's body; it stands on the launch mount, hatch level with the access arm
+    const x0 = 107, x1 = 113.4, cx = 110.2, b = 5, R = '#e8463c', W = '#f1f2f6';
+    if (c.away) flame(cx, b + 0.7, 2.6, c.t);
+    shape([[x0 + 0.1, b + 6.2], [x0 - 1.7, b + 1.5], [x0 - 1.7, b + 0.5], [x0 + 0.1, b + 1.7]], R); shape([[x1 - 0.1, b + 6.2], [x1 + 1.7, b + 1.5], [x1 + 1.7, b + 0.5], [x1 - 0.1, b + 1.7]], R);
+    for (const n of [cx - 1.7, cx, cx + 1.7]) shape([[n - 0.5, b + 1.7], [n + 0.5, b + 1.7], [n + 0.8, b + 0.6], [n - 0.8, b + 0.6]], '#4a4f5c');
+    shell([[x0, b + 1.6], [x0, b + 19], [x0 + 0.1, b + 23.4, cx, b + 25.6], [x1 - 0.1, b + 23.4, x1, b + 19], [x1, b + 1.6]], W, () => {
+      wb(x1 - 1.2, b + 1.6, x1, b + 19, '#d3d7e0'); wb(x0 + 0.5, b + 1.6, x0 + 0.85, b + 19, '#ffffff');
+      wb(x0, b + 19, x1, b + 26, R); wb(x1 - 1.2, b + 19, x1, b + 26, '#bf362e'); wb(x0, b + 18.3, x1, b + 19, ORANGE);
+      stripes(x0, b + 9.4, x1, b + 10.0, '#23202b', W, 0.8); stripes(x0, b + 10.0, x1, b + 10.6, W, '#23202b', 0.8);
+      wb(x0, b + 3.4, x1, b + 4.2, ORANGE); wb(x0, b + 1.6, x1, b + 2.0, '#8d93a0');
     });
-    seam(x0, x1, 19, INK); seam(x0, x1, 7.0, '#b9bec9'); seam(x0, x1, 13.2, '#b9bec9');
-    glass(80.5, 15.6, 83.9, 17.4, 0.6); c.crew(cx, 16.4);
-    rbox(x0 - 0.05, 12.0, x0 + 1.5, 14.5, [0.1, 0.5, 0.5, 0.1], CUT); wb(x0, 12.0, x0 + 1.5, 12.12, '#5d6373');   // the hatch, at the end of the access arm
+    seam(x0, x1, b + 19, INK); seam(x0, x1, b + 7.0, '#b9bec9'); seam(x0, x1, b + 13.2, '#b9bec9');
+    glass(cx - 1.7, b + 15.6, cx + 1.7, b + 17.4, 0.6); c.crew(cx, b + 16.4);
+    rbox(x0 - 0.05, 17.0, x0 + 1.5, 19.5, [0.1, 0.5, 0.5, 0.1], CUT); wb(x0, 17.0, x0 + 1.5, 17.12, '#5d6373');   // the hatch, at the end of the access arm
   },
   pod(G, c) {   // a lunar lander on its legs
     const cx = 139.2, A = '#c9cdd8', F = '#d9a93a';
@@ -2727,6 +2767,15 @@ function drawRide(G, front) {
   ctx.save(); ctx.translate(SHX, SHY);
   RIDE[M.ride]?.(G, { g: M.goal, x: M.rideX, t: G.t, away: G.state === 'away' || G.state === 'over', crew: (x, y) => { if (B.length) drawCrew(B, AX(x), AY(y)); } });
   ctx.restore(); SHX = SHY = 0;
+  if ((M.ride === 'rocket' || M.ride === 'pod') && (G.state === 'away' || G.state === 'over')) {   // exhaust (or moon dust) billowing out across the pad
+    const t = G.state === 'over' ? AWAY_T + G.stateT : G.rideT, R = M.ride === 'rocket', cx = R ? 110.2 : 139.2, base = R ? 5.4 : 0.2, big = R ? 1 : 0.55;
+    for (let i = 0; i < 22; i++) {
+      const h = hsh(i * 1.7 + 0.3), a = t - 0.4 - h * 0.7; if (a <= 0) continue;
+      const sd = i % 2 ? 1 : -1, r = (0.6 + a * 1.6) * big * (0.7 + h * 0.6), x = cx + sd * (0.8 + a * 3.4 * (0.4 + h)) * big, y = base + a * (0.25 + h * 0.6) * big;
+      ctx.globalAlpha = clamp(1.3 - a * 0.28, 0, 0.92); disc(x, y, r, R ? (i % 3 ? '#f4f1ea' : '#dcd8cf') : '#b9b3a6', null);
+    }
+    ctx.globalAlpha = 1;
+  }
 }
 function flame(x, y, w, t) { for (let i = 0; i < 6; i++) { const k = Math.random(); wb(x - w * (0.5 - i * 0.08), y - 0.2 - k * 2.5 * (1 - i * 0.12), x + w * (0.5 - i * 0.08), y, ['#fff6e0', '#ffd23a', '#ff8a2a', '#ff4a2a', '#ff8a2a', '#ffd23a'][i]); } }
 function drawCrew(B, x, y) { B.forEach((p, i) => drawMiniDude(p, x + (i - (B.length - 1) / 2) * 7, y - (i % 2) * 2)); }
@@ -2993,14 +3042,14 @@ function drawMine(G, p, x, y) {
   }
   if (!p.alive && !p.gone) { const s = Math.ceil(p.deadT); if (s > 0) txt(`BACK IN ${s}`, x + 17 + (p.item ? 30 : 0), y + 9, 6, '#ff8a7a'); }
 }
-const MAP_TAG = { van: 'GET IN THE TRUCK', train: 'CATCH THE SUBWAY', heli: 'REACH THE CHOPPER', chopper: 'REACH THE CHOPPER', jet: 'BOARD THE JET', chute: 'GRAB A CHUTE AND JUMP', rocket: 'GET ON THE ROCKET', pod: 'GET TO THE LANDER' };
+const MAP_TAG = { van: 'GET IN THE TRUCK', train: 'CATCH THE SUBWAY', heli: 'REACH THE CHOPPER', chopper: 'REACH THE CHOPPER', jet: 'BOARD THE JET', chute: 'GRAB A CHUTE|AND JUMP', rocket: 'GET ON THE ROCKET', pod: 'GET TO THE LANDER' };
 function drawBanner(G) {
   const st = G.state, t = G.stateT;
   if (st === 'ready') {
     // a slanted strip slides in from the left: the leader's face, then GET TO THE / <RIDE>!!!
     const k = 1 - Math.pow(1 - clamp(t * 3.2, 0, 1), 3), ox = (k - 1) * 200;
-    const full = MAP_TAG[G.M.ride] || 'GET TO THE GETAWAY', cut = full.indexOf(' THE ');
-    const verb = cut > 0 ? full.slice(0, cut + 4) : 'GET TO THE', tag = cut > 0 ? full.slice(cut + 5) : full;
+    const full = MAP_TAG[G.M.ride] || 'GET TO THE GETAWAY', bar = full.indexOf('|'), cut = full.indexOf(' THE ');   // (a '|' marks where a tag without THE breaks)
+    const verb = bar > 0 ? full.slice(0, bar) : cut > 0 ? full.slice(0, cut + 4) : 'GET TO THE', tag = bar > 0 ? full.slice(bar + 1) : cut > 0 ? full.slice(cut + 5) : full;
     const lead = [...G.P].sort((a, b) => b.score - a.score)[0], two = true, Y = 31;
     // (mirrored into the top-right corner, just under the scoreboard: clear of it and of every racer's name tag)
     ctx.save(); if (two) { ctx.translate(320 - ox, 0); ctx.scale(-1, 1); } else ctx.translate(ox, 0);
