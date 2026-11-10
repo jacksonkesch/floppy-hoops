@@ -2070,6 +2070,24 @@ const BACKDROP = {
     sky('#93d5fd', '#eef9ff'); sun(HW * 0.55, -HH * 0.5, 11, '#fff8d6'); clouds(0.03, -62, '#ffffff', G.t, 1.6, 5);
     hills(0.05, 34, '#d3e9f3', 7, 90, 1, 0.1); skyline(0.09, 44, '#c2ddec', 6, 14, 22, 25, null, 9); band(0.09, 42, '#c2ddec');
     par(0.09, 460, (k, x) => { const X = Math.round(x) + 120, y = Math.round(horizon(0.09) + 42); ctx.fillStyle = '#b3d2e5'; ctx.fillRect(X, y - 44, 6, 44); ctx.fillRect(X - 6, y - 54, 18, 10); ctx.fillStyle = '#d8ecf6'; ctx.fillRect(X - 4, y - 52, 14, 4); });
+    // far off: jets climbing out (with contrails) and one coming in to land, on slow loops; up in the sky, so they show from the roof too
+    const jet = (period, ph, dir, sz, climb, y0, a) => {
+      const T = ((G.t + ph) % period) / period, span = HW * 2 + 120, X = Math.round(dir > 0 ? -HW - 60 + T * span : HW + 60 - T * span), Y = Math.round(y0 - T * climb), ang = Math.atan2(climb, span);
+      ctx.save(); ctx.globalAlpha = a * 0.55; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = sz; ctx.beginPath(); ctx.moveTo(X - dir * 8 * sz, Y + 3 * sz * 0.4); ctx.lineTo(X - dir * 140, Y + 140 * climb / span); ctx.stroke();
+      ctx.globalAlpha = a; ctx.translate(X, Y); ctx.scale(dir * sz, sz); ctx.rotate(-ang);
+      ctx.fillStyle = '#eef6fb'; ctx.fillRect(-11, -1, 22, 3); ctx.fillRect(11, 0, 2, 2); ctx.fillRect(-11, -5, 3, 4); ctx.fillRect(-4, 1, 8, 1);
+      ctx.fillStyle = '#9fbdd0'; ctx.fillRect(-8, 0, 17, 1); ctx.fillRect(-1, 2, 3, 1); ctx.restore();
+    };
+    jet(17, 0, 1, 1.5, HH * 1.2, horizon(0.09) + 20, 0.9); jet(23, 9, -1, 1, -HH * 0.35, -HH * 0.75, 0.6);
+    // the apron: a few airliners parked at the far gates
+    par(0.16, 260, (k, x) => {
+      if (hsh(k * 3.1 + 5) < 0.4) return;
+      const X = Math.round(x) + 40, Y = Math.round(horizon(0.16) + 56), B = '#b6d0e1', W = '#d6e9f4', D = '#97b5c9';
+      ctx.fillStyle = B; ctx.fillRect(X, Y - 10, 46, 6); ctx.fillRect(X - 3, Y - 9, 3, 4); ctx.fillRect(X + 40, Y - 20, 5, 10); ctx.fillRect(X + 36, Y - 15, 4, 5);
+      ctx.fillStyle = W; ctx.fillRect(X + 3, Y - 9, 34, 1); ctx.fillRect(X - 2, Y - 9, 2, 1);
+      ctx.fillStyle = D; ctx.fillRect(X + 14, Y - 5, 18, 2); ctx.fillRect(X + 16, Y - 4, 6, 2); ctx.fillRect(X + 6, Y - 4, 1, 4); ctx.fillRect(X + 27, Y - 4, 1, 4);
+      ctx.fillStyle = '#c7dbe8'; ctx.fillRect(X - 24, Y - 12, 20, 4); ctx.fillRect(X - 24, Y - 8, 2, 8);   // (the jet bridge it's docked to)
+    });
     band(0.16, 56, '#cfdbe2');
   },
   plane(G) {   // up above the clouds, and moving
