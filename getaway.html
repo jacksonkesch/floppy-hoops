@@ -637,7 +637,7 @@ const CAP_BOOM = { dmg: 100, kb: 14, splash: 3.4 };   // zipline ride speed (4 b
 const UP_W = 4.8, UP_Z = 0.4, AIR_K = 14, AIR_D = 3, AIR_PITCH = 1.0, TIP_K = 0.3;
 // you never fall over: the upright spring always stands you back up (holding a key braces a lean up to BRACE_MAX)
 const BRACE_MAX = 75 * D2R;
-const RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24;
+const RESPAWN_T = 2.5, IMMUNE_T = 1, WIDTH = 0.24, LAND_PAD = WIDTH + 0.02, STAND_PAD = 0.3;
 const READY_T = 2.6, AWAY_T = 2.8, OVER_HOLD = 0.6, SLOWMO = 0.35, SLOWMO_T = 1.3, KILL_SLOW_T = 0.4;
 
 TEAM.GREEN = { jersey: '#2fa84f', dark: '#1a6431', light: '#7fe39a', num: '#ffffff', dir: 1 };
@@ -670,77 +670,101 @@ const ITEM = Object.fromEntries(ITEMS.map(d => [d.id, d]));
 const B = (x0, x1, top, style, o = {}) => ({ x0, x1, top, bot: top - 40, style, ...o });
 const car = (x, col) => [B(x, x + 4.2, 1.0, 'car', { bot: 0, col }), B(x + 1, x + 3.1, 1.65, 'cabin', { bot: 1.0, col })];
 const lift = (x0, x1, lo, hi, T, ph = 0) => B(x0, x1, lo, 'lift', { bot: lo - 0.35, mv: t => ({ dx: 0, dy: (hi - lo) * 0.5 * (1 - Math.cos((t / T + ph) * Math.PI * 2)) }) });
+// the racing line: [x0, x1, y] is a flat stretch, [x0, x1, y0, y1] a slope. bots, checkpoints and item spots all read it
+const RT = (...s) => s.flatMap(([a, b, y, y2]) => [[a, y], [b, y2 ?? y]]);
+const crate = (x0, x1, top, bot = 0) => B(x0, x1, top, 'crate', { bot });
+// a steel tower of one-way floors, each one starting further right so the left side is a staircase
+const tower = (x1, floors) => floors.map(([x0, y]) => B(x0, x1, y, 'gfloor', { bot: y - 0.3, oneway: 1 }));
+// every map follows one Getaway Shootout stage: same beats in the same order, our own art
 const MAPS = [
-  { id: 'harbor', name: 'HARBOR BAZAAR', theme: 'harbor', ride: 'van', killY: -2.2, water: -0.9, x0: -7, x1: 95, cps: [0, 22, 48, 73],
-    goal: { x0: 84.2, x1: 87.5, y0: 0, y1: 2.6 }, rideX: 84,
-    zips: [[55.5, 5.5, 79, 2.6]],   // off the crate stack, over the water, down to the van
-    solids: [B(-9, 17, 0, 'dock'), B(6, 8.4, 1.1, 'crate', { bot: 0 }), B(8.4, 10.2, 2.2, 'crate', { bot: 0 }), B(13, 14, 1.0, 'barrel', { bot: 0 }),
-      B(20.5, 37, 0, 'dock'), B(25, 30, 2.5, 'awning', { bot: 2.25 }), B(33, 35, 1.4, 'crate', { bot: 0 }),
-      B(39.5, 44.5, -0.3, 'boat', { bot: -1.6, mv: t => ({ dx: 0, dy: Math.sin(t * 1.7) * 0.22 }) }),
-      B(47, 68, 0, 'dock'), B(52, 54.5, 1.2, 'crate', { bot: 0 }), B(54.5, 56.5, 2.4, 'crate', { bot: 0 }), B(61, 62, 1.0, 'barrel', { bot: 0 }),
-      B(71.5, 97, 0, 'dock')] },
-  // the city: a street with traffic, a double-decker bus you run THROUGH (lower deck, a hop up the stairwell, upper deck, out the back), a truck and a train to catch
-  { id: 'alley', name: 'GRIDLOCK ALLEY', theme: 'alley', ride: 'train', killY: -3, x0: -7, x1: 104, cps: [0, 23, 48.5, 72],
-    goal: { x0: 93.5, x1: 97, y0: 0, y1: 3.2 }, rideX: 88,
-    solids: [B(-9, 19, 0, 'street'), ...car(5, '#c84a4a'), ...car(12.3, '#4a8ac8'),
-      B(22, 55, 0, 'street'), ...car(24.5, '#e0a030'),
-      // the bus, x 30-50: lower deck at street level, the upper deck at 4.3 with a stairwell gap at x 44-47, a roof you bonk on
-      B(30, 50, 0, 'busfloor', { bot: -0.2 }), B(30, 30.6, 8.0, 'buswall', { bot: 4.3 }),
-      B(30.6, 44, 4.3, 'busdeck', { bot: 3.9 }), B(47, 50, 4.3, 'busdeck', { bot: 3.9 }), B(44, 47, 4.3, 'busstair', { bot: 4.1, oneway: 1 }),
-      B(29.7, 50.3, 8.2, 'busroof', { bot: 8.0, ceil: 1 }),
-      B(32, 33.6, 0.65, 'busseat', { bot: 0 }), B(36, 37.6, 0.65, 'busseat', { bot: 0 }), B(40, 41.6, 0.65, 'busseat', { bot: 0 }),
-      B(33, 34.6, 4.95, 'busseat', { bot: 4.3 }), B(37, 38.6, 4.95, 'busseat', { bot: 4.3 }), B(41, 42.6, 4.95, 'busseat', { bot: 4.3 }),
-      ...car(52.5, '#6ac06a'),
-      B(58, 106, 0, 'street'), B(62, 64.5, 2.2, 'cab', { bot: 0 }), B(64.5, 71, 3.3, 'truck', { bot: 0 }), ...car(75.5, '#b05ac8'), ...car(81.2, '#d8d8e0')] },
-  { id: 'rail', name: 'RAIL RUNNER', theme: 'rail', ride: 'heli', killY: 1.2, x0: -7, x1: 97, cps: [-2, 9, 23, 37, 51, 66, 80],
-    goal: { x0: 87.6, x1: 91, y0: 7.2, y1: 10.5 }, rideX: 89, rideY: 9.6,
-    solids: [B(-9, 5, 3.2, 'boxcar', { bot: 0.9 }), B(7.5, 18.5, 3.2, 'boxcar', { bot: 0.9 }), B(21.5, 32.5, 1.9, 'flatcar', { bot: 0.9 }),
-      B(25, 27.5, 3.0, 'crate', { bot: 1.9 }), B(27.5, 30, 3.8, 'crate', { bot: 1.9 }), B(35.5, 46.5, 3.6, 'tanker', { bot: 0.9 }),
-      B(49.5, 60.5, 3.2, 'boxcar', { bot: 0.9 }), B(64, 75, 3.4, 'boxcar', { bot: 0.9 }),
-      B(78, 88, 3.8, 'loco', { bot: 0.9 }), B(88, 93, 5.0, 'locab', { bot: 0.9 }), B(93, 97, 3.6, 'loco', { bot: 0.9 })] },
-  // the tower: street, into a dark office floor (desks, a lit EXIT sign), a lift, a second office floor with a hole in the wall, a lift, the roof with a helipad
-  { id: 'spire', name: 'GLASS SPIRE', theme: 'spire', ride: 'chopper', killY: -3, x0: -7, x1: 92, cps: [0, 13, 33, 53, 70],
-    goal: { x0: 80.5, x1: 84.5, y0: 14, y1: 17 }, rideX: 81, rideY: 14,
-    solids: [B(-9, 11, 0, 'street'), B(7, 10, 1.3, 'planter', { bot: 0 }),
-      B(11, 27, 3, 'office', { room: 1, exit: 24 }), B(14, 16.2, 3.75, 'desk2', { bot: 3 }), B(19.5, 21.7, 3.75, 'desk2', { bot: 3 }), B(23.2, 24.2, 4.1, 'cooler', { bot: 3 }),
-      B(11, 27.2, 7.6, 'office', { ceil: 1, bot: 7.3, slab: 1 }),
-      lift(27.6, 31.4, 1.5, 9.2, 7),
-      B(32, 47, 9, 'office', { room: 1, exit: 34 }), B(35, 37.2, 9.75, 'desk2', { bot: 9 }), B(40, 42.2, 9.75, 'desk2', { bot: 9 }), B(43.8, 44.8, 10.1, 'cooler', { bot: 9 }),
-      B(32, 47.2, 13.6, 'office', { ceil: 1, bot: 13.3, slab: 1 }),
-      lift(47.6, 51.4, 6, 13.6, 6.5, 0.4), B(52, 65, 13, 'tower'), B(58, 59.4, 14.1, 'ac', { bot: 13 }), B(69, 93, 14, 'tower', { pad: 1 })] },
-  // the reference's terminal is a climb: hall, escalator, food court, escalator, rooftop with drums and billboards, the gate, then the jet
-  { id: 'airport', name: 'DEPARTURES HALL', theme: 'airport', ride: 'jet', killY: -5, x0: -7, x1: 132, cps: [0, 24, 50, 78, 100],
-    goal: { x0: 118.4, x1: 120.6, y0: 2.7, y1: 5.6 }, rideX: 118.6, strip: { x0: 36, x1: 40 }, roof: { x0: 66, x1: 104 },
-    solids: [B(-9, 60, 0, 'tile'), B(-9, 60, 9, 'ceil', { bot: 6.4, ceil: 1 }),
-      B(8, 11, 1.2, 'desk', { bot: 0 }), B(14, 17, 1.2, 'desk', { bot: 0 }), B(22, 30, 0.6, 'belt', { bot: 0, belt: 2.2 }), B(33, 34.5, 0.9, 'bin', { bot: 0 }),
-      B(42, 49, 0, 'escalator', { bot: -0.6, k: 3 / 7, belt: 1 }),                          // escalator 1: up 3 m over 7 m, and it carries you
-      B(49, 60, 3, 'floor', { bot: 2.6 }), B(52, 54.5, 4.2, 'counter', { bot: 3 }), B(57.5, 58.6, 3.9, 'bin', { bot: 3 }),   // the food court
-      B(60, 67, 3, 'escalator', { bot: 2.4, k: 3 / 7, belt: 1 }),                           // escalator 2
-      B(67, 72, 6, 'floor', { bot: 5.6 }),                                                  // the top landing, then out onto the roof
-      B(72, 104, 6, 'roof', { bot: 0 }), B(73.5, 75.5, 7.5, 'acbox', { bot: 6 }), B(88, 90, 7, 'vent', { bot: 6 }), B(96, 98, 7, 'vent', { bot: 6 }),
-      B(84, 90, 9.2, 'billboard', { bot: 8.6, sign: 'BOB' }), B(94, 100, 9.2, 'billboard', { bot: 8.6, sign: 'PETES' }),      // billboards on stilts: hop on top to skip the roof fight
-      B(104, 106.5, 4.5, 'wall', { bot: 0 }), B(106.5, 114, 5.2, 'gate', { bot: 0 }),       // the drop, a low wall, then Gate C4's block
-      B(114, 134, 0, 'tarmac'), B(115.4, 116.6, 0.9, 'airstep', { bot: 0 }), B(116.6, 117.8, 1.8, 'airstep', { bot: 0 }), B(117.8, 119, 2.7, 'airstep', { bot: 0 })],
-    caps: [{ x: 78.4, y: 6, k: 'barrel' }, { x: 79.4, y: 6, k: 'barrel' }, { x: 80.4, y: 6, k: 'barrel' }, { x: 81.4, y: 6, k: 'barrel' }] },   // a row of fuel drums on the roof: shoot one and they all go
-  { id: 'plane', name: 'CLOUD FREIGHTER', theme: 'plane', ride: 'chute', killY: -4, x0: -7, x1: 70, cps: [0, 16, 40, 54],
-    goal: { x0: 63.5, x1: 74, y0: -4, y1: 3.5 }, rideX: 63, pack: { x0: 53, x1: 55 },   // (the chute rack: past it you wear one)
-    solids: [B(-9, 24, 0, 'deck'), B(-9, 63, 9, 'ceil', { bot: 5.2, ceil: 1, plane: 1 }), B(6, 8.5, 1.4, 'cargo', { bot: 0 }), B(13, 15, 1.0, 'cargo', { bot: 0 }), B(15, 16.6, 2.0, 'cargo', { bot: 0 }),
-      B(29, 32.4, 0.15, 'cart', { bot: -0.45, mv: t => ({ dx: Math.sin(t * 0.75) * 5, dy: 0 }) }),
-      B(38, 60, 0, 'deck'), B(43, 46, 1.6, 'cargo', { bot: 0 }), B(50, 51.6, 1.0, 'cargo', { bot: 0 }),
-      B(60, 63, -0.5, 'ramp'), B(63, 66, -1.0, 'ramp')] },
-  { id: 'meadow', name: 'LAUNCH MEADOW', theme: 'meadow', ride: 'rocket', killY: -2.5, water: -1, x0: -7, x1: 90, cps: [0, 16, 34, 52, 64],
-    goal: { x0: 73, x1: 75.2, y0: 9.2, y1: 12 }, rideX: 75,
-    zips: [[24.5, 5.4, 36, 3.6], [41.5, 4.6, 51.5, 3.3], [59, 3.8, 70.5, 11.2]],   // three cables: over the pond, off the rock, up the gantry
-    solids: [B(-9, 14, 0, 'grass'), B(14, 22, 1.2, 'grass'), B(22, 29, 2.2, 'grass'), B(33, 47, 0.5, 'grass'), B(37, 40, 1.6, 'hay', { bot: 0.5, bounce: 1 }),
-      B(43, 44.5, 1.4, 'rock', { bot: 0.5 }), B(50.5, 92, 0, 'grass'), B(56, 57.5, 1.1, 'hay', { bot: 0 }),
-      B(66, 71, 2.3, 'gantry', { bot: 2.0, oneway: 1 }), B(69, 74, 4.6, 'gantry', { bot: 4.3, oneway: 1 }), B(66, 71, 6.9, 'gantry', { bot: 6.6, oneway: 1 }),
-      B(69, 75, 9.2, 'gantry', { bot: 8.9, oneway: 1 }), B(75, 81, 21, 'hull', { bot: 0 })] },
-  { id: 'moon', name: 'CRATER COLONY', theme: 'moon', ride: 'pod', killY: -5, g: 0.35, x0: -7, x1: 142, cps: [0, 34, 70, 111],
-    goal: { x0: 131.5, x1: 134.5, y0: 0, y1: 3.4 }, rideX: 131,
-    foes: [{ x: 43, y: 2.8 }],   // a grumpy worker on the dome who takes potshots at anyone in line
-    caps: [{ x: 71.5, y: -0.4 }, { x: 113, y: 0 }],   // fuel capsules: shoot one and it blows
-    solids: [B(-9, 22, 0, 'moon'), B(32, 56, 0.6, 'moon'), B(40, 46, 2.8, 'dome', { bot: 0.6 }), B(68, 98, -0.4, 'moon'), B(76, 78, 1.0, 'rock', { bot: -0.4 }),
-      B(84, 86, 1.8, 'rock', { bot: -0.4 }), B(109, 144, 0, 'moon'), B(116, 118.5, 1.3, 'rock', { bot: 0 })] },
+  { id: 'harbor', name: 'MARKET TOWN', theme: 'harbor', ride: 'van', killY: -6, x0: -7, x1: 100, cps: [0, 26, 53, 72],
+    goal: { x0: 88.2, x1: 91.5, y0: 0, y1: 4.2 }, rideX: 88, stop: 91.3,
+    solids: [B(-9, 112, 0, 'street'), crate(5, 6.6, 1.1), crate(6.6, 8.6, 2.0),
+      B(13, 15.6, 1.3, 'dumpster', { bot: 0 }), B(16.8, 19.4, 1.3, 'dumpster', { bot: 0 }), B(20.6, 23.2, 1.3, 'dumpster', { bot: 0 }),
+      crate(27.5, 28.9, 1.1), B(30, 35, 1.8, 'stall', { bot: 0 }),
+      B(42, 52, 7.6, 'shop', { bot: 4.2 }), B(46, 48.6, 1.3, 'dumpster', { bot: 0 }),   // the shop's upper storey hangs over the pavement
+      B(54.5, 57.3, 1.4, 'dumpster', { bot: 0 }), crate(57.3, 59.6, 2.8), crate(59.6, 62, 4.2),
+      B(62, 78, 5.6, 'brick', { bot: 0 }), crate(68, 69.6, 6.7, 5.6),
+      B(86.4, 88.2, 0, 'ramp', { bot: -0.2, k: 0.5 })],   // the loading ramp up into the back of the truck
+    route: RT([-9, 5, 0], [5, 6.6, 1.1], [6.6, 8.6, 2.0], [8.6, 13, 0], [13, 15.6, 1.3], [15.6, 16.8, 0], [16.8, 19.4, 1.3], [19.4, 20.6, 0], [20.6, 23.2, 1.3],
+      [23.2, 27.5, 0], [27.5, 28.9, 1.1], [28.9, 30, 0], [30, 35, 1.8], [35, 46, 0], [46, 48.6, 1.3], [48.6, 54.5, 0], [54.5, 57.3, 1.4], [57.3, 59.6, 2.8],
+      [59.6, 62, 4.2], [62, 68, 5.6], [68, 69.6, 6.7], [69.6, 78, 5.6], [78, 112, 0]) },
+  { id: 'alley', name: 'DOWNTOWN', theme: 'alley', ride: 'train', killY: -12, x0: -7, x1: 100, cps: [0, 14, 46, 68],
+    goal: { x0: 86.2, x1: 89.5, y0: -4.2, y1: -1.2 }, rideX: 86, stop: 89.3,
+    solids: [B(-9, 72, 0, 'street'), ...car(8, '#ffc93a'),
+      // the double-decker: in the back door, over the seats, up the stairs, out through the broken windscreen
+      B(18, 42.4, 0.7, 'busfloor', { bot: 0 }), B(18.4, 35, 4.3, 'busdeck', { bot: 4.0 }), B(18, 42.4, 7.6, 'busroof', { bot: 7.3 }),
+      B(18, 18.4, 7.3, 'buswall', { bot: 4.0 }), B(23, 24.2, 1.5, 'busseat', { bot: 0.7 }), B(28, 29.2, 1.5, 'busseat', { bot: 0.7 }),
+      B(35.2, 36.4, 1.6, 'busstep', { bot: 0.7 }), B(36.4, 37.6, 2.5, 'busstep', { bot: 0.7 }), B(37.6, 38.8, 3.4, 'busstep', { bot: 0.7 }),
+      B(38.8, 42.4, 4.3, 'busbooth', { bot: 0.7 }),
+      crate(52.3, 54, 1.3), B(54, 56.5, 2.2, 'ftcab', { bot: 0 }), B(56.5, 64.5, 3.6, 'ftbox', { bot: 0 }),
+      B(72, 73.5, -1.0, 'substep'), B(73.5, 75, -2.0, 'substep'), B(75, 76.5, -3.0, 'substep'),
+      B(76.5, 86, -4.2, 'platform'), B(86, 122, -5.2, 'trackbed'), B(79, 122, 9, 'bldg', { bot: 0.4 })],
+    route: RT([-9, 8, 0], [8, 9, 1.0], [9, 11.1, 1.65], [11.1, 12.2, 1.0], [12.2, 18, 0], [18, 23, 0.7], [23, 24.2, 1.5], [24.2, 28, 0.7], [28, 29.2, 1.5],
+      [29.2, 35.2, 0.7], [35.2, 36.4, 1.6], [36.4, 37.6, 2.5], [37.6, 38.8, 3.4], [38.8, 42.4, 4.3], [42.4, 52.3, 0], [52.3, 54, 1.3], [54, 56.5, 2.2],
+      [56.5, 64.5, 3.6], [64.5, 72, 0], [72, 73.5, -1], [73.5, 75, -2], [75, 76.5, -3], [76.5, 86, -4.2], [86, 122, -5.2]) },
+  { id: 'rail', name: 'FREIGHT LINE', theme: 'rail', ride: 'heli', killY: 1.2, x0: -5, x1: 101, cps: [0, 13, 26, 42, 54, 67, 81],
+    goal: { x0: 90.2, x1: 93.6, y0: 4.6, y1: 8.6 }, rideX: 90, stop: 93.4,
+    solids: [B(-8, 7.6, 3.6, 'tanker', { bot: 0.9 }), B(9.8, 21.3, 4.2, 'boxcar', { bot: 0.9, col: '#3b7fd9' }),
+      B(23.5, 35, 4.2, 'boxcar', { bot: 0.9, col: '#d9483b' }), crate(32, 33.6, 5.3, 4.2),
+      B(37.2, 48.2, 1.9, 'flatcar', { bot: 0.9 }), B(38.4, 48.2, 3.4, 'logs', { bot: 1.9 }),
+      B(50.4, 61.9, 4.2, 'boxcar', { bot: 0.9, col: '#f08a2c' }), B(64.1, 75.6, 4.2, 'boxcar', { bot: 0.9, col: '#3fae4f' }), crate(70.4, 72, 5.3, 4.2),
+      B(77.8, 85.8, 3.8, 'loco', { bot: 0.9 }), B(85.8, 90, 5.0, 'locab', { bot: 0.9 })],
+    route: RT([-8, 7.6, 3.6], [9.8, 21.3, 4.2], [23.5, 32, 4.2], [32, 33.6, 5.3], [33.6, 35, 4.2], [37.2, 38.4, 1.9], [38.4, 48.2, 3.4], [50.4, 61.9, 4.2],
+      [64.1, 70.4, 4.2], [70.4, 72, 5.3], [72, 75.6, 4.2], [77.8, 85.8, 3.8], [85.8, 101, 5.0]) },
+  { id: 'spire', name: 'GLASS TOWER', theme: 'spire', ride: 'chopper', killY: -6, x0: -7, x1: 94, cps: [0, 14, 37, 54, 71],
+    goal: { x0: 83, x1: 86.4, y0: 10, y1: 13 }, rideX: 82.8, stop: 86.2,
+    solids: [B(-9, 96, 0, 'street'), B(8, 20, 10.0, 'core', { bot: 4.6 }), B(20, 28.5, 5.0, 'slab', { bot: 4.6 }),
+      B(26, 28.5, 1.4, 'equip', { bot: 0 }), B(28.5, 31.5, 2.6, 'equip', { bot: 0 }), B(31.5, 35, 3.8, 'equip', { bot: 0 }),
+      B(35, 90, 5.0, 'office'), B(39, 42, 6.0, 'table', { bot: 5.0 }), B(47, 50, 6.0, 'table', { bot: 5.0 }), B(20, 58, 10.0, 'slab', { bot: 9.6 }),
+      B(61, 63.5, 6.2, 'cabinet', { bot: 5.0 }), B(63.5, 66, 7.4, 'cabinet', { bot: 5.0 }), B(66, 69, 8.6, 'cabinet', { bot: 5.0 }),
+      B(69, 90, 10.0, 'roofblk', { bot: 5.0 }), B(73, 75, 11.2, 'ac', { bot: 10.0 }), crate(76, 77.6, 11.1, 10.0)],
+    route: RT([-9, 26, 0], [26, 28.5, 1.4], [28.5, 31.5, 2.6], [31.5, 35, 3.8], [35, 39, 5.0], [39, 42, 6.0], [42, 47, 5.0], [47, 50, 6.0], [50, 61, 5.0],
+      [61, 63.5, 6.2], [63.5, 66, 7.4], [66, 69, 8.6], [69, 73, 10.0], [73, 75, 11.2], [75, 76, 10.0], [76, 77.6, 11.1], [77.6, 96, 10.0]) },
+  { id: 'airport', name: 'TERMINAL', theme: 'airport', ride: 'jet', killY: -6, x0: -7, x1: 140, cps: [0, 24, 45, 74, 96, 116],
+    goal: { x0: 127.2, x1: 130.4, y0: 11.4, y1: 14.4 }, rideX: 127, stop: 130.2,
+    strip: { x0: 16, x1: 20, y0: 0, y1: 3.6 },   // the scanner takes whatever you are carrying
+    caps: [{ x: 77, y: 10.5, k: 'barrel' }, { x: 84.5, y: 10.5, k: 'barrel' }, { x: 86.5, y: 10.5, k: 'barrel' }, { x: 93.5, y: 10.5, k: 'barrel' }],
+    solids: [B(-9, 30, 0, 'tile'), B(8, 11, 1.1, 'desk', { bot: 0 }), B(-9, 30, 10.5, 'wallmass', { bot: 4.9 }),
+      B(30, 42.25, 0, 'escalator', { bot: -0.6, k: 3 / 7, belt: 1 }), B(42.25, 72.25, 5.25, 'floor'),
+      B(46, 49, 6.35, 'counter', { bot: 5.25 }), B(57, 59, 6.35, 'counter', { bot: 5.25 }), B(30, 60, 10.5, 'slab', { bot: 10.0 }),
+      B(60, 72.25, 5.25, 'escalator', { bot: 5.0, k: 3 / 7, belt: 1 }), B(72.25, 98, 10.5, 'roofblk'),
+      B(80, 82.5, 11.7, 'ac', { bot: 10.5 }), B(88, 90, 11.7, 'ac', { bot: 10.5 }),
+      B(98, 101.5, 9.0, 'roofblk'), B(101.5, 104, 10.2, 'roofblk'), B(104, 114, 11.4, 'gatewall'), B(114, 119, 12.6, 'gatewall'), B(119, 142, 11.4, 'gatewall')],
+    route: RT([-9, 8, 0], [8, 11, 1.1], [11, 30, 0], [30, 42.25, 0, 5.25], [42.25, 46, 5.25], [46, 49, 6.35], [49, 57, 5.25], [57, 59, 6.35], [59, 60, 5.25],
+      [60, 72.25, 5.25, 10.5], [72.25, 80, 10.5], [80, 82.5, 11.7], [82.5, 88, 10.5], [88, 90, 11.7], [90, 98, 10.5], [98, 101.5, 9.0], [101.5, 104, 10.2],
+      [104, 114, 11.4], [114, 119, 12.6], [119, 142, 11.4]) },
+  { id: 'plane', name: 'CARGO JET', theme: 'plane', ride: 'chute', killY: -16, x0: -6, x1: 84, cps: [0, 20, 36, 56],
+    goal: { x0: 70.6, x1: 76, y0: -8, y1: 5.2 }, rideX: 70, pack: { x0: 63, x1: 65.4, y0: 5, y1: 10, fy: 5.6 },
+    caps: [{ x: 23, y: 0 }],
+    solids: [B(-12, -8, 12.6, 'hull', { bot: -2.2, nofloor: 1 }), B(-9, 26.8, 0, 'deck', { bot: -2.2 }),
+      crate(8, 10.5, 1.2), crate(10.5, 13, 2.2), crate(15.5, 17.5, 1.2), B(-9, 24.5, 5.6, 'slab', { bot: 4.6 }),
+      B(26.8, 28.8, 1.4, 'pstair', { bot: -2.2 }), B(28.8, 30.8, 2.8, 'pstair', { bot: -2.2 }), B(30.8, 32.8, 4.2, 'pstair', { bot: -2.2 }),
+      B(32.8, 70, 5.6, 'cabinblk', { bot: -2.2 }), B(40, 41.2, 6.5, 'seat', { bot: 5.6 }), B(46, 47.2, 6.5, 'seat', { bot: 5.6 }), B(52, 53.2, 6.5, 'seat', { bot: 5.6 }),
+      B(-9, 84, 12.6, 'hull', { bot: 10.2, ceil: 1, nofloor: 1 }), B(76, 90, 12.6, 'hull', { bot: -2.2, nofloor: 1 })],
+    route: RT([-9, 8, 0], [8, 10.5, 1.2], [10.5, 13, 2.2], [13, 15.5, 0], [15.5, 17.5, 1.2], [17.5, 26.8, 0], [26.8, 28.8, 1.4], [28.8, 30.8, 2.8], [30.8, 32.8, 4.2],
+      [32.8, 40, 5.6], [40, 41.2, 6.5], [41.2, 46, 5.6], [46, 47.2, 6.5], [47.2, 52, 5.6], [52, 53.2, 6.5], [53.2, 70, 5.6], [70, 76, -8]) },
+  { id: 'meadow', name: 'LAUNCH PAD', theme: 'meadow', ride: 'rocket', killY: -4, water: -1.6, x0: -7, x1: 92, cps: [0, 17, 32, 57, 68],
+    goal: { x0: 76.8, x1: 79, y0: 12, y1: 15 }, rideX: 79,
+    zips: [[37, 12.6, 56.5, 10.6]],   // off the fuel silo, across to the launch tower
+    solids: [B(-9, 67, 0, 'road'), ...car(8, '#ffc93a'),
+      ...tower(30, [[16, 2], [18.5, 4], [21, 6], [23.5, 8]]), B(30, 42, 9.6, 'silo', { bot: 0 }), crate(34, 35.6, 10.7, 9.6),
+      ...tower(67, [[55, 2], [55, 4], [55, 6], [55, 8], [58, 10], [61, 12]]), B(67, 77.4, 12.0, 'bridge', { bot: 11.4 }),
+      B(79, 85.4, 34, 'hull', { bot: -40, nofloor: 1 })],
+    route: RT([-9, 8, 0], [8, 9, 1.0], [9, 11.1, 1.65], [11.1, 12.2, 1.0], [12.2, 16, 0], [16, 18.5, 2], [18.5, 21, 4], [21, 23.5, 6], [23.5, 30, 8],
+      [30, 34, 9.6], [34, 35.6, 10.7], [35.6, 42, 9.6], [56.5, 58, 8], [58, 61, 10], [61, 77.4, 12]) },
+  { id: 'moon', name: 'MOON BASE', theme: 'moon', ride: 'pod', killY: -9, g: 0.35, x0: -7, x1: 148, cps: [0, 34, 70, 111],
+    goal: { x0: 136.5, x1: 139.5, y0: 0, y1: 8 }, rideX: 136, stop: 139.3,
+    foes: [{ x: 106.2, y: 2.4 }], caps: [{ x: 86, y: 0 }, { x: 125, y: 0 }],
+    solids: [B(-9, 12, 0, 'moon'), B(12, 18, 0, 'moon', { k: 0.25 }), B(18, 26, 1.5, 'moon', { k: -0.1875 }), B(26, 46, 0, 'moon'),
+      B(46, 50, 0, 'moon', { k: 0.5 }), B(50, 54, 2.0, 'moon', { k: -0.5 }), B(54, 57, 0, 'moon'),
+      B(57, 61, 0, 'moon', { k: -0.625 }), B(61, 63, -2.5, 'moon'), B(63, 67, -2.5, 'moon', { k: 0.625 }), B(67, 150, 0, 'moon'),   // the crater
+      B(32, 37, 2.2, 'roverbed', { bot: 0 }), B(37, 41, 3.4, 'rovercab', { bot: 0 }),
+      crate(72, 75, 1.75), crate(75, 78, 3.5), crate(78, 81, 5.25), crate(93, 96, 1.75), crate(98, 101, 3.5), crate(105, 107.4, 2.4),
+      B(114, 119, 2.2, 'roverbed', { bot: 0 }), B(119, 123, 3.4, 'rovercab', { bot: 0, dish: 1 }), B(128, 132, 0.8, 'pipe', { bot: 0 })],
+    route: RT([-9, 12, 0], [12, 18, 0, 1.5], [18, 26, 1.5, 0], [26, 32, 0], [32, 37, 2.2], [37, 41, 3.4], [41, 46, 0], [46, 50, 0, 2], [50, 54, 2, 0], [54, 57, 0],
+      [57, 61, 0, -2.5], [61, 63, -2.5], [63, 67, -2.5, 0], [67, 72, 0], [72, 75, 1.75], [75, 78, 3.5], [78, 81, 5.25], [81, 93, 0], [93, 96, 1.75], [96, 98, 0],
+      [98, 101, 3.5], [101, 105, 0], [105, 107.4, 2.4], [107.4, 114, 0], [114, 119, 2.2], [119, 123, 3.4], [123, 128, 0], [128, 132, 0.8], [132, 150, 0]) },
 ];
 const MAP = Object.fromEntries(MAPS.map(m => [m.id, m]));
 const POOLS = { maps: MAPS, items: ITEMS };
@@ -772,7 +796,7 @@ function loadSettings() {
   return out;
 }
 // time trial: best time and a ghost of that run, per map
-const TT_KEY = 'floppy-getaway-tt', GHOST_HZ = 30;
+const TT_KEY = 'floppy-getaway-tt2', GHOST_HZ = 30;
 function loadTT() { try { return JSON.parse(localStorage.getItem(TT_KEY) || '{}') || {}; } catch (e) { return {}; } }
 function saveTT(o) { try { localStorage.setItem(TT_KEY, JSON.stringify(o)); } catch (e) { /* storage unavailable */ } }
 const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return (m ? m + ':' + (s < 10 ? '0' : '') : '') + s.toFixed(3); };
@@ -833,7 +857,7 @@ class Dude {
     Object.assign(this, { x, y, px: x, py: y, vx: 0, vy: 0, a: 0, av: 0, airA: 0, grounded: true, ground: null,
       holdDir: 0, holdT: 0, crouch: 0, launchH: 0, launchDir: 1, tgt: null,
       alive: true, deadT: 0, how: '', imm: 0, hp: 100, item: null, ammo: 0, cd: 0, trig: false, shield: 0,
-      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0 });
+      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0, zipX: 0, zipO: null, inT: 0 });
   }
   get canAct() { return this.alive && !this.gone && !this.zip; }
   get sens() { return this.human ? SET.turn : 1; }   // (bots always lean at the measured rate)
@@ -897,31 +921,43 @@ class Dude {
     if (this.tgt && this.grounded && !this.holdDir && this.crouch <= 0 && !this.zip) this.facing = this.tgt.x < this.x ? -1 : 1;   // (standing still, you turn to face them)
     if (this.zipCool > 0) this.zipCool -= dt;
     if (this.zip) this.zipStep(G, dt); else if (this.grounded) this.groundStep(G, dt); else this.airStep(G, dt);
+    if (this.alive && !this.zip) this.unbury(G, dt);
     if (this.x < G.M.x0) { this.x = G.M.x0; this.vx = Math.abs(this.vx) * 0.2; }
-    if (this.x > G.M.x1) { this.x = G.M.x1; this.vx = -Math.abs(this.vx) * 0.2; }
+    { const xr = G.M.stop ?? G.M.x1; if (this.x > xr) { this.x = xr; this.vx = -Math.abs(this.vx) * 0.2; } }   // (the far wall of the ride: you can't overshoot it)
     if (this.y < G.M.killY) this.die(G, 'fall');
     if (this.alive && this.item && ITEM[this.item].auto && this.trig) G.useItem(this);
   }
+  hgt() { return BH * 0.85 * Math.max(0.4, Math.cos(this.a)); }
   groundStep(G, dt) {
-    const s = this.ground;
+    let s = this.ground;
     if (s && s.dude) {
       const o = s.dude, h = o.head();
       if (!o.alive || o.gone || Math.abs(this.x - h.x) > 0.5 || o.y + Math.cos(o.a) * BH < this.y - 0.6) return this.fall();
-      this.x += o.x - o.px; this.y = o.y + Math.cos(o.a) * BH * 0.98;
+      const ny = o.y + Math.cos(o.a) * BH * 0.98;   // (carried up under a ceiling: you get scraped off)
+      if (ny > this.y && G.S.some(r => !r.oneway && inX(r, this.x, 0.1) && r.bot > this.y + 0.3 && r.bot < ny + BH * 0.85)) return this.fall();
+      this.moveX(G, o.x - o.px, true); this.y = ny;
     } else if (s) {
-      this.x += s.dx || 0; if (s.belt) this.x += s.belt * dt; this.y = topAt(s, this.x);
+      // a moving floor or a belt carries you along, but never through a wall
+      const mx = (s.dx || 0) + (s.belt ? s.belt * dt : 0);
+      if (mx) this.moveX(G, mx, true);
+      s = this.ground; this.y = topAt(s, this.x);
     }
     // shoved along the floor: slide and stop
     if (this.vx) {
-      this.moveX(G, this.vx * dt);
+      this.moveX(G, this.vx * dt); if (s && !s.dude) s = this.ground;
       const f = 9 * dt; this.vx = Math.abs(this.vx) <= f ? 0 : this.vx - Math.sign(this.vx) * f;
     }
-    if (s && !s.dude && !inX(s, this.x, 0.18)) return this.fall();
+    if (s && !s.dude && !inX(s, this.x, STAND_PAD)) {
+      // off the end of this floor: carry straight on if the next one is level with it, else fall
+      const r = G.S.find(r => r !== s && inX(r, this.x, LAND_PAD) && Math.abs(topAt(r, this.x) - this.y) < 0.06);
+      if (!r) return this.fall();
+      s = this.ground = r; this.y = topAt(r, this.x);
+    }
     let tgt = 0, w = UP_W, z = UP_Z;
     if (this.crouch > 0) {
       this.crouch -= dt; this.squash = 0.6; tgt = this.a; z = 1;   // (the crouch keeps whatever lean you had)
       if (this.crouch <= 0) { this.launch(G); return; }
-    } else if (this.holdDir && G.state !== 'away' || this.holdDir && G.state === 'away') {
+    } else if (this.holdDir) {
       // holding leans you further, never back up: a lean you landed with is braced, not undone (that's how you speed-jump)
       this.holdT += dt; const ramp = Math.min(LEAN_MAX, LEAN_RATE * this.holdT * this.sens), cur = this.a * this.holdDir;
       tgt = this.holdDir * (cur > ramp ? Math.min(cur, BRACE_MAX) : ramp); w = LEAN_W; z = LEAN_Z;
@@ -929,37 +965,67 @@ class Dude {
     this.av += (-w * w * (this.a - tgt) - 2 * z * w * this.av) * dt; this.a += this.av * dt;
     // the floor stops you at flat on your face/back: never tip through it (the spring stands you back up)
     if (Math.abs(this.a) > FLAT_A) { this.a = Math.sign(this.a) * FLAT_A; if (this.av * this.a > 0) this.av *= -0.25; }
-    // standing still on solid ground at a checkpoint: that's where you come back if you fall
-    if (s && !s.dude && !s.mv) { const cps = G.M.cps; for (let k = cps.length - 1; k >= 0; k--) if (this.x >= cps[k] - 0.5) { if (cps[k] > this.cp) this.cp = cps[k]; break; } }
+    // standing on solid ground at a checkpoint (on its own level, not somewhere below it): that's where you come back if you fall
+    if (s && !s.dude && !s.mv) {
+      const cps = G.M.cps;
+      for (let k = cps.length - 1; k >= 0; k--) if (this.x >= cps[k] - 0.5 && this.y > G.cpY[k] - 1.5) { if (cps[k] > this.cp) this.cp = cps[k]; break; }
+    }
   }
   fall() { this.grounded = false; this.ground = null; this.airA = this.a; this.vy = Math.min(this.vy, 0); }
-  // move sideways, stopping at walls (a wall bumps you back and knocks your head)
-  moveX(G, dx) {
-    const nx = this.x + dx, top = this.y + BH * 0.85 * Math.max(0.4, Math.cos(this.a));
+  // move sideways, stopping at walls (a wall bumps you back and knocks your head; a quiet push just stops)
+  moveX(G, dx, quiet) {
+    const nx = this.x + dx, top = this.y + this.hgt();
     for (const s of G.S) {
-      if (s.k && nx + WIDTH > s.x0 && nx - WIDTH < s.x1) { const ty = topAt(s, nx); if (this.y >= ty - 0.03) continue; if (this.y > ty - 0.6) { this.y = ty; continue; } }
-      if (s.oneway || this.y >= s.top - 0.03 || top <= s.bot) continue;
-      if (nx + WIDTH > s.x0 && nx - WIDTH < s.x1 && !(this.x + WIDTH > s.x0 && this.x - WIDTH < s.x1)) {
-        this.x = dx > 0 ? s.x0 - WIDTH - 0.001 : s.x1 + WIDTH + 0.001;
-        const v = dx / G.dt;
+      if (s.oneway || nx + WIDTH <= s.x0 || nx - WIDTH >= s.x1) continue;
+      let st = s.top;
+      if (s.k) { st = topAt(s, nx); if (this.y >= st - 0.03) continue; if (this.y > st - 0.6) { this.y = st; if (this.grounded && this.ground && !this.ground.dude) this.ground = s; continue; } }
+      if (this.y >= st - 0.03 || top <= s.bot) continue;
+      if (this.x + WIDTH > s.x0 && this.x - WIDTH < s.x1) continue;   // (already overlapping it: unbury sorts that out)
+      this.x = dx > 0 ? s.x0 - WIDTH - 0.001 : s.x1 + WIDTH + 0.001;
+      if (!quiet) {
+        const v = dx / (G.dt || STEP);
         if (Math.abs(v) > 2) { G.sfx.thud(Math.min(1, Math.abs(v) / 10)); this.av -= v * 0.35; this.flail = Math.max(this.flail, 0.5); }
         this.vx = -v * 0.25;
-        return;
       }
+      return;
     }
     this.x = nx;
   }
+  // never stay inside something solid: step up onto a low lip, else get squeezed out of the near side
+  // (and if nothing works, back to the checkpoint)
+  unbury(G, dt) {
+    let hit = null, st = 0;
+    for (const s of G.S) {
+      if (s.oneway || s === this.ground || this.x + WIDTH <= s.x0 + 0.03 || this.x - WIDTH >= s.x1 - 0.03) continue;
+      const t = topAt(s, this.x);
+      if (this.y >= t - 0.03 || this.y < s.bot) continue;
+      hit = s; st = t; break;
+    }
+    if (!hit) { this.inT = 0; return; }
+    if (st - this.y < 0.7 && inX(hit, this.x, LAND_PAD)) {
+      if (this.grounded || this.vy > 0) { this.y = st; if (this.grounded) this.ground = hit; } else this.land(G, hit, st);
+      return;
+    }
+    const free = x => !G.S.some(r => !r.oneway && x + WIDTH > r.x0 + 0.03 && x - WIDTH < r.x1 - 0.03 && this.y < topAt(r, x) - 0.03 && this.y + 0.3 > r.bot);
+    const L = hit.x0 - WIDTH - 0.001, R = hit.x1 + WIDTH + 0.001, near = this.x - L < R - this.x ? [L, R] : [R, L];
+    const to = free(near[0]) && near[0] > G.M.x0 ? near[0] : free(near[1]) ? near[1] : null;
+    this.inT += dt;
+    if (to == null || this.inT > 0.8) { this.inT = 0; if (G.state !== 'over') G.respawn(this); return; }
+    this.x += clamp(to - this.x, -7 * dt, 7 * dt); this.vx = 0;
+    if (!this.grounded) this.vy = Math.max(this.vy, 0);
+  }
   // a zipline: your hands lock on and it carries you to the far end, then lets go with the speed you had
   zipStep(G, dt) {
-    const z = this.zip, ux = z.ux, uy = z.uy;
+    const z = this.zip, ux = z.ux, uy = z.uy, o = this.zipO;
     this.zipV = Math.min(ZIP_V, this.zipV + ZIP_V * 2.5 * dt);
-    this.x += ux * this.zipV * dt;
-    const cy = z.y0 + (this.x - z.x0) * z.k;
-    this.y = cy - BH * 0.97; this.vx = ux * this.zipV; this.vy = uy * this.zipV;
+    this.zipX += ux * this.zipV * dt;
+    const cy = z.y0 + (this.zipX - z.x0) * z.k, k = Math.exp(-12 * dt);
+    o.x *= k; o.y *= k;   // (the grab swings you in under the wire: no snap)
+    this.x = this.zipX + o.x; this.y = cy - BH * 0.97 + o.y; this.vx = ux * this.zipV; this.vy = uy * this.zipV;
     this.av += (-40 * (this.a + ux * 0.15) - 7 * this.av) * dt; this.a += this.av * dt;   // hang straight, trailing a touch
     this.holdDir = 0; this.holdT = 0; this.crouch = 0;
     if ((this.buzzT = (this.buzzT || 0) - dt) <= 0 && G.heard(this.x, 10)) { this.buzzT = 0.11; G.sfx.hiss(0.12, this.human ? 0.07 : 0.035, 'bandpass', 1100 + this.zipV * 90, 1300 + this.zipV * 90, 4); }
-    if (this.x >= z.x1 - 0.25) this.unzip(G, 1);
+    if (this.zipX >= z.x1 - 0.25) this.unzip(G, 1);
   }
   unzip(G, fling = 0) {
     if (!this.zip) return;
@@ -973,7 +1039,7 @@ class Dude {
       if (h.x < z.x0 || h.x > z.x1 - 1.5) continue;
       const cy = z.y0 + (h.x - z.x0) * z.k;
       if (Math.abs(h.y + 0.25 - cy) > ZIP_GRAB || Math.abs(this.a) > 1.3) continue;
-      this.zip = z; this.zipV = Math.max(2, Math.abs(this.vx)); this.x = h.x; this.av = 0;
+      this.zip = z; this.zipV = Math.max(2, Math.abs(this.vx)); this.zipX = h.x; this.zipO = { x: this.x - h.x, y: this.y - (cy - BH * 0.97) }; this.av = 0;
       this.holdDir = 0; this.crouch = 0; this.trig = false;
       G.sfx.tick(0.5); G.sfx.spin(0.7); G.spark(h.x, cy, '#ffd23a', 5);
       return true;
@@ -989,9 +1055,10 @@ class Dude {
     this.moveX(G, this.vx * dt);
     const ny = this.y + this.vy * dt;
     if (this.vy <= 0) {
+      // coming down: land on the highest thing under your feet (toes on the very lip of a ledge still count)
       let best = null, bt = -Infinity;
       for (const s of G.S) {
-        if (s.ceil || !inX(s, this.x, 0.12)) continue;
+        if (!inX(s, this.x, LAND_PAD)) continue;
         const st = topAt(s, this.x), was = st - (s.dy || 0);
         if (this.y >= was - 0.02 && ny <= st && st > bt) { best = s; bt = st; }
       }
@@ -1002,11 +1069,12 @@ class Dude {
       }
       if (best) return this.land(G, best, bt);
     } else {
+      // going up: your head knocks on the underside of anything above you
       const head = BH * 0.85;
       for (const s of G.S) {
-        if (s.oneway || !inX(s, this.x, -0.05)) continue;
-        if (s.bot >= this.y + head - 0.02 && s.bot <= ny + head) {
-          this.y = s.bot - head; this.vy = -this.vy * 0.15; this.av += (Math.random() - 0.5) * 4; this.flail = 0.8;
+        if (s.oneway || !inX(s, this.x, 0.1)) continue;
+        if (s.bot >= this.y + 0.3 && s.bot <= ny + head) {
+          this.y = Math.max(s.bot - head, this.y - 0.05); this.vy = -this.vy * 0.15; this.av += (Math.random() - 0.5) * 4; this.flail = 0.8;
           G.sfx.thud(0.7); G.addShake(0.8); if (Math.random() < 0.5) G.popup('BONK!', this.x, this.y + BH + 0.3, CREAM, 0.8, 0.6);
           return;
         }
@@ -1055,19 +1123,29 @@ class Dude {
   deadStep(G, dt) {
     this.deadT -= dt;
     if (this.how === 'shot') {
-      // a ragdoll: tumbles, lands, lies there
+      // a ragdoll: tumbles, bounces off walls, lands, lies there
       if (!this.grounded) {
-        this.vy -= GRAV * (G.M.g || 1) * dt; this.x += this.vx * dt; this.a += this.spin * dt;
-        const ny = this.y + this.vy * dt;
-        for (const s of G.S) if (!s.ceil && inX(s, this.x) && this.y >= topAt(s, this.x) - 0.02 && ny <= topAt(s, this.x) && this.vy < 0) {
-          this.y = topAt(s, this.x); this.ground = s;
+        this.vy -= GRAV * (G.M.g || 1) * dt; this.a += this.spin * dt;
+        const nx = this.x + this.vx * dt; let ny = this.y + this.vy * dt, wall = false;
+        for (const s of G.S) {
+          if (s.oneway || nx <= s.x0 || nx >= s.x1) continue;
+          const st = topAt(s, nx);
+          if (this.x > s.x0 && this.x < s.x1) {   // over or under it
+            if (this.vy > 0 && s.bot >= this.y + 0.5 && s.bot <= ny + 0.5) { this.vy = -this.vy * 0.2; ny = this.y; }
+            continue;
+          }
+          if (this.y < st - 0.05 && this.y + 0.5 > s.bot) { wall = true; break; }
+        }
+        if (wall) { this.vx = -this.vx * 0.4; this.spin *= 0.6; } else this.x = nx;
+        if (this.vy < 0) for (const s of G.S) if (inX(s, this.x) && this.y >= topAt(s, this.x) - 0.02 && ny <= topAt(s, this.x)) {
+          this.y = ny = topAt(s, this.x); this.ground = s;
           if (Math.abs(this.vy) > 4) { this.vy = -this.vy * 0.3; this.spin *= 0.5; } else { this.grounded = true; this.vy = 0; this.vx = 0; }
           G.dust(this.x, this.y, 4, 0.6); G.sfx.thud(0.5);
           break;
         }
-        if (!this.grounded) this.y = ny;
-      } else { this.a += ((Math.abs(wrap(this.a)) < Math.PI / 2 ? Math.sign(wrap(this.a)) || 1 : Math.sign(wrap(this.a))) * Math.PI / 2 - wrap(this.a)) * Math.min(1, dt * 8); if (this.ground && this.ground.dx) this.x += this.ground.dx; }
-    } else { this.vy -= GRAV * dt; this.y += this.vy * dt; this.x += this.vx * dt; }
+        this.y = ny;
+      } else { this.a += ((Math.abs(wrap(this.a)) < Math.PI / 2 ? Math.sign(wrap(this.a)) || 1 : Math.sign(wrap(this.a))) * Math.PI / 2 - wrap(this.a)) * Math.min(1, dt * 8); if (this.ground && this.ground.dx) this.x += this.ground.dx; if (this.ground && this.ground.mv) this.y = topAt(this.ground, this.x); }
+    } else { this.vy -= GRAV * (G.M.g || 1) * dt; this.y += this.vy * dt; this.x += this.vx * dt; }
     if (this.deadT <= 0 && G.state !== 'over') G.respawn(this);
   }
 }
@@ -1077,64 +1155,115 @@ class Dude {
 // it furthest toward the getaway without dying (it also avoids landings on moving or edge-of-platform spots).
 class Bot {
   constructor(p, level) { this.p = p; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal; this.plan = null; this.wait = rand(0.3, 0.9); this.seen = 0; this.stuck = 0; this.lastBest = -1e9; this.aimT = 0; }
-  // fly a hop of hold time H toward dir from where p stands now; returns where it lands
-  sim(G, H, dir) {
+  // fly a hop of hold time H toward dir from where p stands now (or from o = { x, y, s, t }); returns where it lands.
+  // It plays by the racer's own rules: walls stop you, a ledge's lip catches your toes, ceilings knock your head.
+  sim(G, H, dir, o) {
     const p = this.p, th = hopAngle(H), phi = dir * th;   // (bots hop from standing, so no extra lean carries in)
-    const g = GRAV * p.gk(G), dt = 1 / 30, s0 = p.ground, V = p.hopV();
-    let x = p.x, y = p.y + 0.01, vx = V * Math.sin(phi) + (s0 && s0.vx ? s0.vx : 0) + (s0 && s0.belt ? s0.belt : 0), vy = V * Math.cos(phi);
-    const t0 = G.rt + CROUCH_T + H, goal = G.M.goal;
+    const g = GRAV * p.gk(G), dt = 1 / 30, s0 = o ? o.s : p.ground, V = p.hopV(), head = BH * 0.85, hg = head * Math.max(0.4, Math.cos(phi));
+    let x = o ? o.x : p.x, y = (o ? o.y : p.y) + 0.01, vx = V * Math.sin(phi) + (s0 && s0.vx ? s0.vx : 0) + (s0 && s0.belt ? s0.belt : 0), vy = V * Math.cos(phi) + (s0 && s0.vy > 0 ? s0.vy : 0);
+    const t0 = (o ? o.t : G.rt) + CROUCH_T + H, goal = G.M.goal, reach = 7 / p.gk(G) + 3, x00 = x;
+    const near = G.S.filter(s => s.mv || (s.x1b > x00 - reach && s.x0b < x00 + reach));
+    const hx = Math.sin(phi) * BH * 0.92, hy = Math.cos(phi) * BH * 0.92;
     for (let t = 0; t < 6; t += dt) {
-      vy -= g * dt; const nx = x + vx * dt, ny = y + vy * dt;
-      if (nx > goal.x0 && nx < goal.x1 && ny + BH * 0.5 > goal.y0 && ny < goal.y1) return { x: nx, y: ny, goal: true, t };
-      let hitWall = false;
-      for (const s of G.S) {
-        const o = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (o ? o.dx : 0), x1 = s.x1b + (o ? o.dx : 0), top = s.topb + (o ? o.dy : 0) + (s.k ? clamp(nx - x0, 0, x1 - x0) * s.k : 0), bot = s.botb + (o ? o.dy : 0);
-        if (vy <= 0 && !s.ceil && nx >= x0 - 0.1 && nx <= x1 + 0.1 && y >= top - 0.05 && ny <= top)
-          return { x: nx, y: top, s, t, edge: Math.min(nx - x0, x1 - nx), th };
-        if (!s.k && !s.oneway && nx + WIDTH > x0 && nx - WIDTH < x1 && ny < top - 0.03 && ny + BH * 0.8 > bot && !(x + WIDTH > x0 && x - WIDTH < x1)) hitWall = true;
-        if (vy > 0 && !s.oneway && nx >= x0 && nx <= x1 && bot >= y + BH * 0.85 - 0.02 && bot <= ny + BH * 0.85) vy = 0;
+      vy -= g * dt; let nx = x + vx * dt;
+      if (nx > goal.x0 && nx < goal.x1 && y + BH * 0.5 > goal.y0 && y < goal.y1) return { x: nx, y, goal: true, t };
+      if (G.zips && !o) for (const z of G.zips) {   // a cable in reach: it carries you to its far end
+        if (x + hx < z.x0 || x + hx > z.x1 - 1.5 || Math.abs(y + hy + 0.25 - (z.y0 + (x + hx - z.x0) * z.k)) > ZIP_GRAB * 0.8) continue;
+        return { x: z.x1 + 1.5, y: G.ry(z.x1 + 1.5), zip: z, t: t + (z.x1 - x) / ZIP_V, edge: 9, th };
       }
-      if (hitWall) vx = -vx * 0.25; else x = nx;
+      for (const s of near) {
+        if (s.oneway) continue;
+        const m = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (m ? m.dx : 0), x1 = s.x1b + (m ? m.dx : 0);
+        if (nx + WIDTH <= x0 || nx - WIDTH >= x1) continue;
+        let top = s.topb + (m ? m.dy : 0); const bot = s.botb + (m ? m.dy : 0);
+        if (s.k) { top += clamp(nx - x0, 0, x1 - x0) * s.k; if (y >= top - 0.03) continue; if (y > top - 0.6) { y = top; continue; } }
+        if (y >= top - 0.03 || y + hg <= bot || (x + WIDTH > x0 && x - WIDTH < x1)) continue;
+        nx = vx > 0 ? x0 - WIDTH - 0.001 : x1 + WIDTH + 0.001; vx = -vx * 0.25; break;
+      }
+      x = nx; let ny = y + vy * dt;
+      if (vy <= 0) {
+        let land = null, lt = -Infinity, e = 0;
+        for (const s of near) {
+          const m = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (m ? m.dx : 0), x1 = s.x1b + (m ? m.dx : 0);
+          if (x < x0 - LAND_PAD || x > x1 + LAND_PAD) continue;
+          const top = s.topb + (m ? m.dy : 0) + (s.k ? clamp(x - x0, 0, x1 - x0) * s.k : 0);
+          if (y >= top - 0.05 && ny <= top && top > lt) { land = s; lt = top; e = Math.min(x - x0, x1 - x); }
+        }
+        if (land) return { x, y: lt, s: land, t, edge: e, th };
+      } else for (const s of near) {
+        if (s.oneway) continue;
+        const m = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (m ? m.dx : 0), x1 = s.x1b + (m ? m.dx : 0), bot = s.botb + (m ? m.dy : 0);
+        if (x < x0 - 0.1 || x > x1 + 0.1 || bot < y + 0.3 || bot > ny + head) continue;
+        ny = Math.max(bot - head, y - 0.05); vy = -vy * 0.15; break;
+      }
       y = ny;
       if (y < G.M.killY) return { dead: true };
     }
     return { dead: true };
+  }
+  // two hops ahead, for when no single hop gets anywhere: back up for a run-up, or hop onto the low thing first
+  look2(G, rate) {
+    let best = null;
+    for (const dir of [1, -1]) for (let H = 0.02; H <= 0.42; H += 0.04) {
+      const r = this.sim(G, H, dir);
+      if (r.dead || r.goal || r.zip || !r.s || r.s.mv || r.edge < 0.3) continue;
+      for (const d2 of [1, -1]) for (let H2 = 0.02; H2 <= 0.42; H2 += 0.04) {
+        const r2 = this.sim(G, H2, d2, { x: r.x, y: r.y, s: r.s, t: G.rt + CROUCH_T + H + r.t + 0.8 });
+        if (r2.dead) continue;
+        const sc = rate(r2) - 0.5 + rand(0, 0.3);
+        if (!best || sc > best.sc) best = { H, dir, sc, next: { H: H2, dir: d2 } };
+      }
+    }
+    return best;
   }
   think(G, dt) {
     const p = this.p, L = this.L;
     if (!p.alive || p.gone || G.state === 'over') { p.trig = false; return; }
     if (p.zip) { this.plan = null; this.wait = rand(0.1, 0.3); return; }   // (just ride it)
     this.items(G, dt);
+    if (!this.plan && p.holdDir) { p.holdDir = 0; p.holdT = 0; }   // (a lean left over from a hop that got knocked out from under it: let go, or it leans there forever)
     if (G.state !== 'run' || !p.grounded || !p.canAct || p.crouch > 0) { if (G.state !== 'run' || !p.grounded) this.plan = null; return; }
     if (this.plan) {   // leaning: let go when the planned time is up
+      if (!p.holdDir) { this.plan = null; this.wait = L.react; return; }   // (a hit knocked the lean out of it: start the hop again instead of waiting forever)
       if (p.holdT >= this.plan.H) { p.press(G, this.plan.dir, false); this.plan = null; this.wait = rand(L.wait[0], L.wait[1]) + L.react; }
       return;
     }
     const settled = Math.abs(p.a) < L.settle && Math.abs(p.av) < 1.6;
     if (!settled) return;
     if ((this.wait -= dt) > 0) return;
-    const goal = G.M.goal, gy = goal.y0, gx = (goal.x0 + goal.x1) / 2;
-    const score = (x, y) => (x - p.x) * Math.sign(gx - p.x || 1) + 1.5 * (Math.min(y, gy) - Math.min(p.y, gy));
-    let best = null;
-    for (const dir of [1, -1]) for (let H = 0.02; H <= 0.42; H += 0.02) {
+    // how far along you are: distance toward the getaway, less whatever you have dropped below the path
+    const goal = G.M.goal, sgn = Math.sign((goal.x0 + goal.x1) / 2 - p.x || 1);
+    const pot = (x, y) => x * sgn + 1.5 * Math.min(y - G.ry(x), 0), p0 = pot(p.x, p.y);
+    const rate = r => {
+      if (r.goal) return 1000;
+      let sc = pot(r.x, r.y) - p0;
+      if (r.th > 37 * D2R && !(r.s && r.s.bounce)) sc -= 2;   // a long hop is harder to land cleanly
+      if (r.edge < 0.35) sc -= 1.2;
+      if (r.s && r.s.mv) sc -= 0.3;
+      return sc - r.t * 0.4;
+    };
+    let best = null; const safe = [];
+    if (this.queue) {   // the second half of a two-hop plan
+      const q = this.queue; this.queue = null;
+      if (!this.sim(G, q.H, q.dir).dead) best = { H: q.H, dir: q.dir, sc: 1 };
+    }
+    if (!best) for (const dir of [1, -1]) for (let H = 0.02; H <= 0.42; H += 0.02) {
       if (H < 0.06 && dir < 0) continue;
       const r = this.sim(G, H, dir);
       if (r.dead) continue;
-      let sc = r.goal ? 1000 : score(r.x, r.y);
-      if (!r.goal) {
-        if (r.th > 37 * D2R && !(r.s && r.s.bounce)) sc -= 2;   // a long hop is harder to land cleanly
-        if (r.edge < 0.35) sc -= 1.2;
-        if (r.s && r.s.mv) sc -= 0.3;
-        sc -= r.t * 0.4;
-      }
-      sc += rand(0, 0.6) * (1 + L.noise * 3);
+      const sc = rate(r) + (r.goal ? 0 : rand(0, 0.6) * (1 + L.noise * 3));
+      if (r.edge >= 0.3) safe.push({ H, dir, sc });
       if (!best || sc > best.sc) best = { H, dir, sc };
     }
-    // nothing helps right now (a lift is coming): wait a moment and look again
+    // nothing helps right now (a lift is coming, or it takes two hops): look deeper, wait, and in the end just try something
     if (!best || best.sc < 0.4) {
-      this.wait = 0.2; this.stuck += 0.2;
-      if (this.stuck > 5 && best) { this.stuck = 0; } else return;
+      this.stuck += 0.2; this.wait = 0.2;
+      if (this.stuck > 1) { const b = this.look2(G, rate); if (b && b.sc >= 0.4) best = b; else this.wait = 0.5; }
+      if (!best || best.sc < 0.4) {
+        if (this.stuck > 4 && safe.length) { best = pick(safe); this.stuck = 2; } else return;
+      }
     } else this.stuck = 0;
+    this.queue = best.next || null;
     if (Math.random() < L.dumb) best.H = clamp(best.H + rand(-0.12, 0.12), 0.02, 0.45);
     best.H = clamp(best.H * (1 + gauss() * L.noise * 0.5), 0.0, 0.46);
     this.plan = best; p.press(G, best.dir, true);
@@ -1201,20 +1330,23 @@ class Game {
     this.caps = (M.caps || []).map(c => ({ x: c.x, y: c.y, k: c.k, dead: false }));
     this.zips = (M.zips || []).map(([x0, y0, x1, y1]) => { const L = Math.hypot(x1 - x0, y1 - y0); return { x0, y0, x1, y1, k: (y1 - y0) / (x1 - x0), ux: (x1 - x0) / L, uy: (y1 - y0) / L }; });
     this.rt = 0; this.moveSolids(0);
+    this.cpY = M.cps.map(c => { const s = this.cpFloor(c); return s ? topAt(s, c) : 0; });
     this.state = 'ready'; this.stateT = 0; this.winner = null; this.boarded = []; this.winners = []; this.departT = 0; this.rideT = 0; this.timeScale = 1; this.slowT = 0; this.stopT = 0;
     this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
     // item spots: one every ~12 m on solid ground
     this.spots = [];
     if (SET.itemRate > 0 && this.mode !== 'tt') {
       const gap = SET.itemRate === 2 ? 8 : 12;
-      for (let x = M.cps[0] + 7; x < M.goal.x0 - 3; x += gap) {
-        const s = this.floorAt(x); if (!s) continue;
-        this.spots.push({ x, y: topAt(s, x) + 1.15, item: null, t: rand(0, 1.2) });
+      for (let x0 = M.cps[0] + 7; x0 < M.goal.x0 - 3; x0 += gap) for (const o of [0, 1.5, -1.5, 3, -3]) {   // (nudged along if there is no room)
+        const x = x0 + o, s = this.cpFloor(x); if (!s || !inX(s, x, -0.4)) continue;
+        const y = topAt(s, x) + 1.15;
+        if (this.S.some(r => r !== s && !r.oneway && x > r.x0 - 0.3 && x < r.x1 + 0.3 && r.bot < y + 0.9 && topAt(r, x) > y - 1.1)) continue;
+        this.spots.push({ x, y, item: null, t: rand(0, 1.2) }); break;
       }
     }
     const x0 = M.cps[0], order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     this.P.forEach((p, k) => {
-      const x = x0 - 1.2 + order[k] * 0.8, s = this.floorAt(x);
+      const x = x0 - 1.2 + order[k] * 0.8, s = this.cpFloor(x);
       p.reset(x, s ? topAt(s, x) : 0); p.ground = s; p.cp = M.cps[0]; p.facing = 1; p.a = rand(-0.05, 0.05);
       if (p.bot) { p.bot.plan = null; p.bot.wait = rand(0.1, 0.6); }
     });
@@ -1226,7 +1358,28 @@ class Game {
       if (rec && rec.g && rec.g.length >= 8) { const p0 = this.P[0], gd = new Dude(0, p0.look, false); gd.i = 9; gd.reset(p0.x, p0.y); this.ghost = { f: rec.g, d: gd }; }
     }
   }
-  // the highest still floor under x (where you stand / respawn)
+  // the height of the intended path at x (a map lists it as route points; without one it is the highest floor)
+  ry(x) {
+    const R = this.M.route;
+    if (!R) { const s = this.floorAt(x); return s ? topAt(s, x) : 0; }
+    if (x <= R[0][0]) return R[0][1];
+    for (let i = 1; i < R.length; i++) if (x <= R[i][0]) { const a = R[i - 1], b = R[i]; return b[0] === a[0] ? b[1] : a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); }
+    return R[R.length - 1][1];
+  }
+  // the still floor at x whose top is nearest height y, and the one the path runs along (start line, checkpoints, items)
+  floorNear(x, y) {
+    let best = null, bd = 1e9;
+    for (const s of this.S) { if (s.mv || s.nofloor || !inX(s, x)) continue; const d = Math.abs(topAt(s, x) - y); if (d < bd) { best = s; bd = d; } }
+    return best;
+  }
+  cpFloor(x) { return this.floorNear(x, this.ry(x)); }
+  // the highest floor at x that is not above height y (what you would land on)
+  floorBelow(x, y) {
+    let best = null, bt = -1e9;
+    for (const s of this.S) { if (!inX(s, x)) continue; const t = topAt(s, x); if (t <= y + 0.3 && t > bt) { best = s; bt = t; } }
+    return best;
+  }
+  // the highest still floor under x (what the scenery stands on)
   floorAt(x) {
     let best = null;
     for (const s of this.S) if (!s.ceil && !s.mv && !s.oneway && s.style !== 'hull' && inX(s, x) && (!best || topAt(s, x) > topAt(best, x))) best = s;
@@ -1258,8 +1411,10 @@ class Game {
     else { this.humT = 0.16; this.sfx.tone('sawtooth', 55 + 25 * k, 50 + 25 * k, 0.17, 0.012 + 0.04 * k); }
   }
   respawn(p) {
-    const x = p.cp, s = this.floorAt(x), keep = p.score;
-    p.reset(x, (s ? topAt(s, x) : 0) + 1.4); p.cp = x; p.score = keep;
+    const x = p.cp, s = this.cpFloor(x), top = s ? topAt(s, x) : 0, keep = p.score;
+    // drop in from just above the floor (from lower down when the ceiling is close)
+    let room = 9; for (const r of this.S) if (r !== s && !r.oneway && x + WIDTH > r.x0 && x - WIDTH < r.x1 && r.bot >= top + 0.5) room = Math.min(room, r.bot - top);
+    p.reset(x, top + clamp(room - BH * 0.85 - 0.15, 0.1, 1.4)); p.cp = x; p.score = keep;
     p.grounded = false; p.ground = null; p.imm = IMMUNE_T + 0.4; p.facing = 1;
     if (p.bot) { p.bot.plan = null; p.bot.wait = rand(0.2, 0.5); }
     this.spark(x, p.y + 1, CREAM, 10);
@@ -1288,7 +1443,7 @@ class Game {
       }
     }
     this.moveSolids(sdt);
-    if (this.M.pack) for (const p of this.P) if (p.alive && !p.pack && !p.gone && p.x >= this.M.pack.x0 && p.y < 5) {   // strap on a chute
+    if (this.M.pack) for (const p of this.P) if (p.alive && !p.pack && !p.gone && p.x >= this.M.pack.x0 && p.y >= (this.M.pack.y0 ?? -1e9) && p.y < (this.M.pack.y1 ?? 5)) {   // strap on a chute
       p.pack = true; this.sfx.grab(); if (p.human) this.popup('CHUTE ON!', p.x, p.y + BH + 0.8, '#7fd7ff', 0.8, 0.8);
     }
     for (const p of this.P) if (p.bot) p.bot.think(this, sdt);
@@ -1381,7 +1536,7 @@ class Game {
       const dx = b.x - a.x, need = 0.46 - Math.abs(dx);
       if (need <= 0) continue;
       const k = Math.min(need, 3 * dt) * (dx >= 0 ? 1 : -1);
-      a.x -= k / 2; b.x += k / 2; a.av -= k * 3; b.av += k * 3;
+      a.moveX(this, -k / 2, true); b.moveX(this, k / 2, true); a.av -= k * 3; b.av += k * 3;
     }
   }
   stepItems(dt) {
@@ -1400,7 +1555,7 @@ class Game {
       }
     }
     // the security scanner takes your stuff
-    if (strip) for (const p of this.P) if (p.item && p.alive && p.x > strip.x0 && p.x < strip.x1 && p.y < 2.5) {
+    if (strip) for (const p of this.P) if (p.item && p.alive && p.x > strip.x0 && p.x < strip.x1 && p.y >= (strip.y0 ?? -1e9) && p.y < (strip.y1 ?? 2.5)) {
       p.item = null; p.trig = false; this.sfx.buzzerShort ? this.sfx.buzzerShort() : this.sfx.click();
       this.popup('CONFISCATED!', p.x, p.y + BH + 0.8, '#ff6a5a', 0.8, 1.0);
     }
@@ -1480,13 +1635,18 @@ class Game {
     for (const q of this.proj) {
       q.t -= dt;
       if (q.kind === 'bomb') { q.vy -= GRAV * (this.M.g || 1) * 0.55 * dt; q.spin += q.vx * dt * 3; }
-      const nx = q.x + q.vx * dt, ny = q.y + q.vy * dt;
-      let boom = q.t <= 0;
+      let nx = q.x + q.vx * dt, ny = q.y + q.vy * dt, boom = q.t <= 0;
       for (const s of this.S) {
-        if (s.oneway || nx < s.x0 || nx > s.x1 || ny > topAt(s, nx) || ny < s.bot) continue;
+        if (s.oneway || nx < s.x0 || nx > s.x1) continue;
+        const st = topAt(s, nx);
+        if (ny > st || ny < s.bot) continue;
         if (q.kind === 'rocket') { boom = true; break; }
-        if (q.y >= topAt(s, nx) - 0.05) { q.vy = Math.abs(q.vy) * 0.45; q.vx *= 0.7; if (Math.abs(q.vy) > 1) this.sfx.thud(0.3); } else q.vx = -q.vx * 0.5;
-        q.x -= q.vx * dt; break;
+        // a bomb: bounces on a top, drops off an underside, comes back off a wall (it never ends up inside)
+        const inside = q.x >= s.x0 && q.x <= s.x1;
+        if (q.y >= st - 0.05 || (inside && q.y > s.bot)) { ny = st + 0.001; if (q.vy < -1.5) this.sfx.thud(0.3); q.vy = Math.abs(q.vy) * 0.45; q.vx *= 0.7; }
+        else if (inside) { ny = Math.min(q.y, s.bot - 0.001); q.vy = -Math.abs(q.vy) * 0.4; }
+        else { nx = q.x; q.vx = -q.vx * 0.5; }
+        break;
       }
       if (q.kind === 'rocket') {
         for (const o of this.P) if (o !== q.owner && o.alive && !o.gone) { const m = o.mid(); if (Math.hypot(m.x - nx, m.y - ny) < 0.7) boom = true; }
@@ -1498,6 +1658,8 @@ class Game {
     }
     this.proj = this.proj.filter(q => !q.dead);
     if (this.flash && (this.flash.t -= dt) <= 0) this.flash = null;
+    if (this.boomFx && (this.boomFx.t -= dt) <= 0) this.boomFx = null;
+    for (const p of this.P) if (p.muzzle > 0) p.muzzle -= dt;
   }
   explode(x, y, d, owner) {
     this.sfx.boom(); this.addShake(3.5);
@@ -1590,8 +1752,8 @@ class Game {
       const g = M.goal, gy = (g.y0 + g.y1) / 2 + 0.8, k = clamp(1 - Math.abs(f.x - (g.x0 + g.x1) / 2) / 14, 0, 1);
       if (Math.abs(gy - ty) > 2) ty += (clamp(gy, ty - 3.2, ty + 3.2) - ty) * k;
     }
-    if (!f.alive && f.deadT < RESPAWN_T - 0.8) { tx = f.cp + 2.6; const s = this.floorAt(f.cp); ty = (s ? topAt(s, f.cp) : 0) + 2; }
-    else if (!f.grounded && f.alive) { const s = this.floorAt(f.x); if (s) { const fl = topAt(s, f.x), hh = (split ? ART_H / SPLIT_Z : ART_H) / PPM / 2; ty = Math.min(ty, fl + hh - 0.6); } }
+    if (!f.alive && f.deadT < RESPAWN_T - 0.8) { tx = f.cp + 2.6; const s = this.cpFloor(f.cp); ty = (s ? topAt(s, f.cp) : 0) + 2; }
+    else if (!f.grounded && f.alive) { const s = this.floorBelow(f.x, f.y + 0.1); if (s) { const fl = topAt(s, f.x), hh = (split ? ART_H / SPLIT_Z : ART_H) / PPM / 2; ty = Math.min(ty, fl + hh - 0.6); } }
     if (this.state === 'away' || this.state === 'over') {
       const g = M.goal, w = this.winner || this.champ;
       if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.65 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' || M.ride === 'pod' ? Math.min(4, this.rideFx().dy * 0.5) : 0) + (M.ride === 'rocket' ? 0.5 : 0); }
@@ -1800,17 +1962,17 @@ const CROWD_PAL = {
 };
 const CROWD_PROPS = {
   harbor: ['bag', 'cone', 'phone', null, null, 'camera'], alley: ['phone', 'dog', null, null, 'coffee'], spire: ['coffee', 'phone', null, null],
-  airport: ['bag', 'bag', 'phone', null, 'coffee'], plane: ['vest', 'vest', 'wave'], meadow: ['balloon', 'camera', 'cheer', 'cone', null, 'wave'], moon: ['wave', null, null],
+  airport: ['bag', 'bag', 'phone', null, 'coffee'], plane: ['vest', 'vest', 'wave'], meadow: ['camera', null, null, 'wave'], moon: ['wave', null, null],
 };
-const CROWD_GROUND = new Set(['dock', 'street', 'tile', 'tarmac', 'floor', 'grass', 'moon', 'deck', 'busfloor', 'mezz']);
+const CROWD_GROUND = new Set(['street', 'road', 'tile', 'floor', 'platform', 'moon']);
 function buildCrowd(G) {
   const M = G.M, out = [], pal = CROWD_PAL[M.theme], props = CROWD_PROPS[M.theme] || [null];
   if (!pal) return out;
-  const gap = M.theme === 'spire' ? 2.4 : 1.7, dens = M.theme === 'plane' ? 0.3 : M.theme === 'moon' ? 0.55 : M.theme === 'alley' ? 0.75 : 0.6;
+  const gap = M.theme === 'spire' ? 2.4 : 1.7, dens = M.theme === 'moon' ? 0.2 : 0.3;   // a few onlookers, not a crowd: the level itself is the scenery
   for (let x = M.x0 + 1.5; x < M.x1 - 1.5; x += gap) {
     if (hsh(x * 3.7 + 11) > dens) continue;
     const xx = x + (hsh(x * 1.3) - 0.5) * gap * 0.8, f = G.floorAt(xx);
-    if (!f || f.mv || f.k || !CROWD_GROUND.has(f.style)) continue;
+    if (!f || f.mv || f.k || !CROWD_GROUND.has(f.style) || xx > M.rideX - 5) continue;   // (and nobody loiters in front of the ride)
     out.push({ x: xx, y: topAt(f, xx), k: Math.round(x * 10), prop: props[(hsh(x * 9.1) * props.length) | 0], suit: M.theme === 'moon' });
   }
   for (const a of G.S) if (a.style === 'awning') { const mx = (a.x0 + a.x1) / 2 + 0.4, f = G.floorAt(mx); if (f) out.push({ x: mx, y: topAt(f, mx), k: Math.round(mx * 10) + 3, prop: 'apron', shirt: '#8a4ab0' }); }
@@ -1850,175 +2012,95 @@ function drawAmbient(G) {
     rr(x, y, 3, 1, '#9aa0b0'); rr(x - 1, y, 1, 1, Math.floor(t * 2) % 2 ? '#ff4a4a' : '#5a2020'); rr(x + 3, y, 1, 1, Math.floor(t * 2 + 1) % 2 ? '#ffffff' : '#606870');
   }
 }
+// the far layers are pale and flat on purpose: the saturated, outlined play layer has to pop off them
+const band = (f, base, col) => { ctx.fillStyle = col; const y = Math.round(horizon(f) + base); ctx.fillRect(-HW - 2, y, HW * 2 + 4, HH + 4 - y); };
+function houses(f, base, col, roof, seed = 0) {
+  par(f, 38, (k, x) => {
+    const h = Math.round(20 + hsh(k + seed) * 22), w = Math.round(26 + hsh(k * 3 + seed) * 9), y = Math.round(horizon(f) + base), X = Math.round(x);
+    ctx.fillStyle = col; ctx.fillRect(X, y - h, w, h + 4);
+    ctx.fillStyle = roof; ctx.beginPath(); ctx.moveTo(X - 3, y - h); ctx.lineTo(X + w / 2, y - h - 11); ctx.lineTo(X + w + 3, y - h); ctx.fill();
+  });
+}
+function mesas(f, base, col, scroll, seed = 0) {
+  par(f, 150, (k, x) => {
+    if (hsh(k + seed) < 0.3) return;
+    const w = 46 + hsh(k * 3 + seed) * 60, h = 14 + hsh(k * 7 + seed) * 20, y = Math.round(horizon(f) + base), X = Math.round(x);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(X, y); ctx.lineTo(X + 7, y - h); ctx.lineTo(X + w - 9, y - h); ctx.lineTo(X + w, y); ctx.fill();
+    ctx.fillStyle = shade(col, 0.2); ctx.fillRect(X + 7, y - h, w - 16, 2);
+  }, scroll);
+}
 const BACKDROP = {
-  harbor(G) {
-    sky('#58b4ec', '#c8ecff'); sun(HW * 0.4 + 8, -HH + 22 + horizon(0.05), 9);
-    clouds(0.08, -70, '#ffffff', G.t, 4);
-    // a far shore with cranes, then the sea
-    const sea = horizon(0.3) + 4;
-    par(0.2, 90, (k, x) => { if (hsh(k) < 0.5) return; const y = sea; ctx.fillStyle = '#6e8fae'; ctx.fillRect(x, y - 30, 3, 30); ctx.fillRect(x - 10, y - 30, 30, 3); ctx.fillRect(x + 14, y - 30, 2, 12); });
-    skyline(0.25, 4, '#7c9cbc', 4, 18, 14, 26, null, 3);
-    par(0.25, 760, (k, x) => {   // lighthouse on the headland
-      const y = Math.round(horizon(0.25) + 4), X = Math.round(x); rr(X - 3, y - 36, 9, 36, '#f4f1ea'); for (let i = 0; i < 3; i++) rr(X - 3, y - 30 + i * 10, 9, 4, '#e8423a');
-      rr(X - 4, y - 40, 11, 4, '#2a2d38'); rr(X - 2, y - 43, 7, 3, '#ffe9a0'); rr(X - 4, y - 45, 11, 2, '#2a2d38');
-      const a = G.t * 0.9; ctx.fillStyle = 'rgba(255,240,180,0.22)'; ctx.beginPath(); ctx.moveTo(X + 1, y - 41); ctx.lineTo(X + 1 + Math.cos(a) * 90 - Math.sin(a) * 7, y - 41 + Math.sin(a) * 30 + Math.cos(a) * 7); ctx.lineTo(X + 1 + Math.cos(a) * 90 + Math.sin(a) * 7, y - 41 + Math.sin(a) * 30 - Math.cos(a) * 7); ctx.fill();
-    });
-    fog(sea - 44, sea + 2, '#c8ecff', 0.45);
-    // the sea: deep far out, a bright waterline, sailboats drifting, glints
-    const sg = ctx.createLinearGradient(0, sea, 0, sea + 60); sg.addColorStop(0, '#2f86c8'); sg.addColorStop(1, '#1d66a6'); ctx.fillStyle = sg; ctx.fillRect(-HW - 2, sea, HW * 2 + 4, HH * 2);
-    rr(-HW - 2, sea, HW * 2 + 4, 1, '#9ad8ff');
-    par(0.3, 140, (k, x) => {
-      if (hsh(k + 2) < 0.45) return;
-      const y = Math.round(sea + 10 + hsh(k) * 14), X = Math.round(x + Math.sin(G.t * 0.7 + k) * 2), b = Math.round(Math.sin(G.t * 1.5 + k));
-      rr(X - 6, y, 13, 3, '#f0ead8'); rr(X - 6, y + 2, 13, 1, '#8a6a4a'); rr(X, y - 11 + b, 1, 11, '#3a2a1a');
-      ctx.fillStyle = hsh(k * 5) > 0.5 ? '#ffffff' : '#e8423a'; ctx.beginPath(); ctx.moveTo(X + 1, y - 11 + b); ctx.lineTo(X + 8, y - 2); ctx.lineTo(X + 1, y - 1); ctx.fill();
-    }, G.t * 6);
-    par(0.35, 40, (k, x) => rr(x + Math.sin(G.t + k) * 3, sea + 6 + hsh(k) * 30, 10, 1, '#5fb0e8'));
-    // bazaar stalls along the quay behind
-    par(0.6, 70, (k, x) => {
-      const y = horizon(0.6) + 0, c = ['#e8423a', '#f0b030', '#3aa0e0', '#3fbf6a'][k & 3 >= 0 ? ((k % 4) + 4) % 4 : 0];
-      ctx.fillStyle = '#b89870'; ctx.fillRect(x, y - 26, 2, 26); ctx.fillRect(x + 34, y - 26, 2, 26);
-      for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#fff6e0' : c; ctx.fillRect(x + i * 6, y - 32, 6, 8); }
-      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(x + 2, y - 12, 32, 12);
-    });
+  harbor(G) {   // a market town on a clear day
+    sky('#86cdfa', '#e2f4ff'); sun(HW * 0.5, -HH * 0.52, 12, '#fff8d6'); clouds(0.03, -62, '#ffffff', G.t, 1.5, 1);
+    skyline(0.07, 30, '#c9e5f6', 12, 38, 14, 24, null, 2); band(0.07, 26, '#c9e5f6');
+    houses(0.16, 44, '#b3d6ee', '#9dc6e4', 4); band(0.16, 40, '#b3d6ee');
   },
-  alley(G) {
-    sky('#3a2a5a', '#f08a5a'); sun(-17, horizon(0.05) - 27, 13, '#ffcf7a');
-    skyline(0.15, -6, '#4a3a68', 30, 70, 16, 28, '#ffcf7a55', 1);
-    fog(horizon(0.15) - 76, horizon(0.15) + 8, '#f08a5a', 0.35);
-    skyline(0.35, 0, '#2c2440', 40, 90, 18, 30, '#ffd27a', 7);
-    // the far sidewalk the lamps and pedestrians stand on, then the lamps, shop fronts and buzzing neon
-    { const sy = Math.round(horizon(0.8)); rr(-HW - 2, sy, HW * 2 + 4, HH * 2, '#3a3646'); rr(-HW - 2, sy, HW * 2 + 4, 2, '#6a6678'); rr(-HW - 2, sy + 2, HW * 2 + 4, 1, '#2a2634'); par(0.8, 24, (k, x) => rr(x, sy + 3, 1, 6, '#2e2a3a')); }
-    par(0.8, 60, (k, x) => {
-      const y = horizon(0.8); ctx.fillStyle = '#1c1828'; ctx.fillRect(x, y - 44, 2, 44); ctx.fillRect(x, y - 44, 8, 2);
-      ctx.fillStyle = '#ffe9a0'; ctx.fillRect(x + 6, y - 42, 4, 2); ctx.fillStyle = 'rgba(255,233,160,0.12)'; ctx.beginPath(); ctx.moveTo(x + 6, y - 40); ctx.lineTo(x - 6, y); ctx.lineTo(x + 22, y); ctx.fill();
-      if (hsh(k + 4) > 0.4) {
-        const c = ['#ff4fa0', '#4fe0ff', '#ffe04f', '#7fff6a'][((k % 4) + 4) % 4], on = hsh(k) > 0.4 || Math.sin(G.t * 9 + k * 3) > -0.8, sy = Math.round(y - 30 - hsh(k + 7) * 10), X = Math.round(x);
-        rr(X + 16, sy, 22, 10, '#1c1828'); rr(X + 16, sy + 10, 22, 1, INK);
-        if (on) { ctx.fillStyle = c + '2e'; ctx.fillRect(X + 10, sy - 6, 34, 22); rr(X + 18, sy + 2, 18, 6, c + '55'); rr(X + 19, sy + 4, 16, 2, c); rr(X + 21, sy + 3, 3, 1, '#ffffff'); }
-      }
-    });
-    const walk = (dir, per, sp, seed) => par(0.8, per, (k, x) => { if (hsh(k + seed) < 0.55) return; const y = Math.round(horizon(0.8)) + (Math.sin(G.t * 9 + k) > 0 ? 0 : -1); person(Math.round(x), y, k * 3 + seed, G.t, CROWD_PAL.alley, { sc: 1, prop: ['phone', 'dog', 'coffee', null, null][((k % 5) + 5) % 5] }); }, G.t * sp * dir);
-    walk(1, 27, 9, 31); walk(-1, 33, 7, 57);
+  alley(G) {   // downtown
+    sky('#7fc6f6', '#d9f0ff'); clouds(0.03, -66, '#ffffff', G.t, 1.2, 2);
+    skyline(0.05, 30, '#cfe7f6', 30, 80, 12, 22, null, 7); band(0.05, 24, '#cfe7f6');
+    skyline(0.12, 42, '#b6d6ec', 22, 62, 16, 25, '#cbe3f2', 11); band(0.12, 34, '#b6d6ec');
+    skyline(0.22, 58, '#a0c5e0', 14, 42, 18, 25, null, 5); band(0.22, 52, '#a0c5e0');
   },
-  rail(G) {
-    sky('#e88a4a', '#ffd88a'); sun(-109 - CAMX * PPM * 0.01, horizon(0.03) - 9, 11, '#fff0b0');
-    hills(0.05, 10, '#c26a4a', 30, 40, 1); fog(horizon(0.05) - 30, horizon(0.05) + 14, '#ffd88a', 0.4); hills(0.12, 18, '#9a4a3a', 18, 26, 4);
-    // the desert rushes past: the train is moving fast
-    const run = G.t * 260;
-    par(0.4, 50, (k, x) => { if (hsh(k) < 0.5) return; const y = horizon(0.4) + 16; ctx.fillStyle = '#4a7a3a'; ctx.fillRect(x, y - 16, 4, 16); ctx.fillRect(x - 4, y - 11, 4, 2); ctx.fillRect(x - 4, y - 15, 2, 5); ctx.fillRect(x + 4, y - 9, 4, 2); ctx.fillRect(x + 6, y - 13, 2, 5); }, run * 0.4);
-    rr(-HW - 2, horizon(0.6) + 16, HW * 2 + 4, HH * 2, '#d8a060');
-    par(0.7, 90, (k, x) => {   // telegraph poles beside the track, wires sagging between them
-      const y = Math.round(horizon(0.7) + 22), X = Math.round(x);
-      rr(X, y - 40, 2, 40, '#5a3a22'); rr(X - 5, y - 38, 12, 2, '#5a3a22'); rr(X - 4, y - 40, 2, 2, '#9ad0e8'); rr(X + 4, y - 40, 2, 2, '#9ad0e8');
-      ctx.strokeStyle = '#3a2a20'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X - 4, y - 38); ctx.quadraticCurveTo(X - 49, y - 30, X - 94, y - 38); ctx.stroke();
-    }, run * 0.7);
-    par(0.4, 110, (k, x) => { if (hsh(k + 8) < 0.5) return; const y = Math.round(horizon(0.4) + 16), X = Math.round(x), c = hsh(k) > 0.5 ? '#5a3a2a' : '#e8e0d0'; rr(X, y - 4, 6, 3, c); rr(X + 5, y - 5, 2, 2, c); rr(X + 1, y - 1, 1, 1, INK); rr(X + 4, y - 1, 1, 1, INK); });
-    par(0.5, 340, (k, x) => {
-      const y = Math.round(horizon(0.5) + 20), X = Math.round(x);
-      if (hsh(k) > 0.5) {   // water tower
-        rr(X + 2, y - 30, 2, 30, '#5a3a22'); rr(X + 14, y - 30, 2, 30, '#5a3a22'); rr(X, y - 26, 18, 2, '#5a3a22'); rr(X, y - 14, 18, 2, '#5a3a22');
-        rr(X - 2, y - 46, 22, 16, '#8a5a34'); rr(X - 2, y - 46, 22, 2, '#a07048'); for (let i = 0; i < 4; i++) rr(X - 2, y - 44 + i * 4, 22, 1, '#6a4424');
-        ctx.fillStyle = '#6a3a2a'; ctx.beginPath(); ctx.moveTo(X - 4, y - 46); ctx.lineTo(X + 9, y - 56); ctx.lineTo(X + 22, y - 46); ctx.fill(); rr(X + 4, y - 40, 10, 6, '#f4f1ea'); txt('H2O', X + 9, y - 37, 4, '#6a4424', { outline: false });
-      } else {   // windmill, blades turning
-        rr(X + 6, y - 34, 2, 34, '#9a9a9a'); rr(X + 2, y - 2, 10, 2, '#9a9a9a'); rr(X + 3, y - 30, 1, 30, '#8a8a8a'); rr(X + 10, y - 30, 1, 30, '#8a8a8a'); rr(X + 4, y - 20, 6, 1, '#8a8a8a'); rr(X + 4, y - 10, 6, 1, '#8a8a8a');
-        ctx.save(); ctx.translate(X + 7, y - 35); ctx.rotate(G.t * 1.6 + k); ctx.fillStyle = '#d8d8d0'; for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.fillRect(2, -1, 9, 2); } ctx.restore(); rr(X + 6, y - 36, 2, 2, '#6a3a2a');
-      }
-    }, run * 0.5);
-    par(1, 60, (k, x) => rr(x, horizon(0.7) + 22 + hsh(k) * 10, 20 + hsh(k + 1) * 30, 1, '#b8804a'), run * 0.7);
+  rail(G) {   // the desert sliding by
+    const t = G.t; sky('#8dd4ff', '#ffeccb'); sun(-HW * 0.45, -HH * 0.5, 12, '#fff3b8'); clouds(0.03, -60, '#ffffff', t, 4, 3);
+    mesas(0.05, 30, '#f3d9ae', t * 5, 1); band(0.05, 30, '#f6e2ba');
+    mesas(0.12, 44, '#ecc88f', t * 14, 6); band(0.12, 44, '#efd3a0');
+    par(0.3, 84, (k, x) => {   // cactus
+      if (hsh(k * 5) < 0.4) return;
+      const X = Math.round(x), y = Math.round(horizon(0.3) + 62), h = 11 + Math.round(hsh(k) * 7); ctx.fillStyle = '#7fc08a';
+      ctx.fillRect(X, y - h, 4, h); ctx.fillRect(X - 5, y - h + 5, 3, 5); ctx.fillRect(X - 5, y - h + 8, 6, 2); ctx.fillRect(X + 6, y - h + 3, 3, 5); ctx.fillRect(X + 3, y - h + 6, 5, 2);
+    }, t * 44);
+    band(0.3, 62, '#e9c98f');
   },
-  spire(G) {
-    sky('#4aa6ea', '#d8f2ff'); clouds(0.06, -50, '#ffffff', G.t, 3);
-    skyline(0.1, 140, '#9ec4e0', 60, 160, 16, 30, null, 2);
-    fog(horizon(0.1) - 60, horizon(0.1) + 140, '#d8f2ff', 0.55);
-    skyline(0.25, 180, '#7aa6cc', 80, 200, 18, 32, '#c8e6ff', 5);
-    fog(horizon(0.25) - 20, horizon(0.25) + 180, '#d8f2ff', 0.35);
-    clouds(0.3, 40, 'rgba(255,255,255,0.7)', G.t, 6, 5);
-    { const bx = Math.round(-HW - 60 + ((G.t * 7 - CAMX * PPM * 0.08) % (HW * 2 + 160) + HW * 2 + 160) % (HW * 2 + 160)), by = Math.round(-HH + 34 + Math.sin(G.t * 0.6) * 2);
-      ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(bx, by, 23, 8, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#d8dce4'; ctx.beginPath(); ctx.ellipse(bx, by, 22, 7, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#e8423a'; ctx.beginPath(); ctx.ellipse(bx, by, 22, 7, 0, 0.5, 2.6); ctx.fill(); rr(bx - 24, by - 6, 5, 4, '#e8423a'); rr(bx - 24, by + 2, 5, 4, '#e8423a');
-      rr(bx - 4, by + 7, 9, 3, '#3a3d46'); rr(bx - 3, by + 8, 2, 1, '#ffe9a0'); rr(bx + 1, by + 8, 2, 1, '#ffe9a0');
-      rr(bx + 26, by - 5, 1, 10, INK); rr(bx + 27, by - 4, 30, 8, '#fff6e0'); rr(bx + 27, by - 4, 30, 1, '#e8423a'); rr(bx + 27, by + 3, 30, 1, '#e8423a'); txt('FLOPPY AIR', bx + 42, by, 4, '#2b3350', { outline: false }); }
+  spire(G) {   // over the rooftops
+    sky('#8fd2fb', '#e6f6ff'); sun(-HW * 0.5, -HH * 0.5, 12, '#fff8d6'); clouds(0.03, -60, '#ffffff', G.t, 1.4, 4);
+    skyline(0.04, 36, '#d2e9f7', 20, 60, 12, 22, null, 3); band(0.04, 30, '#d2e9f7');
+    skyline(0.1, 52, '#bbd9ee', 16, 54, 16, 25, '#d0e6f4', 9); band(0.1, 44, '#bbd9ee');
+    skyline(0.18, 72, '#a6c9e3', 12, 40, 18, 25, null, 13); band(0.18, 64, '#a6c9e3');
   },
   airport(G) {
-    sky('#6ec8f4', '#dff2fb'); clouds(0.06, -30, '#ffffff', G.t, 2, 3);
-    hills(0.1, 10, '#a8c4b0', 8, 60, 6, 0.1); fog(horizon(0.1) - 10, horizon(0.3) + 8, '#dff2fb', 0.5);
-    par(0.3, 180, (k, x) => { const y = horizon(0.3) + 8; rr(x, y - 22, 60, 22, '#c9d2d8'); rr(x, y - 22, 60, 3, '#9aa6ae'); rr(x + 70, y - 8, 46, 8, '#eef2f4'); rr(x + 82, y - 14, 10, 6, '#eef2f4'); rr(x + 60, y - 11, 14, 3, '#eef2f4'); });   // far hangars and a parked jet
-    rr(-HW - 2, horizon(0.3) + 8, HW * 2 + 4, HH * 2, '#9aa08e');
-    par(0.3, 24, (k, x) => rr(x, horizon(0.3) + 14, 12, 1, '#c8ccc0'));
-    par(0.5, 30, (k, x) => rr(x, horizon(0.5) + 12, 14, 1, '#e8e048'));
+    sky('#93d5fd', '#eef9ff'); sun(HW * 0.55, -HH * 0.5, 11, '#fff8d6'); clouds(0.03, -62, '#ffffff', G.t, 1.6, 5);
+    hills(0.05, 34, '#d3e9f3', 7, 90, 1, 0.1); skyline(0.09, 44, '#c2ddec', 6, 14, 22, 25, null, 9); band(0.09, 42, '#c2ddec');
+    par(0.09, 460, (k, x) => { const X = Math.round(x) + 120, y = Math.round(horizon(0.09) + 42); ctx.fillStyle = '#b3d2e5'; ctx.fillRect(X, y - 44, 6, 44); ctx.fillRect(X - 6, y - 54, 18, 10); ctx.fillStyle = '#d8ecf6'; ctx.fillRect(X - 4, y - 52, 14, 4); });
+    band(0.16, 56, '#cfdbe2');
   },
-  plane(G) {
-    // outside: the sky rushes past below the floor and through the open ramp
-    sky('#5aa8e8', '#e0f2ff');
-    const fy = Math.round(horizon(0.1) + 44), run = G.t * 40;
-    const fg = ctx.createLinearGradient(0, fy, 0, HH); fg.addColorStop(0, '#9ab888'); fg.addColorStop(1, '#5f8f4a'); ctx.fillStyle = fg; ctx.fillRect(-HW - 2, fy, HW * 2 + 4, HH - fy + 2);
-    par(0.1, 44, (k, x) => {   // patchwork fields and hedgerows
-      const c = ['#7fae5a', '#b8b060', '#6a9a4a', '#c8a850', '#8fbf66'][((k % 5) + 5) % 5];
-      for (let i = 0; i < 3; i++) if (hsh(k * 7 + i) > 0.3) rr(x + 2, fy + 4 + i * 16 + hsh(k + i) * 6, 40 - hsh(k + 3) * 10, 8 + hsh(k * 2 + i) * 8, shade(c, (i - 1) * 0.1));
-      if (hsh(k + 11) > 0.6) rr(x, fy, 1, HH - fy + 2, '#5a7a48');
-    }, run);
-    fog(fy + 56, fy, '#e0f2ff', 0.8);
-    clouds(0.2, 30, '#ffffff', G.t, 90, 2); clouds(0.4, 60, 'rgba(255,255,255,0.8)', G.t, 160, 7);
+  plane(G) {   // up above the clouds, and moving
+    const t = G.t; sky('#52aef0', '#c4e8ff'); sun(HW * 0.5, -HH * 0.45, 12, '#fff8d6');
+    clouds(0.04, 10, '#e9f6ff', t, 10, 2); clouds(0.08, 44, '#ffffff', t, 26, 6); fog(HH * 0.35, HH + 2, '#ffffff', 0.55);
   },
-  meadow(G) {
-    sky('#5ab8f0', '#d8f4ff'); sun(HW * 0.72 + 9, horizon(0.04) - 75, 10); clouds(0.08, -60, '#ffffff', G.t, 3);
-    hills(0.15, 6, '#7ec86a', 20, 50, 2);
-    par(0.2, 22, (k, x) => { if (hsh(k + 3) < 0.5) return; tree(Math.round(x), Math.round(horizon(0.2) + 8 - hsh(k) * 6), 10 + hsh(k + 1) * 6, '#5a7a4a', '#4f9a48', false); });
-    hills(0.3, 12, '#5aa84a', 14, 34, 5);
-    par(0.3, 34, (k, x) => { if (hsh(k) < 0.6) return; tree(Math.round(x) + 1, Math.round(horizon(0.3) + 4), 20 + hsh(k + 2) * 10); });
-    par(0.5, 16, (k, x) => { const y = Math.round(horizon(0.5) + 6), X = Math.round(x); rr(X, y - 9, 2, 9, '#a07848'); rr(X, y - 8, 16, 1, '#b8885a'); rr(X, y - 4, 16, 1, '#b8885a'); });
-    par(0.12, 190, (k, x) => {   // hot-air balloons
-      if (hsh(k + 2) < 0.4) return; const X = Math.round(x), y = Math.round(-HH + 30 + hsh(k) * 40 + Math.sin(G.t * 0.5 + k) * 3), c = ['#e8423a', '#3a6ab0', '#f4d03f', '#2fa36b'][((k % 4) + 4) % 4];
-      ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(X, y, 11, 0, 7); ctx.fill(); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(X, y, 10, 0, 7); ctx.fill(); ctx.fillStyle = '#fff6e0'; ctx.fillRect(X - 2, y - 10, 4, 20); ctx.fillStyle = shade(c, -0.25); ctx.fillRect(X + 5, y - 8, 3, 16);
-      rr(X - 4, y + 9, 8, 4, c); rr(X - 2, y + 13, 4, 2, INK); rr(X - 3, y + 15, 6, 4, '#8a5a34'); rr(X - 3, y + 15, 6, 1, '#b07a4a');
-    });
-    par(0.15, 60, (k, x) => { if (hsh(k + 4) < 0.55) return; const y = Math.round(horizon(0.15) + 6 - hsh(k) * 8), X = Math.round(x); rr(X, y - 3, 5, 3, '#f4f1ea'); rr(X + 1, y - 3, 2, 2, '#2a2a3a'); rr(X + 4, y - 4, 2, 2, '#f4f1ea'); });
-    par(0.5, 140, (k, x) => {   // picnic blankets with a basket
-      if (hsh(k + 6) < 0.5) return; const y = Math.round(horizon(0.5) + 8), X = Math.round(x), c = hsh(k) > 0.5 ? '#e8423a' : '#3a6ab0';
-      rr(X, y - 2, 22, 4, c); for (let i = 0; i < 4; i++) rr(X + 2 + i * 6, y - 2, 2, 4, '#fff6e0'); rr(X + 15, y - 7, 5, 5, '#b07a4a'); rr(X + 15, y - 8, 5, 1, '#8a5a34');
-    });
+  meadow(G) {   // the launch site sits on the coast
+    sky('#86d2ff', '#fff3d6'); sun(-HW * 0.5, -HH * 0.5, 12, '#fff3b8'); clouds(0.03, -60, '#ffffff', G.t, 1.5, 7);
+    band(0.05, 34, '#8fd3ee'); ctx.fillStyle = '#c9ecf8'; ctx.fillRect(-HW - 2, Math.round(horizon(0.05) + 34), HW * 2 + 4, 1);
+    hills(0.08, 40, '#c4e2cd', 9, 110, 2, 0.12); hills(0.18, 58, '#f3e6bd', 4, 70, 4, 0.14);
   },
   moon(G) {
-    sky('#05040c', '#1a1830');
-    par(0.02, 37, (k, x) => { for (let i = 0; i < 3; i++) { ctx.globalAlpha = hsh(k * 11 + i) > 0.7 ? 0.5 + 0.5 * Math.sin(G.t * (2 + hsh(k + i * 3) * 4) + k) : 1; rr(x + hsh(k * 3 + i) * 37, -HH + hsh(k * 7 + i) * HH * 1.6, 1, 1, hsh(k + i) > 0.8 ? '#ffe9a0' : '#d8d8f0'); } ctx.globalAlpha = 1; });
-    const ex = -HW + 34 - CAMX * PPM * 0.03, ey = horizon(0.03) - 62;
-    ctx.fillStyle = 'rgba(90,150,255,0.18)'; ctx.beginPath(); ctx.arc(ex, ey, 17, 0, 7); ctx.fill();
-    ctx.fillStyle = '#3a7ae0'; ctx.beginPath(); ctx.arc(ex, ey, 14, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#4ac06a'; ctx.fillRect(ex - 8, ey - 6, 7, 5); ctx.fillRect(ex + 2, ey + 1, 6, 7); ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(ex - 10, ey - 10, 8, 2); ctx.fillRect(ex + 2, ey + 9, 7, 2); ctx.fillRect(ex - 4, ey - 1, 5, 1);
-    ctx.save(); ctx.beginPath(); ctx.arc(ex, ey, 14, 0, 7); ctx.clip(); ctx.fillStyle = 'rgba(5,4,14,0.78)'; ctx.beginPath(); ctx.arc(ex + 9, ey - 2, 15, 0, 7); ctx.fill(); ctx.restore();
-    hills(0.15, 4, '#3a3848', 16, 30, 3); hills(0.35, 10, '#55525e', 10, 22, 8);
-    par(0.35, 70, (k, x) => { if (hsh(k + 5) < 0.5) return; const y = horizon(0.35) + 18 + hsh(k) * 8; ctx.fillStyle = '#6a6774'; ctx.beginPath(); ctx.ellipse(x, y, 12, 4, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#3e3c4a'; ctx.beginPath(); ctx.ellipse(x, y + 1, 9, 2.5, 0, 0, 7); ctx.fill(); });
-    par(0.2, 420, (k, x) => {   // the colony: three domes, a mast with a blinking light, a solar farm
-      const y = Math.round(horizon(0.2) + 8), X = Math.round(x);
-      for (const [dx, r] of [[0, 16], [28, 11], [-22, 9]]) { ctx.fillStyle = '#8a8896'; ctx.beginPath(); ctx.arc(X + dx, y, r, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#b8b6c2'; ctx.beginPath(); ctx.arc(X + dx - r * 0.25, y, r * 0.75, Math.PI, Math.PI * 1.5); ctx.fill(); ctx.fillStyle = '#ffe9a0'; for (let i = -1; i <= 1; i++) ctx.fillRect(X + dx + i * 5 - 1, y - r * 0.45, 2, 3); ctx.fillStyle = INK; ctx.fillRect(X + dx - r, y, r * 2, 1); }
-      rr(X + 10, y - 2, 16, 2, '#6a6874'); rr(X - 12, y - 2, 12, 2, '#6a6874');
-      rr(X + 44, y - 40, 1, 40, '#9a98a6'); rr(X + 40, y - 30, 9, 1, '#9a98a6'); rr(X + 42, y - 20, 5, 1, '#9a98a6'); if (Math.sin(G.t * 4) > 0.3) { rr(X + 43, y - 42, 3, 2, '#ff4040'); ctx.fillStyle = 'rgba(255,64,64,0.25)'; ctx.fillRect(X + 41, y - 44, 7, 6); }
-      for (let i = 0; i < 5; i++) { rr(X + 54 + i * 9, y - 7, 7, 5, '#2a3a6a'); rr(X + 54 + i * 9, y - 7, 7, 1, '#4a6ab0'); rr(X + 57 + i * 9, y - 2, 1, 2, '#9a98a6'); }
-    });
-    par(0.5, 260, (k, x) => {   // a rover crawling along on six wheels
-      const y = Math.round(horizon(0.5) + 10), X = Math.round(x + Math.sin(G.t * 0.3 + k) * 20);
-      rr(X, y - 8, 20, 5, '#d8d6e0'); rr(X, y - 8, 20, 1, '#f4f1ea'); rr(X + 14, y - 12, 5, 4, '#2a3a6a'); rr(X + 4, y - 11, 1, 3, '#9a98a6'); rr(X + 1, y - 12, 7, 1, '#2a3a6a');
-      for (let i = 0; i < 3; i++) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(X + 3 + i * 7, y - 1, 2.5, 0, 7); ctx.fill(); }
-    });
+    sky('#06050e', '#15122a');
+    par(0.02, 29, (k, x) => { const s = hsh(k * 3.3) > 0.72 ? 2 : 1; rr(x + hsh(k) * 20, -HH + hsh(k + 7) * HH * 1.5, s, s, hsh(k + 2) > 0.5 ? '#fff6e0' : '#8f9ad0'); });
+    const ex = Math.round(HW * 0.5), ey = Math.round(-HH * 0.48);   // the Earth
+    ctx.save(); ctx.beginPath(); ctx.arc(ex, ey, 15, 0, 7); ctx.clip(); ctx.fillStyle = '#3f8fe0'; ctx.fillRect(ex - 16, ey - 16, 32, 32);
+    ctx.fillStyle = '#58c46a'; ctx.fillRect(ex - 9, ey - 8, 9, 7); ctx.fillRect(ex - 4, ey - 2, 7, 8); ctx.fillRect(ex + 5, ey - 11, 6, 5);
+    ctx.fillStyle = '#eef8ff'; ctx.fillRect(ex - 14, ey + 6, 12, 2); ctx.fillRect(ex + 1, ey - 5, 12, 2); ctx.fillRect(ex - 8, ey - 13, 10, 2);
+    ctx.fillStyle = 'rgba(6,5,14,0.5)'; ctx.beginPath(); ctx.arc(ex + 9, ey + 4, 17, 0, 7); ctx.fill(); ctx.restore();
+    hills(0.05, 34, '#4b4760', 9, 85, 3, 0.1); hills(0.13, 50, '#77728a', 6, 60, 5, 0.12);
   },
 };
-
 // ---- level pieces
 function outlineBox(x0, y0, x1, y1) { ctx.strokeStyle = INK; ctx.lineWidth = 1; const a = Math.round(AX(x0)) + 0.5, b = Math.round(AY(y1)) + 0.5; ctx.strokeRect(a, b, Math.round(AX(x1)) - a - 1 + 0.5, Math.round(AY(y0)) - b - 1 + 0.5); }
 function wheel(x, y, r = 0.32) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(AX(x), AY(y), r * PPM, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#8a8a96'; ctx.beginPath(); ctx.arc(AX(x), AY(y), r * PPM * 0.45, 0, Math.PI * 2); ctx.fill(); }
 // moon props: fuel capsules that blow up, and the worker with a pistol
 function drawProps(G) {
   for (const c of G.caps || []) {
-    if (c.dead) { wb(c.x - 0.45, c.y, c.x + 0.45, c.y + 0.25, '#3a3440'); continue; }
-    if (c.k === 'barrel') {   // a green drum with two ribs and a hazard band
-      wb(c.x - 0.38, c.y, c.x + 0.38, c.y + 1.15, '#3fae55'); wb(c.x - 0.38, c.y + 0.3, c.x + 0.38, c.y + 0.38, '#2a7a3c'); wb(c.x - 0.38, c.y + 0.78, c.x + 0.38, c.y + 0.86, '#2a7a3c');
-      wb(c.x - 0.38, c.y + 0.48, c.x + 0.38, c.y + 0.66, '#ffd23a'); wb(c.x - 0.28, c.y + 0.02, c.x - 0.18, c.y + 1.13, '#7fe39a'); outlineBox(c.x - 0.38, c.y, c.x + 0.38, c.y + 1.15);
+    if (!onView(c.x - 1, c.x + 1)) continue;
+    if (c.dead) { wb(c.x - 0.45, c.y, c.x + 0.45, c.y + 0.2, '#3a3440'); continue; }
+    contact(c.x - 0.42, c.x + 0.42, c.y);
+    if (c.k === 'barrel') {   // a red drum: shoot it and it goes up
+      rbox(c.x - 0.42, c.y, c.x + 0.42, c.y + 1.2, 0.1, '#e8463c'); wb(c.x - 0.34, c.y + 1.04, c.x + 0.34, c.y + 1.12, '#ff8a80'); wb(c.x + 0.26, c.y + 0.08, c.x + 0.36, c.y + 1.0, '#bf362e');
+      seam(c.x - 0.4, c.x + 0.4, c.y + 0.38, '#a82e2a'); seam(c.x - 0.4, c.x + 0.4, c.y + 0.84, '#a82e2a');
+      shape([[c.x, c.y + 0.8], [c.x + 0.2, c.y + 0.46], [c.x - 0.2, c.y + 0.46]], '#ffd23a');
       continue;
     }
-    wb(c.x - 0.4, c.y, c.x + 0.4, c.y + 1.3, '#e8e4dc'); wb(c.x - 0.4, c.y + 0.35, c.x + 0.4, c.y + 0.55, '#ff8a2a'); wb(c.x - 0.4, c.y + 0.8, c.x + 0.4, c.y + 0.95, '#ff8a2a');
-    wb(c.x - 0.25, c.y + 1.3, c.x + 0.25, c.y + 1.45, '#9a96a0'); outlineBox(c.x - 0.4, c.y, c.x + 0.4, c.y + 1.3);
-    if (Math.floor(G.t * 3) % 2) wb(c.x - 0.08, c.y + 1.45, c.x + 0.08, c.y + 1.6, '#ff4a2a');
+    rbox(c.x - 0.4, c.y, c.x + 0.4, c.y + 1.35, [0.38, 0.38, 0.08, 0.08], '#f1f2f6'); wb(c.x - 0.36, c.y + 0.3, c.x + 0.36, c.y + 0.52, ORANGE); wb(c.x + 0.22, c.y + 0.56, c.x + 0.33, c.y + 1.05, '#d3d7e0');   // a fuel capsule
+    rbox(c.x - 0.14, c.y + 1.35, c.x + 0.14, c.y + 1.5, 0.04, '#8d93a0'); disc(c.x, c.y + 1.6, 0.09, Math.sin(G.t * 5) > 0 ? '#ff4a2a' : '#8a3a30', null);
   }
   for (const f of G.foes || []) {
     ctx.save(); ctx.translate(AX(f.x), AY(f.y));
@@ -2044,359 +2126,474 @@ function drawProps(G) {
   }
 }
 // the chute rack on the freighter: a wall frame with packs hanging on it
-function drawPackRack(G, k) {
-  if (AX(k.x1) < -HW - 4 || AX(k.x0) > HW + 4) return;
-  wb(k.x0, 0, k.x0 + 0.15, 3.6, '#5a5f6a'); wb(k.x1 - 0.15, 0, k.x1, 3.6, '#5a5f6a'); wb(k.x0, 3.4, k.x1, 3.6, '#5a5f6a');
-  for (let i = 0; i < 3; i++) { const x = k.x0 + 0.35 + i * 0.6; wb(x, 2.3, x + 0.42, 3.3, '#3f6b3a'); wb(x + 0.05, 2.8, x + 0.37, 2.9, '#2b4a28'); wb(x + 0.17, 3.3, x + 0.25, 3.4, '#c9c2b6'); }
-  txt('CHUTES', AX((k.x0 + k.x1) / 2), AY(1.2), 5, '#c9c2b6');
-  ctx.globalAlpha = 0.25; wb(k.x0, 0, k.x1, 0.06, '#7fd7ff'); ctx.globalAlpha = 1;
+function drawPackRack(G, k) {   // parachutes hanging on a rack: you take one just by passing it
+  if (!onView(k.x0 - 1, k.x1 + 1)) return;
+  const y = k.fy ?? 0, m = (k.x0 + k.x1) / 2;
+  contact(k.x0, k.x1, y);
+  mass(k.x0, y, k.x0 + 0.18, y + 3.2, '#6b7180', { top: 0 }); mass(k.x1 - 0.18, y, k.x1, y + 3.2, '#6b7180', { top: 0 });
+  mass(k.x0 - 0.12, y + 3.0, k.x1 + 0.12, y + 3.3, '#6b7180', { lip: '#a9aebb', foot: 0, side: 0 });
+  for (let i = 0; i < 3; i++) { const x = k.x0 + 0.38 + i * 0.6; rib(x + 0.21, y + 2.8, y + 3.0, '#c9c2b6'); rbox(x, y + 1.7, x + 0.44, y + 2.8, 0.12, '#43b05a'); wb(x + 0.06, y + 2.2, x + 0.38, y + 2.3, '#2f7a3c'); }
+  mass(k.x0 - 0.12, y + 3.45, k.x1 + 0.12, y + 4.15, '#ffd23a', { lip: '#fff3b0', foot: 0, side: 0 }); txt('CHUTES', px(m), py(y + 3.8) + 1, 6, INK, { outline: false });
 }
-// ziplines: a pole at each end and a sagging-free cable between; riders hang from a little trolley
 function drawZips(G) {
   for (const z of G.zips || []) {
     if (AX(z.x1) < -HW - 4 || AX(z.x0) > HW + 4) continue;
-    for (const [x, y] of [[z.x0, z.y0], [z.x1, z.y1]]) {
-      const f = G.floorAt(x), base = f ? f.top : y - 6;
-      wb(x - 0.12, base, x + 0.12, y + 0.35, '#4a4256'); wb(x - 0.3, y + 0.2, x + 0.3, y + 0.42, '#6a6276');
+    for (const [x, y] of [[z.x0, z.y0], [z.x1, z.y1]]) {   // a post at each end, standing on whatever floor is under it
+      const f = G.floorBelow(x, y), base = f ? topAt(f, x) : y - 6;
+      mass(x - 0.14, base, x + 0.14, y + 0.42, '#5d6373', { top: 0, foot: 0 }); mass(x - 0.34, y + 0.2, x + 0.34, y + 0.46, '#8d93a0', { foot: 0, side: 0 });
     }
-    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(AX(z.x0), AY(z.y0 + 0.3)); ctx.lineTo(AX(z.x1), AY(z.y1 + 0.3)); ctx.stroke();
-    ctx.strokeStyle = '#c9c2b6'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(AX(z.x0), AY(z.y0 + 0.3)); ctx.lineTo(AX(z.x1), AY(z.y1 + 0.3)); ctx.stroke();
+    seg(z.x0, z.y0 + 0.3, z.x1, z.y1 + 0.3, INK, 3); seg(z.x0, z.y0 + 0.3, z.x1, z.y1 + 0.3, '#c9cdd8', 1);
   }
   for (const p of G.P) if (p.zip) { const sh = p.shoulder(), hx = sh.x, hy = sh.y + BODY.armLen, cy = p.zip.y0 + (hx - p.zip.x0) * p.zip.k + 0.3; rr(AX(hx) - 3, AY(cy) - 1, 6, 4, '#ffd23a'); const gap = AY(hy) - AY(cy) - 3; if (gap > 0) rr(AX(hx) - 1, AY(cy) + 3, 2, gap, '#3b3f4a'); }
 }
-// small pixel helpers (stepped circles and lines) used by a few props
-function pcircle(cx, cy, r, col) { ctx.fillStyle = col; for (let y = -r; y <= r; y++) { const w = Math.floor(Math.sqrt(r * r - y * y)); ctx.fillRect(cx - w, cy + y, 2 * w + 1, 1); } }
-function pline(x0, y0, x1, y1, col, w = 1) { ctx.fillStyle = col; let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, err = dx + dy; for (let n = 0; n < 4000; n++) { ctx.fillRect(x0, y0, w, w); if (x0 === x1 && y0 === y1) break; const e2 = 2 * err; if (e2 >= dy) { err += dy; x0 += sx; } if (e2 <= dx) { err += dx; y0 += sy; } } }
-function drawTerminal(G) {
-  const M = G.M, t = G.t;
-  // hall: glass wall with mullions, runway behind, floor skirting
-  wb(-9, 0, 42, 6.4, '#8ec8ee'); wb(-9, 0, 42, 2.2, '#a8d8f4'); wb(-9, 0, 42, 0.5, '#7a8a7a');
-  { const px = -9 + ((t * 1.4) % 51), py = 0.5;   // out on the apron: a jet taxiing past the glass
-    wb(px, py, px + 3.2, py + 0.55, '#f4f6f8'); wb(px + 2.7, py + 0.55, px + 3.0, py + 1.3, '#f4f6f8'); wb(px + 1.0, py - 0.1, px + 2.0, py + 0.15, '#c9d2d8'); wb(px + 0.25, py + 0.3, px + 0.5, py + 0.42, INK);
-    for (let k = 0; k < 5; k++) wb(px + 0.9 + k * 0.4, py + 0.3, px + 1.1 + k * 0.4, py + 0.42, '#5a9ac0');
-    const fx = 42 - ((t * 4 + 20) % 51), fy = 4.7 + Math.sin(t * 0.5) * 0.2;   // and one climbing out the other way
-    wb(fx, fy, fx + 1.6, fy + 0.3, '#ffffff'); wb(fx, fy + 0.3, fx + 0.25, fy + 0.7, '#ffffff'); wb(fx + 0.5, fy - 0.1, fx + 1.0, fy, '#c9d2d8'); }
-  for (let x = -6; x < 42; x += 4.4) { wb(x, 0, x + 0.22, 6.4, '#5a6070'); if (hsh(x) > 0.5) { wb(x + 0.8, 0.6, x + 3.0, 0.95, '#f4f6fa'); wb(x + 2.5, 0.95, x + 2.75, 1.4, '#e8423a'); } }
-  wb(-9, 1.9, 42, 2.0, '#5a6070'); wb(-9, 4.2, 42, 4.3, '#5a6070');
-  for (let x = -3; x < 40; x += 8.8) {   // gate seating: people first, the bench in front hides their legs
-    for (let i = 0; i < 3; i++) if (hsh(x * 2 + i) > 0.35) person(Math.round(AX(x + 0.5 + i * 1.2)), Math.round(AY(0.42)) + 3, Math.round(x * 10 + i), t, CROWD_PAL.airport, { sc: 2, ol: true, prop: ['phone', 'coffee', null, 'bag'][(hsh(x + i * 3) * 4) | 0] });
-    wb(x, 0.45, x + 4.2, 0.95, '#3a6ab0'); wb(x, 0.9, x + 4.2, 0.95, '#5a8ad0'); for (let i = 0; i < 4; i++) wb(x + 0.05 + i * 1.05, 0.45, x + 1.0 + i * 1.05, 0.5, '#2a4a80');
-    wb(x + 0.2, 0, x + 0.32, 0.45, '#8a8692'); wb(x + 3.9, 0, x + 4.02, 0.45, '#8a8692'); outlineBox(x, 0.45, x + 4.2, 0.95);
-  }
-  { const x = 29, by = 5.2; wb(x, by - 1.9, x + 4, by, '#1c1e26'); wb(x + 0.1, by - 1.8, x + 3.9, by - 0.1, '#2a2d38'); txt('DEPARTURES', AX(x + 2), AY(by - 0.4), 6, '#ffd23a', { outline: false });
-    for (let i = 0; i < 3; i++) { wb(x + 0.2, by - 1.0 - i * 0.3, x + 1.5, by - 0.8 - i * 0.3, '#3a3e4c'); wb(x + 1.8, by - 1.0 - i * 0.3, x + 1.8 + (i === 1 ? 1.2 : 0.7 + (i % 2) * 0.4), by - 0.8 - i * 0.3, i === 1 ? '#7fe39a' : '#c8ccd6'); } }
-  // food court: a stone-tile wall with two shop fronts (ours: BOB'S and PANINI PETE'S), between the two escalators
-  wb(42, 0, 72, 9.2, '#d9d3c4'); for (let y = 0; y < 9.2; y += 0.8) for (let x = 42 + ((y / 0.8) % 2) * 0.6; x < 72; x += 1.2) wb(x, y, x + 1.1, y + 0.7, '#cfc8b8');
-  const shop = (x, w, col, name, food) => { wb(x, 3, x + w, 6.2, '#efe9df'); wb(x, 5.6, x + w, 6.2, col); wb(x, 5.5, x + w, 5.6, shade(col, -0.3)); txt(name, AX(x + w / 2), AY(5.9), 6, '#fff6e0', { outline: false });
-    wb(x + 0.3, 3.3, x + w - 0.3, 5.3, '#8ec8ee'); wb(x + 0.3, 3.3, x + w - 0.3, 3.4, '#5a6070'); wb(x + w / 2 - 0.05, 3.3, x + w / 2 + 0.05, 5.3, '#5a6070'); food(x, w); };
-  shop(50, 4.4, '#e8423a', "BOB'S", (x, w) => { wb(x + 0.8, 4.0, x + 1.9, 4.5, '#e8b23a'); wb(x + 0.9, 4.2, x + 1.8, 4.4, '#c0392b'); wb(x + 2.5, 4.0, x + 3.6, 4.5, '#e8b23a'); wb(x + 2.6, 4.2, x + 3.5, 4.4, '#c0392b'); });
-  shop(55.6, 4.0, '#3fae55', 'PETES', (x, w) => { wb(x + 0.6, 4.0, x + 1.7, 4.3, '#e8b23a'); wb(x + 0.6, 4.3, x + 1.7, 4.6, '#c9a060'); wb(x + 2.3, 4.0, x + 3.4, 4.3, '#e8b23a'); wb(x + 2.3, 4.3, x + 3.4, 4.6, '#c9a060'); });
-  wb(42, 6.2, 72, 6.45, '#b8b0a4');   // a beam over the shop fronts
-  // a hanging plane model that sways over the top landing (decor in the reference too)
-  { const sx = 69 + Math.sin(t * 0.8) * 0.3; wb(sx, 7.8, sx + 0.05, 9.2, '#9a948a'); wb(sx - 0.9, 7.3, sx + 0.9, 7.75, '#f4f6fa'); wb(sx - 0.4, 7.75, sx + 0.3, 8.0, '#f4f6fa'); wb(sx + 0.6, 7.75, sx + 0.9, 8.2, '#e8423a'); }
-  // outside, under the roof: the terminal's white face with a dark window strip, then the gate block's glass
-  wb(72, 0, 104, 6, '#eceae4'); wb(72, 2.2, 104, 4.4, '#2a2d38'); for (let x = 73; x < 104; x += 2.5) wb(x, 2.4, x + 1.9, 4.2, '#8ec8ee'); wb(72, 0, 104, 0.4, '#b8b0a4');
-  wb(106.5, 0, 114, 5.2, '#f4f1ea'); for (let x = 107.2; x < 113.5; x += 1.6) wb(x, 0.6, x + 1.2, 4.4, '#8ec8ee');
-  // luggage piled inside the gate block
-  wb(108, 0, 109.2, 0.9, '#8a5a34'); wb(109.3, 0, 110.1, 1.3, '#3a6ab0'); wb(110.2, 0, 111.4, 0.7, '#c0392b'); wb(108.4, 0.9, 109.6, 1.6, '#c98e4a');
+function drawStrip(G) {   // the security scanner: go through it and it keeps whatever you were carrying
+  const st = G.M.strip; if (!st || !onView(st.x0 - 1, st.x1 + 1)) return;
+  const y0 = st.y0 ?? 0, y1 = st.y1 ?? y0 + 3.6, m = (st.x0 + st.x1) / 2;
+  ctx.fillStyle = `rgba(255,80,80,${(0.1 + 0.04 * Math.sin(G.t * 4)).toFixed(3)})`; ctx.fillRect(px(st.x0), py(y1), px(st.x1) - px(st.x0), py(y0) - py(y1));
+  wb(st.x0, y0, st.x1, y0 + 0.06, '#e8463c');
+  mass(st.x0 - 0.35, y0, st.x0, y1, '#8d93a0', { lip: '#c9cdd8' }); mass(st.x1, y0, st.x1 + 0.35, y1, '#8d93a0', { lip: '#c9cdd8' });
+  mass(st.x0 - 0.35, y1, st.x1 + 0.35, y1 + 0.95, '#e8463c', { lip: '#ff8a80', foot: 0, side: 0 });
+  txt('SECURITY', px(m), py(y1 + 0.47) + 1, 6, CREAM, { outline: false }); txt('NO ITEMS', px(m), py(y1 - 0.5), 5, CREAM);
 }
-function drawSolid(G, s) {
-  const { x0, x1, top } = s, bot = Math.max(s.bot, CAMY - HH / PPM - 1), M = G.M, t = G.t, w = x1 - x0;
-  const plain = (body, lip, lipH = 0.18, depth = bot) => {
-    wb(x0, depth, x1, top, body);
-    if (w > 0.6) { wb(x1 - 0.14, depth, x1, top - lipH, shade(body, -0.18)); wb(x0, depth, x0 + 0.08, top - lipH, shade(body, 0.12)); }
-    wb(x0, top - lipH - 0.1, x1, top - lipH, shade(body, -0.22)); wb(x0, top - lipH, x1, top, lip);
-    outlineBox(x0, depth, x1, top);
-  };
-  if (DROP.has(s.style) && s.bot > CAMY - HH / PPM) {   // a banded drop shadow under anything box-like, so it sits in the scene
-    for (let i = 0; i < 3; i++) wb(x0 + 0.15, s.bot - 0.12 * (i + 1), x1 + 0.15, s.bot - 0.12 * i, `rgba(10,8,20,${[0.22, 0.13, 0.06][i]})`);
-  }
-  switch (s.style) {
-    case 'dock': {
-      for (let x = x0 + 0.6; x < x1; x += 2.4) { wb(x, (M.water ?? -2) - 3, x + 0.35, top - 0.3, '#4a2e1a'); wb(x + 0.26, (M.water ?? -2) - 3, x + 0.35, top - 0.3, '#3a2212'); wb(x - 0.1, top - 0.95, x + 0.45, top - 0.8, '#5a3a22'); }
-      for (let x = x0; x < x1; x += 1.2) { const k = hsh(x * 2.3); wb(x, top - 0.45, Math.min(x1, x + 1.2), top, k > 0.66 ? '#96643a' : k > 0.33 ? '#8a5a34' : '#7e502c'); }
-      wb(x0, top - 0.12, x1, top, '#b07a4a');
-      for (let x = x0 + 1.2; x < x1; x += 1.2) { wb(x, top - 0.45, x + 0.06, top, '#5a3a22'); wb(x - 0.32, top - 0.32, x - 0.22, top - 0.22, '#4a2e1a'); }
-      outlineBox(x0, top - 0.45, x1, top); break;
-    }
-    case 'crate': {
-      wb(x0, s.bot, x1, top, '#b07a3e'); wb(x0 + 0.12, s.bot + 0.12, x1 - 0.12, top - 0.12, '#c98e4a');
-      wb(x0 + 0.12, top - 0.26, x1 - 0.12, top - 0.12, '#d8a058'); wb(x1 - 0.3, s.bot + 0.12, x1 - 0.12, top - 0.26, '#b8803e');
-      ctx.strokeStyle = '#7a4e24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(AX(x0 + 0.15), AY(s.bot + 0.15)); ctx.lineTo(AX(x1 - 0.15), AY(top - 0.15)); ctx.stroke();
-      ctx.fillStyle = '#5a3a1a'; for (const [nx, ny] of [[x0 + 0.22, s.bot + 0.22], [x1 - 0.22, s.bot + 0.22], [x0 + 0.22, top - 0.22], [x1 - 0.22, top - 0.22]]) ctx.fillRect(Math.round(AX(nx)) - 1, Math.round(AY(ny)) - 1, 2, 2);
-      outlineBox(x0, s.bot, x1, top); break;
-    }
-    case 'barrel': { wb(x0, s.bot, x1, top, '#3a7ac0'); wb(x0, s.bot + 0.2, x1, s.bot + 0.3, '#24507e'); wb(x0, top - 0.3, x1, top - 0.2, '#24507e'); wb(x0 + 0.15, s.bot, x0 + 0.3, top, '#5a9ad8'); outlineBox(x0, s.bot, x1, top); break; }
-    case 'awning': {
-      wb(x0 + 0.1, 0, x0 + 0.25, s.bot, '#6a5a4a'); wb(x1 - 0.25, 0, x1 - 0.1, s.bot, '#6a5a4a');
-      for (let i = 0, x = x0; x < x1; x += 0.5, i++) wb(x, s.bot, Math.min(x1, x + 0.5), top, i % 2 ? '#fff6e0' : '#e8423a');
-      outlineBox(x0, s.bot, x1, top); break;
-    }
-    case 'boat': {
-      ctx.fillStyle = '#e8eef4'; ctx.beginPath(); ctx.moveTo(AX(x0 - 0.4), AY(top)); ctx.lineTo(AX(x1 + 0.6), AY(top)); ctx.lineTo(AX(x1 - 0.4), AY(s.bot)); ctx.lineTo(AX(x0 + 0.4), AY(s.bot)); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke(); wb(x0, s.bot + 0.3, x1, s.bot + 0.6, '#d83a3a'); wb(x0 - 0.2, top - 0.15, x1 + 0.3, top, '#a07040');
-      wb(x0 + 1, top, x0 + 1.12, top + 3, '#6a4a2a'); ctx.fillStyle = '#fff6e0'; ctx.beginPath(); ctx.moveTo(AX(x0 + 1.15), AY(top + 2.9)); ctx.lineTo(AX(x0 + 3 + Math.sin(t * 2) * 0.1), AY(top + 0.6)); ctx.lineTo(AX(x0 + 1.15), AY(top + 0.6)); ctx.fill(); break;
-    }
-    case 'street': {
-      wb(x0, bot, x1, top, '#2a2834'); wb(x0, top - 0.5, x1, top, '#3d3b48'); wb(x0, top - 0.12, x1, top, '#9a98a6');
-      for (let x = Math.ceil(x0 / 3) * 3; x < x1 - 1; x += 3) wb(x, top - 0.32, x + 1.4, top - 0.26, '#d8c060');
-      wb(x0, bot, x0 + 0.15, top, '#1a1822'); wb(x1 - 0.15, bot, x1, top, '#1a1822'); break;
-    }
-    case 'car': {
-      wb(x0 + 0.1, s.bot + 0.25, x1 - 0.1, top, s.col); wb(x0 + 0.1, top - 0.12, x1 - 0.1, top, shade(s.col, 0.25)); wb(x0 + 0.1, s.bot + 0.25, x1 - 0.1, s.bot + 0.4, shade(s.col, -0.35));
-      wb(x1 - 0.35, top - 0.45, x1 - 0.1, top - 0.25, '#fff3b0'); wb(x0 + 0.1, top - 0.45, x0 + 0.3, top - 0.25, '#e8423a');
-      outlineBox(x0 + 0.1, s.bot + 0.25, x1 - 0.1, top); wheel(x0 + 0.9, s.bot + 0.3); wheel(x1 - 0.9, s.bot + 0.3); break;
-    }
-    case 'cabin': {
-      ctx.fillStyle = shade(s.col, -0.15); ctx.beginPath(); ctx.moveTo(AX(x0 - 0.3), AY(s.bot)); ctx.lineTo(AX(x0 + 0.15), AY(top)); ctx.lineTo(AX(x1 - 0.15), AY(top)); ctx.lineTo(AX(x1 + 0.4), AY(s.bot)); ctx.closePath(); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke();
-      wb(x0 + 0.2, s.bot + 0.08, (x0 + x1) / 2 - 0.05, top - 0.12, '#9fd0f0'); wb((x0 + x1) / 2 + 0.05, s.bot + 0.08, x1 - 0.1, top - 0.12, '#9fd0f0'); break;
-    }
-    case 'bus': {
-      const sq = (s.squish || 0) * 0.25;
-      wb(x0, s.bot + 0.3, x1, top - 0.4 - sq, '#e85a8a'); wb(x0, s.bot + 0.3, x1, s.bot + 0.55, '#a83a62');
-      for (let x = x0 + 0.4; x < x1 - 0.8; x += 1.2) wb(x, top - 1.4, x + 0.9, top - 0.75, '#9fd0f0');
-      outlineBox(x0, s.bot + 0.3, x1, top - 0.4 - sq);
-      // the bouncy mattress strapped on the roof
-      for (let i = 0, x = x0 + 0.2; x < x1 - 0.2; x += 0.6, i++) wb(x, top - 0.42 - sq, Math.min(x1 - 0.2, x + 0.6), top - sq * 0.4, i % 2 ? '#ffd23a' : '#43a8e8');
-      outlineBox(x0 + 0.2, top - 0.42 - sq, x1 - 0.2, top - sq * 0.4);
-      txt('BOING', AX((x0 + x1) / 2), AY(top - 1.85), 6, '#fff6e0'); wheel(x0 + 1.2, s.bot + 0.35, 0.38); wheel(x1 - 1.2, s.bot + 0.35, 0.38); break;
-    }
-    case 'cab': { wb(x0, s.bot + 0.35, x1, top, '#d83a3a'); wb(x0 + 0.25, top - 1.0, x1 - 0.6, top - 0.3, '#9fd0f0'); wb(x0, s.bot + 0.35, x0 + 0.15, top - 1.2, '#fff3b0'); outlineBox(x0, s.bot + 0.35, x1, top); wheel(x0 + 0.8, s.bot + 0.35, 0.38); break; }
-    case 'truck': { wb(x0, s.bot + 0.6, x1, top, '#e8e4dc'); wb(x0, top - 1.6, x1, top - 1.2, '#3a7ac0'); txt('MOVERS', AX((x0 + x1) / 2), AY(top - 0.8), 6, '#3a7ac0', { outline: false }); outlineBox(x0, s.bot + 0.6, x1, top); wheel(x0 + 1, s.bot + 0.38, 0.38); wheel(x1 - 1.6, s.bot + 0.38, 0.38); wheel(x1 - 0.8, s.bot + 0.38, 0.38); break; }
-    case 'boxcar': case 'flatcar': case 'tanker': case 'loco': {
-      const c = s.style === 'boxcar' ? '#9a4a2e' : s.style === 'tanker' ? '#30323c' : s.style === 'loco' ? '#e8b322' : '#5a5048';
-      if (s.style === 'tanker') { ctx.fillStyle = c; const r = (top - s.bot - 0.3) / 2 * PPM; ctx.beginPath(); ctx.roundRect(AX(x0), AY(top), w * PPM, (top - s.bot - 0.3) * PPM, r); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke(); wb(x0 + 0.4, top - 0.5, x1 - 0.4, top - 0.35, '#5a5c68'); wb(x0, s.bot + 0.3, x1, s.bot + 0.6, '#1c1d24'); }
-      else {
-        wb(x0, s.bot + 0.3, x1, top, c); wb(x0, top - 0.15, x1, top, shade(c, 0.2));
-        if (s.style === 'boxcar') { for (let x = x0 + 0.5; x < x1 - 0.3; x += 0.8) wb(x, s.bot + 0.4, x + 0.08, top - 0.2, shade(c, -0.25)); wb((x0 + x1) / 2 - 1, s.bot + 0.4, (x0 + x1) / 2 + 1, top - 0.3, shade(c, -0.12)); }
-        if (s.style === 'loco') { wb(x0, s.bot + 1.2, x1, s.bot + 1.5, '#2f6bd8'); wb(x1 - 0.8, top - 1.2, x1 - 0.2, top - 0.6, '#fff3b0'); }
-        outlineBox(x0, s.bot + 0.3, x1, top);
-      }
-      wheel(x0 + 1, s.bot + 0.15, 0.3); wheel(x0 + 1.8, s.bot + 0.15, 0.3); wheel(x1 - 1.8, s.bot + 0.15, 0.3); wheel(x1 - 1, s.bot + 0.15, 0.3);
-      wb(x1, s.bot + 0.5, x1 + 0.3, s.bot + 0.7, '#1c1d24'); break;
-    }
-    case 'locab': { wb(x0, s.bot + 0.3, x1, top, '#e8b322'); wb(x0, s.bot + 1.2, x1, s.bot + 1.5, '#2f6bd8'); wb(x0 + 0.4, top - 1.1, x1 - 0.4, top - 0.35, '#9fd0f0'); wb(x0, top - 0.15, x1, top, '#ffe27a'); outlineBox(x0, s.bot + 0.3, x1, top); wheel(x0 + 1, s.bot + 0.15, 0.3); wheel(x1 - 1, s.bot + 0.15, 0.3); break; }
-    case 'planter': { plain('#9a96a0', '#b8b4be'); ctx.fillStyle = '#3f9f4a'; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(AX(x0 + 0.4 + i * (w - 0.8) / 3), AY(top + 0.2), 6, 0, Math.PI * 2); ctx.fill(); } break; }
-    case 'tower': {
-      wb(x0, bot, x1, top, '#5a7a9e');
-      for (let x = x0 + 0.3; x < x1 - 0.3; x += 1.6) for (let y = top - 1; y > bot; y -= 1.4) wb(x, y - 0.9, x + 1.2, y, (hsh(x * 3 + y) > 0.75 ? '#c8e8ff' : '#8ab4dc'));
-      wb(x0 - 0.15, top - 0.5, x1 + 0.15, top, '#b8b4be'); wb(x0 - 0.15, top - 0.12, x1 + 0.15, top, '#dedae2'); outlineBox(x0 - 0.15, top - 0.5, x1 + 0.15, top);
-      if (s.pad) { const cx = (G.M.goal.x0 + G.M.goal.x1) / 2; ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(AX(cx), AY(top) - 1, 2.6 * PPM, 3, 0, 0, Math.PI * 2); ctx.stroke(); }
-      break;
-    }
-    case 'lift': {
-      wb(x0 + 0.1, top, x0 + 0.16, top + 30, '#2a2834'); wb(x1 - 0.16, top, x1 - 0.1, top + 30, '#2a2834');
-      wb(x0, top - 0.35, x1, top, '#e8b322'); for (let x = x0 + 0.3; x < x1; x += 0.6) wb(x, top - 0.35, x + 0.25, top - 0.2, '#2a2834');
-      wb(x0, top, x0 + 0.08, top + 1, '#9a96a0'); wb(x1 - 0.08, top, x1, top + 1, '#9a96a0'); wb(x0, top + 0.95, x1, top + 1.05, '#9a96a0');
-      outlineBox(x0, top - 0.35, x1, top); break;
-    }
-    case 'ac': { plain('#b8b4be', '#dedae2', 0.12, s.bot); ctx.fillStyle = '#5a5862'; ctx.beginPath(); ctx.arc(AX((x0 + x1) / 2), AY((s.bot + top) / 2), 6, 0, Math.PI * 2); ctx.fill(); ctx.save(); ctx.translate(AX((x0 + x1) / 2), AY((s.bot + top) / 2)); ctx.rotate(t * 9); rr(-5, -1, 10, 2, '#9a96a0'); ctx.restore(); break; }
-    case 'tile': case 'tarmac': {
-      const tile = s.style === 'tile';
-      wb(x0, bot, x1, top, tile ? '#7a7468' : '#3d3b44'); wb(x0, top - 0.35, x1, top, tile ? '#d8d2c6' : '#55535e');
-      for (let x = Math.ceil(x0); x < x1; x += tile ? 1 : 3) wb(x, top - 0.35, x + (tile ? 0.05 : 1.5), top - (tile ? 0 : 0.28), tile ? '#b8b0a2' : '#e8d33a');
-      break;
-    }
-    case 'office': {   // a floor of the tower seen from inside: dark room, back wall with a window strip, blue cladding above the slab
-      if (s.slab) { wb(x0, s.bot, x1, top, '#2f6bd8'); wb(x0, s.bot, x1, s.bot + 0.12, '#1b3d86'); for (let x = x0 + 0.5; x < x1; x += 1.2) wb(x, s.bot + 0.12, x + 0.08, top, '#1b3d86'); break; }
-      const H = 4.3;
-      wb(x0, bot, x1, top, '#5a7a9e'); wb(x0 - 0.15, top - 0.5, x1 + 0.15, top, '#b8b4be'); wb(x0 - 0.15, top - 0.12, x1 + 0.15, top, '#dedae2'); outlineBox(x0 - 0.15, top - 0.5, x1 + 0.15, top);
-      for (let x = x0 + 0.3; x < x1 - 0.3; x += 1.6) for (let y = top - 1; y > bot; y -= 1.4) wb(x, y - 0.9, x + 1.2, y, (hsh(x * 3 + y) > 0.75 ? '#c8e8ff' : '#8ab4dc'));
-      // the room above the floor
-      wb(x0, top, x1, top + H, '#3a3642'); wb(x0, top + H - 0.9, x1, top + H, '#2a2733');
-      for (let x = x0 + 0.5; x < x1 - 0.8; x += 2.2) { wb(x, top + 1.6, x + 1.5, top + 3.1, '#4a5a7a'); wb(x, top + 1.6, x + 1.5, top + 1.9, '#6a86b0'); }   // back-wall windows (city glow)
-      wb(x0, top, x1, top + 0.35, '#4a4652'); for (let x = x0; x < x1; x += 1.1) wb(x, top, x + 0.06, top + 0.35, '#2a2733');   // skirting + carpet tiles
-      if (s.exit) { const ex = s.exit; wb(ex - 0.55, top + 3.2, ex + 0.55, top + 3.75, '#2a2733'); txt('EXIT', AX(ex), AY(top + 3.48), 5, Math.floor(t * 2) % 2 ? '#ff5a5a' : '#ff9a9a', { outline: false }); }
-      wb(x0 + 1, top + 2.4, x0 + 1.5, top + 2.9, '#6a5a4a'); wb(x0 + 1.08, top + 2.48, x0 + 1.42, top + 2.82, '#8ab4dc');   // a picture frame
-      break;
-    }
-    case 'desk2': { wb(x0, s.bot + 0.55, x1, top, '#8a8a98'); wb(x0, top - 0.1, x1, top, '#b8b8c6'); wb(x0 + 0.15, s.bot, x0 + 0.3, top - 0.1, '#5a5a68'); wb(x1 - 0.3, s.bot, x1 - 0.15, top - 0.1, '#5a5a68'); wb(x0 + 0.5, top, x0 + 1.3, top + 0.6, '#3a3642'); wb(x0 + 0.58, top + 0.08, x0 + 1.22, top + 0.55, '#8ec8ee'); wb(x0 + 0.85, top + 0.6, x0 + 0.95, top + 0.8, '#5a5a68'); break; }   // desk with a monitor
-    case 'cooler': { wb(x0, s.bot, x1, top, '#e8e4dc'); wb(x0 + 0.15, top - 0.5, x1 - 0.15, top, '#8ec8ee'); wb(x0 + 0.3, top, x1 - 0.3, top + 0.55, '#9ad4f4'); outlineBox(x0, s.bot, x1, top); break; }
-    case 'escalator': {   // a moving stair: stepped treads under a handrail; the steps scroll up with time
-      const k = s.k || 0, h0 = top, n = Math.max(1, Math.round(w / 0.5)), step = w / n;
-      wb(x0, bot, x1, h0, '#9a96a0'); for (let i = 0; i <= n; i++) { const xa = x0 + i * step, ya = h0 + (xa - x0) * k; wb(xa, bot, Math.min(x1, xa + step), ya, '#9a96a0'); }
-      const off = ((G.rt * 1) % step); for (let i = -1; i < n; i++) { const xa = x0 + off + i * step; if (xa < x0 - 0.01 || xa + step > x1 + 0.01) continue; const ya = h0 + (xa - x0) * k; wb(xa, ya - 0.02, xa + step, ya + 0.1, '#c9c4d0'); wb(xa, ya + 0.08, xa + step * 0.5, ya + 0.1 + step * k, '#b8b4be'); }
-      // side panel + handrail
-      wb(x0, bot, x1, bot + 0.1, INK); pline(Math.round(AX(x0)), Math.round(AY(h0 + 1.0)), Math.round(AX(x1)), Math.round(AY(h0 + w * k + 1.0)), '#5a6070', 1); pline(Math.round(AX(x0)), Math.round(AY(h0 + 1.05)), Math.round(AX(x1)), Math.round(AY(h0 + w * k + 1.05)), INK, 1);
-      for (let i = 0; i <= 2; i++) { const xa = x0 + 0.4 + i * (w - 0.8) / 2, ya = h0 + (xa - x0) * k; wb(xa, ya, xa + 0.08, ya + 1.0, '#5a6070'); }
-      break;
-    }
-    case 'floor': { wb(x0, bot, x1, top, '#b8b0a4'); wb(x0, top - 0.3, x1, top, '#e8e2d6'); for (let x = Math.ceil(x0); x < x1; x += 1) wb(x, top - 0.3, x + 0.05, top, '#cfc8b8'); wb(x0, bot, x1, bot + 0.1, '#8a8478'); break; }
-    case 'counter': { plain('#8a5a34', '#f4f1ea', 0.2, s.bot); wb(x0 + 0.3, top, x0 + 0.9, top + 0.35, '#e8423a'); wb(x1 - 1.0, top, x1 - 0.3, top + 0.25, '#3a6ab0'); break; }
-    case 'roof': {   // white concrete bar on top of the terminal, with a parapet lip
-      wb(x0, top - 0.5, x1, top, '#f4f1ea'); wb(x0, top - 0.12, x1, top, '#ffffff'); wb(x0, top - 0.5, x1, top - 0.42, '#c9c2b6'); for (let x = Math.ceil(x0 / 2) * 2; x < x1; x += 2) wb(x, top - 0.42, x + 0.06, top - 0.12, '#dcd6cc');
-      break;
-    }
-    case 'acbox': { plain('#8a8692', '#b8b4be', 0.15, s.bot); for (let y = s.bot + 0.3; y < top - 0.2; y += 0.3) wb(x0 + 0.2, y, x1 - 0.2, y + 0.08, '#5a5862'); break; }
-    case 'vent': { plain('#9a96a0', '#c9c4d0', 0.12, s.bot); wb(x0 + 0.3, s.bot + 0.2, x1 - 0.3, top - 0.25, '#5a5862'); for (let x = x0 + 0.4; x < x1 - 0.3; x += 0.35) wb(x, s.bot + 0.25, x + 0.12, top - 0.3, '#9a96a0'); break; }
-    case 'billboard': {   // a sign on two stilts; its top is a ledge you can hop onto
-      const bob = s.sign === 'BOB', col = bob ? '#e8423a' : '#3fae55', base = (G.floorAt((x0 + x1) / 2) || { top: 0 }).top;
-      wb(x0 + 0.4, base, x0 + 0.6, s.bot, '#5a5862'); wb(x1 - 0.6, base, x1 - 0.4, s.bot, '#5a5862');
-      wb(x0, s.bot - 1.9, x1, top, '#f4f1ea'); wb(x0, s.bot - 1.9, x1, s.bot - 1.75, col); wb(x0, top - 0.18, x1, top, '#c9c2b6'); outlineBox(x0, s.bot - 1.9, x1, top);
-      txt(bob ? "BOB'S DOGS" : "PETE'S PANINI", AX((x0 + x1) / 2), AY(s.bot - 0.75), 7, col, { outline: false });
-      if (bob) { wb(x0 + 1.2, s.bot - 1.4, x0 + 2.6, s.bot - 1.0, '#e8b23a'); wb(x0 + 1.35, s.bot - 1.3, x0 + 2.45, s.bot - 1.1, '#c0392b'); } else { wb(x0 + 1.2, s.bot - 1.5, x0 + 2.6, s.bot - 1.2, '#e8b23a'); wb(x0 + 1.2, s.bot - 1.2, x0 + 2.6, s.bot - 0.95, '#c9a060'); }
-      break;
-    }
-    case 'wall': { plain('#eceae4', '#ffffff', 0.15, s.bot); wb(x0, s.bot, x1, s.bot + 0.3, '#b8b0a4'); break; }
-    case 'gate': {   // Gate C4's block: white, a yellow sign on a pole, cloud cushions on top
-      plain('#f4f1ea', '#ffffff', 0.2, s.bot);
-      wb(x0 + 1.0, top, x0 + 1.15, top + 2.4, '#5a5862'); wb(x0 + 0.2, top + 1.6, x0 + 2.6, top + 2.4, '#ffd23a'); outlineBox(x0 + 0.2, top + 1.6, x0 + 2.6, top + 2.4); txt('C4', AX(x0 + 1.4), AY(top + 2.0), 7, INK, { outline: false });
-      for (let i = 0; i < 3; i++) { const cx = x0 + 3.4 + i * 1.6; wb(cx, top, cx + 1.2, top + 0.4, '#ffffff'); wb(cx + 0.2, top + 0.4, cx + 1.0, top + 0.6, '#ffffff'); }
-      break;
-    }
-    case 'busfloor': {   // the whole bus body, seen from inside: far wall with windows on both decks, poles, the stairwell
-      const R = '#d8382e', L = x0 - 0.3, Rr = x1 + 0.3;
-      wb(L, -0.4, Rr, 8.2, R); wb(L, -0.4, Rr, -0.2, '#8a1f1a'); outlineBox(L, -0.4, Rr, 8.2);
-      wb(x0, 0, x1, 8.0, '#efe9df'); wb(x0, 0, x1, 0.25, '#9a96a0'); wb(x0, 3.9, x1, 4.3, '#b8b0a4'); wb(x0, 4.3, x1, 4.55, '#9a96a0');
-      for (const [ya, yb] of [[1.3, 3.1], [5.6, 7.4]]) for (let x = x0 + 0.8; x < x1 - 1.5; x += 2.6) { if (x > 43.2 && x < 47.6 && ya < 4) continue; wb(x, ya, x + 1.8, yb, '#8ec8ee'); wb(x, ya, x + 1.8, ya + 0.5, '#a8d8f4'); wb(x - 0.08, ya - 0.08, x + 1.88, ya, '#5a6070'); wb(x - 0.08, yb, x + 1.88, yb + 0.08, '#5a6070'); }
-      for (const x of [34.8, 38.8, 42.8]) { wb(x, 0.25, x + 0.1, 3.9, '#ffd23a'); wb(x, 4.55, x + 0.1, 8.0, '#ffd23a'); }   // grab poles
-      // the stairwell: steps climbing to the gap, with a rail
-      for (let i = 0; i < 7; i++) { const sx = 43.6 + i * 0.5, sy = 0.25 + i * 0.58; wb(sx, sy, sx + 0.55, sy + 0.14, '#5a5862'); wb(sx, 0.25, sx + 0.5, sy, '#c9c2b6'); }
-      pline(Math.round(AX(43.4)), Math.round(AY(1.4)), Math.round(AX(47.0)), Math.round(AY(5.4)), '#5a5862', 1);
-      // "BUS" cut-away hint: a thin dark rim where the near wall was removed, so the interior reads as inside
-      wb(x0 - 0.3, -0.2, x1 + 0.3, 0, '#8a1f1a');
-      txt('CITY LINE', AX((x0 + x1) / 2), AY(8.1) - 7, 6, '#fff6e0', { outline: false });   // written on the outside strip under the roof
-      for (const wx of [x0 + 3, x1 - 3]) { pcircle(Math.round(AX(wx)), Math.round(AY(-0.35)), 5, INK); pcircle(Math.round(AX(wx)), Math.round(AY(-0.35)), 2, '#8a8a96'); }
-      break;
-    }
-    case 'buswall': { wb(x0, s.bot, x1, top, '#d8382e'); wb(x0 + 0.15, s.bot + 1.2, x1, top - 1.0, '#8ec8ee'); break; }
-    case 'busdeck': { wb(x0, s.bot, x1, top, '#b8b0a4'); wb(x0, top - 0.12, x1, top, '#d9d3c4'); wb(x0, s.bot, x1, s.bot + 0.1, '#8a8478'); break; }
-    case 'busstair': { wb(x0, top - 0.08, x1, top, '#ffd23a'); for (let x = x0 + 0.2; x < x1; x += 0.6) wb(x, top - 0.08, x + 0.3, top, INK); break; }   // the lip of the gap, striped
-    case 'busroof': { wb(x0, s.bot, x1, top, '#d8382e'); wb(x0, s.bot, x1, s.bot + 0.06, '#8a1f1a'); wb(x0 + 0.5, top, x1 - 0.5, top + 0.2, '#b02a22'); break; }
-    case 'busseat': { wb(x0, s.bot + 0.1, x1, top, '#3a86d8'); wb(x1 - 0.4, top, x1, top + 0.85, '#3a86d8'); wb(x1 - 0.4, top + 0.85, x1, top + 1.0, '#fff6e0'); wb(x0, top - 0.1, x1 - 0.4, top, '#2a66b0'); wb(x0 + 0.1, s.bot, x0 + 0.3, s.bot + 0.1, '#5a5862'); wb(x1 - 0.3, s.bot, x1 - 0.1, s.bot + 0.1, '#5a5862'); break; }
-    case 'desk': { plain('#3a6ab0', '#f4f1ea', 0.2, s.bot); txt('CHECK IN', AX((x0 + x1) / 2), AY(top - 0.6), 4, '#f4f1ea', { outline: false }); break; }
-    case 'belt': {
-      wb(x0, s.bot, x1, top, '#4a4854'); wb(x0, top - 0.15, x1, top, '#22212a');
-      const off = (G.rt * (s.belt || 0)) % 0.6; for (let x = x0 + off; x < x1; x += 0.6) wb(x, top - 0.15, x + 0.12, top, '#5a5864');
-      outlineBox(x0, s.bot, x1, top); txt('>>>', AX((x0 + x1) / 2), AY(top - 0.38), 5, '#ffd23a', { outline: false }); break;
-    }
-    case 'bin': { plain('#3a8a4a', '#5aaa6a', 0.15, s.bot); break; }
-    case 'step': case 'airstep': { plain(s.style === 'step' ? '#8a8692' : '#e8e4dc', s.style === 'step' ? '#b8b4be' : '#ffffff', 0.15, s.bot); if (s.style === 'airstep') wb(x0, top, x0 + 0.06, top + 0.9, '#9a96a0'); break; }
-    case 'mezz': { plain('#b8b0a4', '#e8e2d6', 0.15, s.bot); ctx.fillStyle = 'rgba(160,210,240,0.35)'; ctx.fillRect(AX(x0), AY(top + 0.9), w * PPM, 0.9 * PPM); wb(x0, top + 0.85, x1, top + 0.95, '#9a96a0'); break; }
-    case 'ceil': {
-      if (s.plane) { wb(x0, s.bot, x1, s.bot + 4, '#4a4e58'); for (let x = x0; x < x1; x += 2.2) wb(x, s.bot, x + 0.3, s.bot + 4, '#3a3d46'); for (let x = x0 + 1; x < x1; x += 4.4) wb(x, s.bot, x + 0.4, s.bot + 0.15, (Math.floor(t * 2 + x) & 1) ? '#ff3a3a' : '#5a1a1a'); }
-      else { wb(x0, s.bot, x1, s.bot + 4, '#d8d2c6'); wb(x0, s.bot, x1, s.bot + 0.15, '#9a948a'); for (let x = x0 + 2; x < x1; x += 4) wb(x, s.bot + 0.15, x + 1.5, s.bot + 0.3, '#fffbe8'); }
-      break;
-    }
-    case 'deck': {
-      wb(x0, top - 0.5, x1, top, '#5a5e68'); wb(x0, top - 0.1, x1, top, '#7a7e8a'); for (let x = x0 + 0.5; x < x1; x += 1) wb(x, top - 0.1, x + 0.3, top, '#3a3d46');
-      ctx.fillStyle = '#4a4e58'; ctx.beginPath(); ctx.moveTo(AX(x0), AY(top - 0.5)); ctx.lineTo(AX(x1), AY(top - 0.5)); ctx.lineTo(AX(x1), AY(top - 2.2)); ctx.lineTo(AX(x0), AY(top - 2.2)); ctx.fill();
-      wb(x0, top - 2.3, x1, top - 2.1, '#3a3d46'); outlineBox(x0, top - 0.5, x1, top); break;
-    }
-    case 'cargo': { plain('#5a6a3a', '#7a8a4a', 0.12, s.bot); wb((x0 + x1) / 2 - 0.08, s.bot, (x0 + x1) / 2 + 0.08, top, '#c8a040'); txt('FRAGILE', AX((x0 + x1) / 2), AY((s.bot + top) / 2), 4, '#e8e4dc', { outline: false }); break; }
-    case 'cart': { wb(x0, s.bot, x1, top, '#c87a30'); wb(x0, top - 0.1, x1, top, '#e8a050'); outlineBox(x0, s.bot, x1, top); wheel(x0 + 0.5, s.bot - 0.1, 0.18); wheel(x1 - 0.5, s.bot - 0.1, 0.18); wb(x0 - 6, s.bot - 0.32, x1 + 6, s.bot - 0.26, '#2a2834'); break; }
-    case 'ramp': { wb(x0, top - 0.3, x1, top, '#6a6e78'); wb(x0, top - 0.08, x1, top, '#ffd23a'); for (let x = x0 + 0.2; x < x1; x += 0.6) wb(x, top - 0.08, x + 0.3, top, INK); outlineBox(x0, top - 0.3, x1, top); break; }
-    case 'grass': case 'moon': {
-      const moon = s.style === 'moon';
-      wb(x0, bot, x1, top, moon ? '#6a6874' : '#8a5a34');
-      for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) { const r = hsh(x * 3.1 + 5); if (r > 0.6) wb(x, top - 0.8 - r * 2.2, x + 0.18, top - 0.72 - r * 2.2, moon ? '#55535f' : '#6a4424'); else if (r < 0.1) wb(x, top - 0.6 - r * 9, x + 0.3, top - 0.45 - r * 9, moon ? '#7c7a86' : '#a07048'); }
-      wb(x0, top - 0.35, x1, top, moon ? '#a8a6b2' : '#4ab84a'); wb(x0, top - 0.1, x1, top, moon ? '#c8c6d0' : '#7ae06a');
-      for (let x = Math.ceil(x0); x < x1; x += 1) {
-        const r = hsh(x * 1.7);
-        if (moon) { if (r > 0.7) { const cx = AX(x + 0.4), cy = AY(top - 0.6 - r); ctx.fillStyle = '#c4c2cc'; ctx.beginPath(); ctx.ellipse(cx, cy - 1, 5, 2.5, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#8a8894'; ctx.beginPath(); ctx.ellipse(cx, cy, 4, 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#55535f'; ctx.beginPath(); ctx.ellipse(cx, cy + 1, 3, 1, 0, 0, 7); ctx.fill(); } }
-        else if (r > 0.75) { wb(x, top, x + 0.06, top + 0.3, '#3a8a3a'); wb(x - 0.06, top + 0.25, x + 0.12, top + 0.37, r > 0.88 ? '#ff7aa8' : '#ffe34a'); }
-        else if (r > 0.55) { wb(x + 0.2, top, x + 0.26, top + 0.18, '#3a8a3a'); wb(x + 0.5, top, x + 0.56, top + 0.12, '#3a8a3a'); }
-        else if (r > 0.4) wb(x + 0.3, top - 0.35, x + 0.6, top - 0.12, '#3f9f3f');
-      }
-      ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(AX(x0) + 0.5, AY(bot)); ctx.lineTo(AX(x0) + 0.5, AY(top) + 0.5); ctx.lineTo(AX(x1) - 0.5, AY(top) + 0.5); ctx.lineTo(AX(x1) - 0.5, AY(bot)); ctx.stroke(); break;
-    }
-    case 'hay': { const sq = (s.squish || 0) * 0.2; wb(x0, s.bot, x1, top - sq, '#e8c050'); for (let y = s.bot + 0.2; y < top - sq; y += 0.3) wb(x0, y, x1, y + 0.05, '#c89a30'); wb(x0 + 0.4, s.bot, x0 + 0.5, top - sq, '#a07a2a'); wb(x1 - 0.5, s.bot, x1 - 0.4, top - sq, '#a07a2a'); outlineBox(x0, s.bot, x1, top - sq); break; }
-    case 'rock': { ctx.fillStyle = M.theme === 'moon' ? '#8a8894' : '#8a8692'; ctx.beginPath(); ctx.roundRect(AX(x0), AY(top), w * PPM, (top - s.bot) * PPM + 2, [8, 8, 2, 2]); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke(); wb(x0 + 0.3, top - 0.3, x0 + 0.8, top - 0.15, '#b8b4c0'); break; }
-    case 'gantry': { wb(x0, s.bot, x1, top, '#d84a2a'); for (let x = x0; x < x1; x += 0.5) wb(x, s.bot, x + 0.08, top, '#8a2a1a'); outlineBox(x0, s.bot, x1, top); break; }
-    case 'hull': break;   // the rocket is drawn as the getaway ride
-    case 'dome': {
-      plain('#b8b4be', '#dedae2', 0.15, s.bot);
-      ctx.fillStyle = 'rgba(150,210,255,0.45)'; ctx.beginPath(); ctx.ellipse(AX((x0 + x1) / 2), AY(top), w * PPM * 0.38, 1.4 * PPM, 0, Math.PI, 0); ctx.fill(); ctx.strokeStyle = '#dff2ff'; ctx.stroke();
-      wb(x0 + 0.5, s.bot + 0.5, x0 + 1.3, top - 0.5, '#2a2834'); txt('BASE 7', AX((x0 + x1) / 2 + 0.6), AY((s.bot + top) / 2), 5, '#2a2834', { outline: false }); break;
-    }
-    default: plain('#7a7680', '#9a96a0');
-  }
-  dressSolid(G, s, bot);
+// ---- solid-look kit: everything in the play layer is a flat mass with a light top, a dark foot and one ink outline ----
+const px = x => Math.round(AX(x)), py = y => Math.round(AY(y));
+let SHX = 0, SHY = 0;   // drawRide slides its vehicle this many px, and the culling below has to know
+function mass(x0, y0, x1, y1, col, o = {}) {
+  const a = px(x0), b = py(y1), w = px(x1) - a, h = Math.min(py(y0), Math.ceil(HH) + 6 - SHY) - b;
+  if (w <= 0 || h <= 0 || a + SHX > HW + 4 || a + w + SHX < -HW - 4) return;
+  ctx.fillStyle = col; ctx.fillRect(a, b, w, h);
+  const tp = o.top ?? 2;
+  if (tp && h > tp + 1) { ctx.fillStyle = o.lip || shade(col, 0.22); ctx.fillRect(a, b, w, tp); }
+  if (o.foot !== 0 && h > 8) { ctx.fillStyle = shade(col, -0.2); ctx.fillRect(a, b + h - 2, w, 2); }
+  if (o.side !== 0 && w > 8 && h > 4) { ctx.fillStyle = shade(col, -0.12); ctx.fillRect(a + w - 2, b + tp, 2, h - tp); }
+  if (o.ol !== 0) { ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.strokeRect(a + 0.5, b + 0.5, w - 1, h - 1); }
 }
-const DROP = new Set(['crate', 'barrel', 'planter', 'bin', 'step', 'airstep', 'counter', 'desk', 'desk2', 'cart', 'cargo', 'hay', 'rock', 'acbox', 'vent', 'ac', 'cooler', 'car', 'cabin', 'cab', 'truck', 'boxcar', 'flatcar', 'tanker', 'loco', 'locab', 'busseat']);
-// extra texture on top of the base shapes: speckled asphalt and manholes, checkered tiles, cracked tarmac,
-// tread-plate floors, scalloped awnings with lanterns, market goods, office life, hanging gate signs
-function dressSolid(G, s, bot) {
-  const { x0, x1, top } = s, t = G.t, w = x1 - x0, M = G.M;
-  switch (s.style) {
-    case 'street': {
-      if (M.theme === 'alley') {   // rain-slick: everything above glints back off the asphalt
-        wb(x0, top - 1.6, x1, top, 'rgba(14,12,24,0.35)');
-        const NE = ['#ff4fa0', '#4fe0ff', '#ffe04f', '#7fff6a', '#ffcf7a'];
-        for (let x = Math.ceil(x0 / 1.5) * 1.5; x < x1; x += 1.5) { const r = hsh(x * 1.3 + 9); if (r < 0.45) continue; const c = NE[((r * 37) | 0) % 5]; ctx.fillStyle = c + '22'; ctx.fillRect(Math.round(AX(x)), Math.round(AY(top)), 3, Math.round(6 + r * 14)); ctx.fillStyle = c + '44'; ctx.fillRect(Math.round(AX(x)) + 1, Math.round(AY(top)), 1, Math.round(3 + r * 8)); }
-        for (const c of G.S) if (c.style === 'car' && c.bot === top && c.x1 > x0 && c.x0 < x1) { ctx.fillStyle = (c.col || '#888') + '33'; ctx.fillRect(Math.round(AX(c.x0)), Math.round(AY(top)), Math.round((c.x1 - c.x0) * PPM), Math.round(1.0 * PPM)); }
-        drawMirror(G, top, 0.22, () => ctx.rect(Math.round(AX(x0)), Math.round(AY(top)), Math.round(w * PPM), Math.round((top - bot) * PPM)));
-      }
-      for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) { const r = hsh(x * 2.1 + 3); if (r > 0.72) wb(x, top - 0.5 - r * 1.6, x + 0.12, top - 0.44 - r * 1.6, r > 0.9 ? '#4a4856' : '#1e1c28'); }
-      for (let x = Math.ceil((x0 - 5) / 11) * 11 + 5; x < x1 - 1; x += 11) { ctx.fillStyle = '#1a1822'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.04), 0.55 * PPM, 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4a4856'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.04), 0.4 * PPM, 1.2, 0, 0, 7); ctx.fill(); }
-      outlineBox(x0, bot, x1, top); break;
+function shape(pts, col, ol = INK, lw = 1) {
+  ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(px(x), py(y)) : ctx.moveTo(px(x), py(y))); ctx.closePath();
+  if (col) { ctx.fillStyle = col; ctx.fill(); }
+  if (ol) { ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.stroke(); }
+}
+function rbox(x0, y0, x1, y1, r, col, ol = INK) {
+  const a = px(x0), b = py(y1), w = px(x1) - a, h = py(y0) - b; if (w <= 0 || h <= 0) return;
+  const lim = Math.min(w, h) / 2, rad = Array.isArray(r) ? r.map(q => Math.min(q * PPM, lim)) : Math.min(r * PPM, lim);
+  ctx.beginPath(); ctx.roundRect(a, b, w, h, rad);
+  if (col) { ctx.fillStyle = col; ctx.fill(); }
+  if (ol) { ctx.strokeStyle = ol; ctx.lineWidth = 1; ctx.stroke(); }
+}
+function disc(x, y, r, col, ol = INK) {
+  ctx.beginPath(); ctx.arc(px(x), py(y), Math.max(1, r * PPM), 0, Math.PI * 2);
+  if (col) { ctx.fillStyle = col; ctx.fill(); }
+  if (ol) { ctx.strokeStyle = ol; ctx.lineWidth = 1; ctx.stroke(); }
+}
+function oval(x, y, rx, ry, col, ol = INK) {
+  ctx.beginPath(); ctx.ellipse(px(x), py(y), Math.max(1, rx * PPM), Math.max(1, ry * PPM), 0, 0, Math.PI * 2);
+  if (col) { ctx.fillStyle = col; ctx.fill(); }
+  if (ol) { ctx.strokeStyle = ol; ctx.lineWidth = 1; ctx.stroke(); }
+}
+function seg(x0, y0, x1, y1, col = INK, w = 1) { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'butt'; ctx.beginPath(); ctx.moveTo(px(x0), py(y0)); ctx.lineTo(px(x1), py(y1)); ctx.stroke(); }
+function tyre(x, y, r = 0.45) { disc(x, y, r, '#23202b'); disc(x, y, r * 0.55, '#a9aebb'); disc(x, y, r * 0.18, '#4a4f5c', null); }
+function glass(x0, y0, x1, y1, r = 0.1, col = '#7fd7ff') {
+  rbox(x0, y0, x1, y1, r, col);
+  const a = px(x0), b = py(y1), w = px(x1) - a, h = py(y0) - b;
+  if (w > 7 && h > 5) { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(a + 2, b + 2, Math.max(1, Math.round(w * 0.3)), 1); ctx.fillRect(a + 2, b + 3, 1, Math.max(1, Math.round(h * 0.3))); }
+}
+// vertical stripes of two colours, w metres wide, cut to the box
+function stripes(x0, y0, x1, y1, c0, c1, w = 0.5) {
+  wb(x0, y0, x1, y1, c0); ctx.fillStyle = c1; const b = py(y1), h = py(y0) - b, e = px(x1);
+  for (let x = x0 + w; x < x1; x += w * 2) { const a = px(x); ctx.fillRect(a, b, Math.min(px(x + w), e) - a, h); }
+}
+function contact(x0, x1, y) { ctx.fillStyle = 'rgba(20,16,25,0.28)'; ctx.fillRect(px(x0) - 1, py(y), px(x1) - px(x0) + 2, 2); }
+// thin world-space details: a darker line across a mass (panel seam) and an up-down one (rib)
+const seam = (x0, x1, y, col) => { ctx.fillStyle = col; ctx.fillRect(px(x0), py(y), px(x1) - px(x0), 1); };
+const rib = (x, y0, y1, col) => { ctx.fillStyle = col; ctx.fillRect(px(x), py(y1), 1, py(y0) - py(y1)); };
+const onView = (x0, x1) => AX(x1) > -HW - 6 && AX(x0) < HW + 6;
+
+const GCOL = { harbor: ['#857d8a', '#c9c2cc'], alley: ['#555a6a', '#a4a9b8'], spire: ['#555a6a', '#a4a9b8'] };
+const WOOD = '#cf9550', WOOD_L = '#e9b673', WOOD_D = '#9c6a34';
+const LOOK = {
+  _: s => mass(s.x0, s.bot, s.x1, s.top, s.col || '#8d93a0'),
+  cabin() {}, hull() {}, lift: s => mass(s.x0, s.bot, s.x1, s.top, '#ffd23a'),
+  street(s, G) { const [c, l] = GCOL[G.M.theme] || GCOL.alley; mass(s.x0, s.bot, s.x1, s.top, c, { lip: l, top: 3, side: 0 }); seam(s.x0, s.x1, s.top - 0.5, shade(c, -0.18)); },
+  ramp(s) { const { x0, x1, top } = s, y1 = top + (x1 - x0) * s.k; shape([[x0, top], [x1, y1], [x1, top]], '#8d93a0'); seg(x0, top, x1, y1, '#ffd23a', 2); seg(x0, top, x1, y1, INK, 1); rib(x1 - 0.5, top, y1 - 0.3, '#5f6574'); },
+  road(s) { mass(s.x0, s.bot, s.x1, s.top, '#9a9ca6', { lip: '#d3d5dc', top: 3 }); for (let x = Math.ceil(s.x0 / 4) * 4; x < s.x1 - 1; x += 4) wb(x, s.top - 0.62, x + 1.6, s.top - 0.5, '#f4d35e'); },
+  crate(s, G) {
+    const m = G.M.theme === 'moon', c = m ? '#c3c8d2' : WOOD, l = m ? '#e8ebf1' : WOOD_L, d = m ? '#8b91a0' : WOOD_D, { x0, x1, top, bot } = s;
+    mass(x0, bot, x1, top, c, { lip: l }); const i = 0.16;
+    if (x1 - x0 > 0.8 && top - bot > 0.8) {
+      ctx.strokeStyle = d; ctx.lineWidth = 1; ctx.strokeRect(px(x0 + i) + 0.5, py(top - i) + 0.5, px(x1 - i) - px(x0 + i) - 1, py(bot + i) - py(top - i) - 1);
+      if (m) wb(x0 + i, (top + bot) / 2 - 0.12, x1 - i, (top + bot) / 2 + 0.12, '#3f8fe0'); else { seg(x0 + i, bot + i, x1 - i, top - i, d); }
     }
-    case 'tile': {
-      for (let x = Math.ceil(x0); x < x1; x += 1) { if ((Math.floor(x) & 1) === 0) wb(x + 0.05, top - 0.3, Math.min(x1, x + 1), top, '#cfc8bb'); if (hsh(x * 1.9) > 0.55) wb(x + 0.15, top - 0.09, x + 0.55, top - 0.04, '#f8f6f0'); }
-      wb(x0, top - 0.35, x1, top - 0.3, '#a8a094'); outlineBox(x0, bot, x1, top); break;
+  },
+  dumpster(s) {
+    const { x0, x1, top, bot } = s; contact(x0, x1, bot);
+    disc(x0 + 0.35, bot + 0.14, 0.14, '#23202b'); disc(x1 - 0.35, bot + 0.14, 0.14, '#23202b');
+    shape([[x0 + 0.12, bot + 0.2], [x0, top - 0.3], [x1, top - 0.3], [x1 - 0.12, bot + 0.2]], '#3f9a52');
+    for (const k of [0.3, 0.5, 0.7]) rib(x0 + (x1 - x0) * k, bot + 0.3, top - 0.4, '#2c7440');
+    mass(x0 - 0.08, top - 0.3, x1 + 0.08, top, '#2f7f44', { lip: '#5cc474', foot: 0, side: 0 });
+  },
+  stall(s, G) {   // a market stall: you land on the striped awning
+    const { x0, x1, top, bot } = s; contact(x0, x1, bot);
+    wb(x0 + 0.2, bot + 1.0, x1 - 0.2, top - 0.5, '#4a3550');   // shade under the awning
+    mass(x0 + 0.15, bot, x0 + 0.4, top - 0.4, WOOD_D, { top: 0 }); mass(x1 - 0.4, bot, x1 - 0.15, top - 0.4, WOOD_D, { top: 0 });
+    mass(x0, bot, x1, bot + 1.0, WOOD, { lip: WOOD_L });
+    for (let i = 0; i < 4; i++) { const cx = x0 + 0.7 + i * (x1 - x0 - 1.4) / 3; disc(cx, bot + 1.14, 0.16, ['#f25c3a', '#ffd23a', '#58c46a', '#f08a2c'][i]); }
+    stripes(x0 - 0.15, top - 0.5, x1 + 0.15, top, '#e8463c', '#fff6e0', 0.5); wb(x0 - 0.15, top - 0.12, x1 + 0.15, top, 'rgba(255,255,255,0.35)');
+    outlineBox(x0 - 0.15, top - 0.5, x1 + 0.15, top);
+    for (let x = x0 - 0.15; x < x1 + 0.1; x += 0.5) { ctx.fillStyle = (Math.round((x - x0 + 0.15) / 0.5) & 1) ? '#fff6e0' : '#e8463c'; ctx.fillRect(px(x), py(top - 0.5), px(x + 0.5) - px(x), 2); }
+  },
+  shop(s) {   // the upper storey; the shopfront behind it is scenery
+    const { x0, x1, top, bot } = s, c = '#e6bd52';
+    mass(x0, bot, x1, top, c, { lip: '#fff0b8', top: 3 });
+    for (let y = bot + 1.3; y < top - 0.3; y += 0.55) seam(x0 + 0.1, x1 - 0.1, y, '#c99c36');
+    for (let x = x0 + 1.2; x + 1.6 < x1; x += 3.1) { mass(x - 0.15, bot + 1.15, x + 1.75, bot + 2.95, '#fff6e0', { top: 0, foot: 0, side: 0 }); glass(x, bot + 1.3, x + 1.6, bot + 2.8, 0.05); rib(x + 0.8, bot + 1.3, bot + 2.8, INK); }
+    mass(x0 - 0.2, bot, x1 + 0.2, bot + 0.75, '#2f6fb5', { lip: '#6aa6e0' }); txt('CORNER SHOP', px((x0 + x1) / 2), py(bot + 0.38) + 2, 6, CREAM, { outline: false });
+  },
+  brick(s) {
+    const { x0, x1, top, bot } = s, c = '#b9573f', d = '#96432f';
+    mass(x0, bot, x1, top, c, { top: 0 });
+    for (let y = bot + 0.6, r = 0; y < top - 0.4; y += 0.6, r++) { seam(x0 + 0.1, x1 - 0.1, y, d); for (let x = x0 + (r & 1 ? 1.2 : 0.4); x < x1 - 0.3; x += 1.6) rib(x, y - 0.6, y, d); }
+    mass(x0 - 0.15, top - 0.3, x1 + 0.15, top, '#f1ebde', { lip: '#ffffff', foot: 0, side: 0 });
+  },
+  car(s) {   // the taxi is one drawing: the 'cabin' solid on top draws nothing
+    const { x0, x1, top, bot } = s, c = s.col || '#ffc93a', w = x1 - x0; contact(x0 + 0.2, x1 - 0.2, bot);
+    rbox(x0 + 0.95, top - 0.1, x0 + w * 0.76, top + 0.67, [0.35, 0.3, 0, 0], c);
+    glass(x0 + 1.12, top, x0 + 1.95, top + 0.5, 0.1); glass(x0 + 2.1, top, x0 + w * 0.76 - 0.15, top + 0.5, 0.1);
+    rbox(x0, bot + 0.28, x1, top, [0.3, 0.38, 0.12, 0.12], c);
+    wb(x0 + 0.1, top - 0.14, x1 - 0.2, top - 0.06, shade(c, 0.3)); seam(x0 + 0.1, x1 - 0.1, bot + 0.52, shade(c, -0.25));
+    for (let x = x0 + 1.5; x < x1 - 1.5; x += 0.3) wb(x, bot + 0.6, x + 0.15, bot + 0.74, (Math.round((x - x0) / 0.3) & 1) ? INK : c);
+    wb(x1 - 0.14, top - 0.42, x1, top - 0.2, '#fff6e0'); wb(x0, top - 0.42, x0 + 0.12, top - 0.2, '#e8463c');
+    mass(x0 + 1.75, top + 0.67, x0 + 2.55, top + 0.9, '#fff6e0', { top: 0, foot: 0, side: 0 });
+    tyre(x0 + 0.85, bot + 0.34, 0.34); tyre(x1 - 0.85, bot + 0.34, 0.34);
+  },
+  // ---- the double-decker (cutaway: the near side is off so you can see in) ----
+  busfloor(s) {
+    const { x0, x1, top } = s, R = '#d8403a', IN = '#f1e7d0';
+    wb(x0 + 0.2, top, x1 - 0.1, 7.3, IN); wb(x0 + 0.2, top, x1 - 0.1, top + 1.0, '#d9cdb2'); wb(x0 + 0.2, 4.3, x1 - 0.1, 5.2, '#d9cdb2');
+    for (let x = x0 + 1.4; x + 2.6 < x1 - 3.4; x += 3.3) { glass(x, top + 1.5, x + 2.6, top + 2.9, 0.15, '#9be3ff'); glass(x, 5.5, x + 2.6, 6.8, 0.15, '#9be3ff'); }
+    for (const x of [x0 + 5.6, x0 + 10.6]) { mass(x, 4.3, x + 1.2, 5.1, '#3f6fd0', { foot: 0 }); mass(x, 5.1, x + 0.3, 5.75, '#3f6fd0', { foot: 0, side: 0 }); }   // upper-deck seats are just for show
+    rib(x0 + 15.4, top, 4.0, '#c9cdd6'); rib(x0 + 15.5, top, 4.0, '#8d93a0');   // the grab pole by the stairs
+    contact(x0, x1, 0); mass(x0, 0, x1, top, R, { lip: '#8d93a0', top: 2 }); wb(x0 + 0.1, 0.34, x1 - 0.1, 0.46, '#fff6e0');
+    for (const x of [x0 + 4.2, x1 - 4.4]) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(px(x), py(0.5), 0.62 * PPM, Math.PI, 0); ctx.fill(); tyre(x, 0.5, 0.5); }
+  },
+  busdeck: s => mass(s.x0, s.bot, s.x1, s.top, '#9aa0ad', { lip: '#d3d7e0' }),
+  busroof(s) { rbox(s.x0, s.bot, s.x1, s.top, [0.25, 0.25, 0, 0], '#d8403a'); wb(s.x0 + 0.2, s.top - 0.14, s.x1 - 0.2, s.top - 0.06, '#f08078'); },
+  buswall(s) { mass(s.x0 - 0.1, s.bot, s.x1, s.top, '#d8403a', { top: 0, foot: 0, side: 0 }); wb(s.x0 - 0.1, 0.7, s.x0 + 0.1, s.bot - 0.4, '#b02e2a'); wb(s.x0 - 0.1, s.bot - 0.4, s.x1 + 0.3, s.bot, '#d8403a'); outlineBox(s.x0 - 0.1, s.bot - 0.4, s.x1 + 0.3, s.bot); },
+  busseat(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#3f6fd0', { lip: '#7fa2ee' }); mass(x0, top, x0 + 0.3, top + 0.7, '#3f6fd0', { lip: '#7fa2ee', foot: 0, side: 0 }); },
+  busstep: s => mass(s.x0, s.bot, s.x1, s.top, '#8d93a0', { lip: '#ffd23a', side: 0 }),
+  busbooth(s) {   // the driver's end: body below, the open top-deck front above with its windscreen smashed out
+    const { x0, x1, top, bot } = s, R = '#d8403a';
+    mass(x0, bot, x1, top, R, { lip: '#9aa0ad' }); glass(x0 + 1.0, bot + 1.3, x1 - 0.35, bot + 2.7, 0.15, '#9be3ff');
+    wb(x0 + 1.5, bot + 1.32, x0 + 2.3, bot + 2.1, '#2b3350'); disc(x0 + 1.9, bot + 2.3, 0.3, '#f2c79a'); wb(x0 + 1.55, bot + 2.44, x0 + 2.25, bot + 2.62, '#2b3350');
+    wb(x1 - 0.12, bot + 0.25, x1, bot + 0.6, '#fff6e0'); mass(x1 - 0.3, 7.0, x1, 7.3, R, { top: 0, foot: 0, side: 0 }); mass(x1 - 0.3, top, x1, top + 0.5, R, { top: 0, foot: 0, side: 0 });
+    shape([[x1 - 0.3, top + 0.5], [x1 - 0.1, top + 0.95], [x1 - 0.25, top + 0.8], [x1 - 0.02, top + 1.3], [x1 - 0.3, top + 0.9]], '#9be3ff');
+    shape([[x1 - 0.3, 7.0], [x1 - 0.08, 6.5], [x1 - 0.22, 6.65], [x1 - 0.05, 6.2], [x1 - 0.3, 6.5]], '#9be3ff');
+  },
+  ftcab(s) {   // the food truck faces left: cab here, kitchen box behind it
+    const { x0, x1, top, bot } = s, c = '#3fae55'; contact(x0, x1, bot);
+    rbox(x0, bot + 0.4, x1 + 0.05, top, [0.5, 0, 0, 0.1], c); glass(x0 + 0.35, top - 1.05, x1 - 0.5, top - 0.25, [0.3, 0.05, 0.05, 0.05]);
+    wb(x0, bot + 0.55, x0 + 0.14, bot + 0.85, '#fff6e0'); mass(x0 - 0.12, bot + 0.3, x0 + 0.5, bot + 0.5, '#6b7180', { top: 0, foot: 0, side: 0 });
+    wb(x0 + 0.4, bot, x1, bot + 0.4, '#2a2731'); tyre(x0 + 1.3, bot + 0.42, 0.42);
+  },
+  ftbox(s) {
+    const { x0, x1, top, bot } = s, c = '#3fae55', w = x1 - x0; contact(x0, x1, bot);
+    wb(x0, bot, x1, bot + 0.4, '#2a2731'); mass(x0, bot + 0.4, x1, top, c, { lip: '#7fe39a' }); seam(x0 + 0.1, x1 - 0.1, bot + 1.0, '#2f8a42');
+    mass(x0 + 1.4, bot + 1.35, x1 - 1.4, top - 0.95, '#2b2734', { top: 0, foot: 0, side: 0 }); mass(x0 + 1.2, bot + 1.2, x1 - 1.2, bot + 1.38, '#e9ebf1', { top: 0, foot: 0, side: 0 });
+    disc(x0 + w / 2 - 0.9, bot + 1.72, 0.3, '#f2c79a'); wb(x0 + w / 2 - 1.2, bot + 1.38, x0 + w / 2 - 0.6, bot + 1.5, '#fff6e0');
+    stripes(x0 + 1.0, top - 0.95, x1 - 1.0, top - 0.45, '#e8463c', '#fff6e0', 0.45); outlineBox(x0 + 1.0, top - 0.95, x1 - 1.0, top - 0.45);
+    txt('TACOS', px(x0 + w / 2), py(bot + 0.72) + 2, 6, CREAM, { outline: false });
+    tyre(x0 + 1.2, bot + 0.42, 0.42); tyre(x1 - 1.3, bot + 0.42, 0.42);
+  },
+  substep: s => mass(s.x0, s.bot, s.x1, s.top, '#8d8f98', { lip: '#ffd23a', top: 2, side: 0 }),
+  platform(s) { mass(s.x0, s.bot, s.x1, s.top, '#a9a59c', { lip: '#e1ddd2', top: 3 }); wb(s.x1 - 1.0, s.top - 0.17, s.x1, s.top - 0.06, '#ffd23a'); },
+  trackbed(s) { mass(s.x0, s.bot, s.x1, s.top, '#35323c', { lip: '#565260', side: 0 }); wb(s.x0, s.top, s.x1, s.top + 0.16, '#a9aebb'); for (let x = Math.ceil(s.x0); x < s.x1; x += 1.2) wb(x, s.top - 0.14, x + 0.4, s.top, '#6a5340'); },
+  bldg(s) {   // the station building over the platform
+    const { x0, x1, top, bot } = s, c = '#d8cfbc';
+    mass(x0, bot, x1, top, c, { lip: '#f3ecdc', top: 3 });
+    for (let x = x0 + 2.2; x + 2 < x1; x += 4.4) for (let y = bot + 3.6; y + 2 < top; y += 3.4) { glass(x, y, x + 2, y + 2, 0.05, '#8fb9d8'); rib(x + 1, y, y + 2, INK); }
+    mass(x0, bot, x1, bot + 0.5, '#6b7180', { lip: '#a9aebb', side: 0 });
+    mass(x0 + 1.2, bot + 1.0, x0 + 6.4, bot + 2.3, '#2f6fb5', { lip: '#6aa6e0' }); txt('SUBWAY', px(x0 + 3.8), py(bot + 1.65) + 2, 7, CREAM, { outline: false });
+  },
+  // ---- the freight train: every car sits on two bogies, couplers reach half-way across the gap ----
+  tanker(s) {
+    const { x0, x1, top, bot } = s; railcar(x0, x1); mass(x0 + 0.2, bot, x1 - 0.2, bot + 0.35, '#3a3d48', { top: 0, foot: 0, side: 0 });
+    rbox(x0 + 0.3, bot + 0.3, x1 - 0.3, top - 0.1, 1.25, '#e9ebf1'); wb(x0 + 1.4, top - 0.62, x1 - 1.4, top - 0.5, '#ffffff');
+    wb(x0 + 0.55, bot + 1.0, x1 - 0.55, bot + 1.3, '#e8463c'); wb(x0 + 1.2, bot + 0.36, x1 - 1.2, bot + 0.5, '#b9bec9');
+    for (const x of [x0 + 3.2, x1 - 3.2]) rib(x, bot + 0.4, top - 0.2, '#b9bec9');
+    mass(x0 + 0.7, top - 0.22, x1 - 0.7, top, '#6b7180', { lip: '#b9bec9', foot: 0, side: 0 });
+  },
+  boxcar(s) {
+    const { x0, x1, top, bot } = s, c = s.col || '#3b7fd9', d = shade(c, -0.22), m = (x0 + x1) / 2; railcar(x0, x1);
+    mass(x0, bot, x1, top, c, { top: 3 });
+    for (let x = x0 + 1.15; x < x1 - 0.6; x += 1.15) if (Math.abs(x - m) > 1.7) rib(x, bot + 0.15, top - 0.3, d);
+    mass(m - 1.5, bot + 0.25, m + 1.5, top - 0.5, shade(c, -0.08), { lip: shade(c, 0.2), side: 0 }); rib(m, bot + 0.3, top - 0.6, d);
+    wb(m - 0.35, bot + 1.3, m - 0.2, bot + 1.75, '#e9ebf1'); seam(x0 + 0.15, x1 - 0.15, top - 0.42, d);
+  },
+  flatcar(s) { const { x0, x1, top, bot } = s; railcar(x0, x1); mass(x0, bot, x1, top, '#8a6846', { lip: '#c39a68' }); mass(x0 + 0.85, top, x0 + 1.1, top + 1.6, '#3a3d48', { top: 0, foot: 0, side: 0 }); },
+  logs(s) {
+    const { x0, x1, top, bot } = s, n = 3, h = (top - bot) / n;
+    for (let i = 0; i < n; i++) { const y = bot + i * h, a = x0 + (i === 1 ? 0.25 : 0); rbox(a, y, x1, y + h, h / 2, i === 1 ? '#a9683a' : '#bd7a45'); wb(a + 0.5, y + h - 0.16, x1 - 0.4, y + h - 0.08, '#d99a62'); disc(a + h / 2, y + h / 2, h * 0.36, '#e9c08a'); disc(a + h / 2, y + h / 2, h * 0.14, '#bd7a45', null); }
+    mass(x1 - 0.25, bot, x1, top + 0.1, '#3a3d48', { top: 0, foot: 0, side: 0 });
+  },
+  loco(s, G) {
+    const { x0, x1, top, bot } = s, c = '#d8403a', cab = G.S.find(q => q.style === 'locab') || s; railcar(x0, cab.x1, 1);
+    mass(x0, bot, x1, top, c, { lip: '#f08078' }); wb(x0, bot + 0.5, x1, bot + 0.85, '#ffd23a');
+    for (let x = x0 + 0.8; x < x1 - 3; x += 0.45) rib(x, bot + 1.3, top - 0.5, '#a82e2a');
+    mass(x1 - 2.4, bot + 1.2, x1 - 0.6, top - 0.5, '#a82e2a', { top: 0, foot: 0, side: 0 }); disc(x1 - 1.5, (bot + 1.2 + top - 0.5) / 2, 0.55, '#3a3d48'); disc(x1 - 1.5, (bot + 1.2 + top - 0.5) / 2, 0.15, '#8d93a0', null);
+    wb(x0 + 0.1, bot + 0.02, x0 + 0.24, bot + 0.4, '#ffd23a'); seam(x0 + 0.2, x1 - 0.1, top - 0.32, '#a82e2a');
+  },
+  locab(s) {
+    const { x0, x1, top, bot } = s, c = '#d8403a';
+    mass(x0, bot, x1, top, c, { top: 0 }); wb(x0, bot + 0.5, x1, bot + 0.85, '#ffd23a');
+    glass(x0 + 0.5, top - 1.75, x0 + 1.9, top - 0.6, 0.1); glass(x0 + 2.2, top - 1.75, x1 - 0.4, top - 0.6, [0.1, 0.5, 0.1, 0.1]);
+    mass(x0 - 0.15, top - 0.28, x1 + 0.25, top, '#3a3d48', { lip: '#6b7180', foot: 0, side: 0 });
+    disc(x1 - 0.1, bot + 1.6, 0.2, '#fff6e0'); wb(x1 - 0.1, bot, x1 + 0.3, bot + 0.45, '#3a3d48');
+  },
+  // ---- glass tower ----
+  core(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#3e5180', { lip: '#7f97cf', top: 3 }); for (let y = bot + 1.2; y < top - 0.5; y += 1.2) seam(x0 + 0.1, x1 - 0.1, y, '#2c3b62'); mass(x0, bot, x1, bot + 0.4, '#6b7180', { lip: '#a9aebb', side: 0 }); },
+  slab(s, G) { const pl = G.M.theme === 'plane'; mass(s.x0, s.bot, s.x1, s.top, pl ? '#c9cdd8' : '#8d93a0', { lip: pl ? '#f0f2f7' : '#c3c8d2', side: 0 }); },
+  equip(s) {
+    const { x0, x1, top, bot } = s; contact(x0, x1, bot); mass(x0, bot, x1, top, '#8e94a3', { lip: '#c9cdd8' });
+    for (let y = top - 0.45; y > top - 1.0 && y > bot + 0.3; y -= 0.18) seam(x0 + 0.3, x1 - 0.3, y, '#5f6574');
+    if (top - bot > 1.6) { wb(x0 + 0.3, bot + 0.35, x0 + 0.5, bot + 0.5, '#43f07a'); wb(x0 + 0.65, bot + 0.35, x0 + 0.85, bot + 0.5, '#ffd23a'); }
+  },
+  office(s) { mass(s.x0, s.bot, s.x1, s.top, '#444a5a', { lip: '#dfe2ea', top: 3 }); for (let x = s.x0 + 5; x < s.x1; x += 5) rib(x, s.top - 5, s.top - 0.3, '#353a48'); },
+  table(s) { const { x0, x1, top, bot } = s; contact(x0, x1, bot); mass(x0 + 0.15, bot, x1 - 0.15, top - 0.2, WOOD_D, { top: 0 }); mass(x0, top - 0.25, x1, top, WOOD, { lip: WOOD_L, foot: 0, side: 0 }); },
+  cabinet(s) {
+    const { x0, x1, top, bot } = s; contact(x0, x1, bot); mass(x0, bot, x1, top, '#aab0bd', { lip: '#dfe3ea' });
+    for (let y = bot + 0.6; y < top - 0.3; y += 0.6) { seam(x0 + 0.1, x1 - 0.1, y, '#7c8291'); wb((x0 + x1) / 2 - 0.25, y - 0.34, (x0 + x1) / 2 + 0.25, y - 0.26, '#5f6574'); }
+  },
+  roofblk(s, G) { const sp = G.M.theme === 'spire'; mass(s.x0, s.bot, s.x1, s.top, sp ? '#59627a' : '#9aa0ad', { lip: sp ? '#b3bbcf' : '#dadde5', top: 3 }); seam(s.x0 + 0.1, s.x1 - 0.1, s.top - 0.55, sp ? '#434b60' : '#787e8c'); },
+  ac(s) {
+    const { x0, x1, top, bot } = s, m = (x0 + x1) / 2, h = top - bot; contact(x0, x1, bot); mass(x0, bot, x1, top, '#b9bec9', { lip: '#e6e9ef' });
+    disc(m, bot + h / 2 - 0.05, Math.min(h, x1 - x0) * 0.3, '#4a4f5c'); seg(m - 0.25, bot + h / 2 - 0.05, m + 0.25, bot + h / 2 - 0.05, '#b9bec9'); seg(m, bot + h / 2 - 0.3, m, bot + h / 2 + 0.2, '#b9bec9');
+  },
+  // ---- terminal ----
+  tile(s) { mass(s.x0, s.bot, s.x1, s.top, '#b4b9c6', { lip: '#eceef3', top: 3 }); for (let x = Math.ceil(s.x0 / 2) * 2; x < s.x1; x += 2) rib(x, s.top - 0.4, s.top - 0.16, '#8a90a0'); },
+  floor(s) { LOOK.tile(s); },
+  desk(s) { const { x0, x1, top, bot } = s; contact(x0, x1, bot); mass(x0, bot, x1, top, '#3f6fd0', { lip: '#f4f6fa', top: 3 }); wb(x0 + 0.3, bot + 0.35, x1 - 0.3, bot + 0.5, '#7fa2ee'); },
+  counter(s) { LOOK.desk(s); },
+  wallmass(s) {
+    const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#c6cad5', { lip: '#e9ebf1' });
+    for (let x = Math.ceil(x0 / 2.5) * 2.5; x < x1; x += 2.5) rib(x, bot + 0.5, top - 0.2, '#a4a9b8');
+    mass(x0, bot, x1, bot + 0.45, '#7c8291', { lip: '#a9aebb', side: 0 });
+  },
+  escalator(s, G) {
+    const { x0, x1, top, bot } = s, k = s.k, y1 = top + (x1 - x0) * k, at = x => top + (x - x0) * k;
+    ctx.fillStyle = 'rgba(159,216,240,0.4)'; ctx.beginPath(); ctx.moveTo(px(x0 + 0.3), py(top)); ctx.lineTo(px(x0 + 0.3), py(top + 0.95)); ctx.lineTo(px(x1), py(y1 + 0.95)); ctx.lineTo(px(x1), py(y1)); ctx.fill();
+    shape([[x0, bot], [x0, top], [x1, y1], [x1, bot]], '#5d6373');
+    const ph = (G.t * 0.9) % 0.7; ctx.fillStyle = '#c9cdd8';
+    for (let x = x0 + ph; x < x1 - 0.3; x += 0.7) ctx.fillRect(px(x), py(at(x + 0.35)) + 1, px(x + 0.35) - px(x), 2);
+    seg(x0, top, x1, y1, INK, 1); seg(x0 + 0.3, top + 0.95, x1, y1 + 0.95, '#23202b', 2);
+    rib(x0 + 0.3, top, top + 0.95, '#23202b');
+  },
+  gatewall(s) {
+    const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#e7e9ef', { lip: '#ffffff', top: 3 });
+    for (let x = Math.ceil(x0 / 2.4) * 2.4; x < x1; x += 2.4) rib(x, top - 4.5, top - 0.3, '#c3c8d2');
+    wb(x0, top - 1.5, x1, top - 1.2, '#3f6fd0');
+  },
+  // ---- cargo jet (cutaway fuselage: white skin outside, grey structure inside) ----
+  hull(s, G) {
+    if (G.M.theme !== 'plane') return;   // (the rocket's hull is the ride's drawing)
+    const { x0, x1, top, bot } = s;
+    if (s.ceil) {   // the roof of the fuselage
+      mass(x0, bot, x1, top, '#e9ebf1', { lip: '#ffffff', top: 3 }); wb(x0, top - 1.1, x1, top - 0.85, '#3f6fd0');
+      wb(x0, bot, x1, bot + 0.32, '#aab0bd'); seam(x0, x1, bot + 0.32, '#7c8291');
+      for (let x = Math.ceil(x0 / 4.5) * 4.5; x < x1; x += 4.5) rib(x, bot + 0.36, top - 1.2, '#c9cdd8');
+      return;
     }
-    case 'tarmac': {
-      for (let x = Math.ceil(x0 / 4) * 4; x < x1; x += 4) if (hsh(x * 0.7 + 1) > 0.5) { let y = top - 0.05; for (let i = 0; i < 5 && y > top - 0.35; i++) { const dx = (hsh(x + i) - 0.5) * 0.6; wb(x + dx, y - 0.07, x + dx + 0.06, y, '#2a2830'); y -= 0.07; } }
-      for (let x = Math.ceil(x0 / 9) * 9 + 2; x < x1; x += 9) { ctx.fillStyle = 'rgba(10,8,20,0.28)'; ctx.beginPath(); ctx.ellipse(AX(x), AY(top - 0.06), 0.9 * PPM, 2, 0, 0, 7); ctx.fill(); }
-      outlineBox(x0, bot, x1, top); break;
+    mass(x0, bot, x1, top, '#c3c8d2', { top: 0 });
+    for (let y = bot + 2.6; y < top - 2.6; y += 2.6) seam(x0 + 0.1, x1 - 0.1, y, '#a4a9b8');
+    if (x0 > 0) {   // the cockpit bulkhead, door shut
+      mass(x0 + 0.9, 5.6, x0 + 2.6, 8.4, '#8d93a0', { lip: '#c9cdd8' }); glass(x0 + 1.35, 7.2, x0 + 2.15, 7.9, 0.25); wb(x0 + 1.1, 6.8, x0 + 1.25, 7.05, '#ffd23a');
+      mass(x0 + 0.6, 8.7, x0 + 2.9, 9.4, '#e8463c', { lip: '#ff8a80', foot: 0, side: 0 }); txt('CREW', px(x0 + 1.75), py(9.05) + 1, 6, CREAM, { outline: false });
     }
-    case 'floor': {
-      for (let x = Math.ceil(x0 * 2) / 2; x < x1; x += 0.5) { const o = (Math.round(x * 2) & 1) * 0.1; wb(x + 0.1, top - 0.22 + o, x + 0.3, top - 0.18 + o, '#9a9488'); }
-      for (let x = Math.ceil(x0) + 0.5; x < x1; x += 2) { wb(x, top - 0.08, x + 0.08, top - 0.03, '#f4f1ea'); wb(x, top - 0.28, x + 0.08, top - 0.23, '#f4f1ea'); }
-      outlineBox(x0, bot, x1, top); break;
+  },
+  deck(s) {
+    const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#6f7480', { lip: '#aeb3bf', top: 3 }); seam(x0, x1, top - 0.45, '#555a66');
+    for (let x = Math.ceil(x0 / 3) * 3; x < x1; x += 3) rib(x, top - 0.45, top - 0.16, '#555a66');
+    for (let x = Math.ceil(x0 / 3) * 3 + 0.4; x < x1 - 1; x += 3) wb(x, top - 0.34, x + 0.7, top - 0.26, '#ffd23a');
+  },
+  pstair: s => mass(s.x0, s.bot, s.x1, s.top, '#8d93a0', { lip: '#ffd23a', side: 0 }),
+  cabinblk(s) {   // the main-cabin floor and the avionics bay under it
+    const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#4f5565', { lip: '#d3d7e0', top: 3 }); seam(x0, x1, top - 0.5, '#3d4250');
+    for (let x = x0 + 2.4; x + 3.2 < x1; x += 4.6) {
+      mass(x, top - 4.5, x + 3.2, top - 1.1, '#5d6475', { lip: '#8a91a3', foot: 0 }); rib(x + 1.6, top - 4.4, top - 1.2, '#3d4250');
+      wb(x + 1.2, top - 2.95, x + 1.42, top - 2.6, '#c9cdd8'); wb(x + 1.78, top - 2.95, x + 2.0, top - 2.6, '#c9cdd8');
     }
-    case 'awning': {
-      for (let i = 0, x = x0; x < x1; x += 0.5, i++) wb(x + 0.12, s.bot - 0.14, Math.min(x1, x + 0.38), s.bot, i % 2 ? '#fff6e0' : '#e8423a');
-      for (let i = 0; i < 3; i++) {   // paper lanterns swinging under the front edge
-        const lx = x0 + w * (0.2 + 0.3 * i) + Math.sin(t * 1.6 + i + x0) * 0.08, ly = s.bot - 0.55;
-        wb(lx - 0.02, ly + 0.3, lx + 0.02, s.bot, INK); wb(lx - 0.2, ly - 0.05, lx + 0.2, ly + 0.35, INK); wb(lx - 0.17, ly - 0.02, lx + 0.17, ly + 0.32, i === 1 ? '#f4d03f' : '#e8423a'); wb(lx - 0.17, ly + 0.14, lx + 0.17, ly + 0.17, 'rgba(255,246,224,0.5)');
-      }
-      txt(['FISH', 'FRUIT', 'RUGS', 'TEA', 'SPICE'][Math.round(hsh(x0 * 1.3) * 4)], AX((x0 + x1) / 2), AY(top - (top - s.bot) / 2), 4, '#2a1a1a', { outline: false }); break;
-    }
-    case 'counter': {   // goods piled on the stall
-      const cols = hsh(x0) > 0.5 ? ['#ff8a2a', '#e8423a', '#7ae06a'] : ['#9ad0e8', '#f4f1ea', '#c8a040'];
-      for (let i = 0; i < 3 && x0 + 0.5 + i * 0.9 < x1 - 0.4; i++) { const gx = x0 + 0.5 + i * 0.9; pcircle(Math.round(AX(gx)), Math.round(AY(top + 0.22)), 4, cols[i]); pcircle(Math.round(AX(gx - 0.18)), Math.round(AY(top + 0.12)), 3, cols[i]); pcircle(Math.round(AX(gx + 0.18)), Math.round(AY(top + 0.12)), 3, shade(cols[i], -0.15)); }
-      break;
-    }
-    case 'office': {   // the room above the slab: ceiling lights, a plant, a picture, a water cooler, people at desks
-      if (s.slab) break;
-      const H = 4.3;
-      for (let x = x0 + 1.5; x < x1 - 1; x += 3) { wb(x, top + H - 0.95, x + 1.2, top + H - 0.85, '#fff6e0'); ctx.fillStyle = 'rgba(255,246,224,0.05)'; ctx.beginPath(); ctx.moveTo(AX(x), AY(top + H - 0.95)); ctx.lineTo(AX(x + 1.2), AY(top + H - 0.95)); ctx.lineTo(AX(x + 2.4), AY(top)); ctx.lineTo(AX(x - 1.2), AY(top)); ctx.fill(); }
-      if (w > 4) { wb(x0 + 0.5, top, x0 + 0.9, top + 0.35, '#b85a3a'); pcircle(Math.round(AX(x0 + 0.7)), Math.round(AY(top + 0.65)), 4, '#3f9f4a'); pcircle(Math.round(AX(x0 + 0.5)), Math.round(AY(top + 0.5)), 3, '#2f8f3a'); wb(x1 - 1.1, top, x1 - 0.7, top + 0.9, '#9ad0e8'); wb(x1 - 1.05, top + 0.9, x1 - 0.75, top + 1.25, '#c8e8ff'); wb(x1 - 1.1, top, x1 - 0.7, top + 0.12, '#8a8692'); }
-      if (w > 3) { wb(x0 + w * 0.5 - 0.35, top + 2.3, x0 + w * 0.5 + 0.35, top + 2.85, '#c8a040'); wb(x0 + w * 0.5 - 0.28, top + 2.37, x0 + w * 0.5 + 0.28, top + 2.78, hsh(x0) > 0.5 ? '#5ab8f0' : '#e88a4a'); }
-      for (let x = x0 + 1.6; x < x1 - 2.4; x += 3.6) {
-        if (hsh(x * 2.2) < 0.3) continue;
-        person(Math.round(AX(x + 0.5)) - 5, Math.round(AY(top)), Math.round(x * 10), t, CROWD_PAL.spire, { sc: 2, ol: true, prop: hsh(x) > 0.6 ? 'coffee' : null });
-        wb(x - 0.2, top + 0.85, x + 1.4, top + 0.95, '#8a7a6a'); wb(x - 0.1, top, x, top + 0.85, '#6a5a4a'); wb(x + 1.2, top, x + 1.3, top + 0.85, '#6a5a4a');
-        wb(x + 0.2, top + 0.95, x + 0.8, top + 1.4, INK); wb(x + 0.25, top + 1.0, x + 0.75, top + 1.35, Math.sin(t * 7 + x) > -0.6 ? '#9fd0f0' : '#7ab0d8'); wb(x + 0.45, top + 0.95, x + 0.55, top + 1.0, '#5a5862');
-      }
-      break;
-    }
-    case 'ceil': {
-      if (s.plane) { for (let x = x0 + 2; x < x1; x += 4.4) { ctx.fillStyle = 'rgba(255,246,224,0.06)'; ctx.beginPath(); ctx.moveTo(AX(x - 0.3), AY(s.bot)); ctx.lineTo(AX(x + 0.9), AY(s.bot)); ctx.lineTo(AX(x + 2.4), AY(s.bot - 6)); ctx.lineTo(AX(x - 1.8), AY(s.bot - 6)); ctx.fill(); } break; }
-      for (let x = Math.ceil(x0 / 16) * 16 + 4, n = 1; x < x1 - 4; x += 16, n += 4) {   // hanging gate signs
-        wb(x + 0.3, s.bot - 0.8, x + 0.36, s.bot, '#5a5862'); wb(x + 2.6, s.bot - 0.8, x + 2.66, s.bot, '#5a5862');
-        wb(x, s.bot - 1.5, x + 3, s.bot - 0.8, INK); wb(x + 0.04, s.bot - 1.46, x + 2.96, s.bot - 0.84, '#1b3d86');
-        txt(`GATES ${n}-${n + 3}  >`, AX(x + 1.5), AY(s.bot - 1.15), 4, '#fff6e0', { outline: false });
-      }
-      break;
-    }
-    case 'boxcar': case 'tanker': case 'flatcar': {   // rivet rows
-      ctx.fillStyle = 'rgba(20,16,25,0.35)'; for (let x = x0 + 0.3; x < x1 - 0.1; x += 0.5) { ctx.fillRect(Math.round(AX(x)), Math.round(AY(s.bot + 0.25)), 1, 1); if (s.style !== 'flatcar') ctx.fillRect(Math.round(AX(x)), Math.round(AY(top - 0.3)), 1, 1); }
-      break;
-    }
+  },
+  seat(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#3f6fd0', { lip: '#7fa2ee' }); mass(x0, top, x0 + 0.34, top + 0.9, '#3f6fd0', { lip: '#fff6e0', foot: 0, side: 0 }); },
+  // ---- launch pad ----
+  gfloor(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#9aa0ad', { lip: '#dadde5', side: 0 }); for (let x = x0 + 0.5; x < x1 - 0.2; x += 0.5) rib(x, bot + 0.06, top - 0.12, '#6b7180'); },
+  silo(s) {
+    const { x0, x1, top, bot } = s, m = (x0 + x1) / 2; contact(x0, x1, bot);
+    mass(x0, bot, x1, top, '#4a4f5e', { lip: '#9097aa', top: 3 });
+    wb(x0 + 1.3, bot + 0.15, x0 + 2.5, top - 0.3, '#5c6274'); wb(x1 - 2.4, bot + 0.15, x1 - 0.12, top - 0.3, '#3d414e');   // light and shade so it reads as a round tank
+    seam(x0 + 0.1, x1 - 0.1, top - 3.2, '#353946'); seam(x0 + 0.1, x1 - 0.1, top - 6.4, '#353946');
+    stripes(x0 + 0.06, bot + 0.9, x1 - 0.06, bot + 1.5, '#ffd23a', '#23202b', 0.6);
+    txt('FUEL', px(m), py(top - 1.7), 9, '#c9cdd8', { outline: false });
+    rib(x0 + 0.5, bot + 1.5, top - 0.2, '#c9cdd8'); rib(x0 + 1.0, bot + 1.5, top - 0.2, '#c9cdd8');
+    for (let y = bot + 1.9; y < top - 0.3; y += 0.5) seam(x0 + 0.5, x0 + 1.0, y, '#c9cdd8');
+  },
+  bridge(s) {   // the crew access arm out to the rocket
+    const { x0, x1, top, bot } = s;
+    for (let x = x0; x < x1 - 0.6; x += 1.3) { seg(x, bot, x + 0.65, bot - 0.9, '#8d93a0', 2); seg(x + 0.65, bot - 0.9, x + 1.3, bot, '#8d93a0', 2); }
+    wb(x0, bot - 1.0, x1, bot - 0.84, '#8d93a0'); mass(x0, bot, x1, top, '#e9ebf1', { lip: '#ffffff', side: 0 }); wb(x0, bot + 0.1, x1, bot + 0.22, '#e8463c');
+    mass(x1, top - 0.22, x1 + 1.6, top, '#ffd23a', { lip: '#fff3b0', foot: 0, side: 0 });   // the last step out to the hatch: a lip you jump from, not a floor
+  },
+  // ---- moon base ----
+  moon(s) {
+    const { x0, x1, top } = s, y1 = top + (x1 - x0) * (s.k || 0), lo = CAMY - HH / PPM - 1;
+    ctx.fillStyle = '#d6cfbb'; ctx.beginPath(); ctx.moveTo(px(x0), py(top)); ctx.lineTo(px(x1), py(y1)); ctx.lineTo(px(x1), py(lo)); ctx.lineTo(px(x0), py(lo)); ctx.fill();
+    if (!s.k) for (let x = Math.ceil((x0 + 1.6) / 3.7) * 3.7; x < x1 - 1.6; x += 3.7) { const h = hsh(x * 3.1); if (h > 0.3) oval(x + h * 0.6, top - 1.0 - h * 2.4, 0.45 + h * 0.5, 0.16 + h * 0.14, '#c2baa4', null); }
+    ctx.lineCap = 'butt'; ctx.strokeStyle = '#f4efe0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px(x0), py(top) + 2); ctx.lineTo(px(x1), py(y1) + 2); ctx.stroke();
+    ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px(x0), py(top) + 0.5); ctx.lineTo(px(x1), py(y1) + 0.5); ctx.stroke();
+  },
+  roverbed(s) {   // the rover's flat bed; its cab is the next solid along
+    const { x0, x1, top, bot } = s; contact(x0 + 0.3, x1 + 3.6, bot);
+    wb(x0 + 0.3, bot + 0.5, x1 + 0.2, bot + 0.95, '#3a3d48'); mass(x0, bot + 0.9, x1, top, '#c3c8d2', { lip: '#eef0f5' });
+    wb(x0, top - 0.62, x1, top - 0.42, '#ff8a2a'); for (let x = x0 + 1.25; x < x1 - 0.5; x += 1.25) rib(x, bot + 0.95, top - 0.62, '#9aa0ad');
+    mwheel(x0 + 1.05, bot + 0.62); mwheel(x0 + 3.6, bot + 0.62);
+  },
+  rovercab(s) {
+    const { x0, x1, top, bot } = s;
+    if (s.dish) { rib(x0 + 0.9, top, top + 1.0, '#8d93a0'); shape([[x0 + 0.2, top + 1.5], [x0 + 0.9, top + 0.9], [x0 + 1.6, top + 1.5], [x0 + 0.9, top + 1.2]], '#e9ebf1'); }
+    wb(x0 - 0.1, bot + 0.5, x1 - 0.5, bot + 0.95, '#3a3d48'); rbox(x0, bot + 0.9, x1, top, [0.15, 1.1, 0.2, 0.05], '#eceef3');
+    wb(x0 + 0.1, top - 0.14, x1 - 1.1, top - 0.06, '#ffffff'); wb(x0, bot + 1.3, x1 - 0.1, bot + 1.5, '#ff8a2a');
+    glass(x0 + 1.5, top - 1.5, x1 - 0.45, top - 0.4, [0.1, 0.75, 0.1, 0.1]); wb(x1 - 0.16, bot + 1.02, x1, bot + 1.24, '#ffd23a');
+    mwheel(x0 + 2.3, bot + 0.62);
+  },
+  pipe(s) {
+    const { x0, x1, top, bot } = s; contact(x0, x1, bot);
+    rbox(x0, bot + 0.06, x1, top, 0.1, '#aab0bd'); wb(x0 + 0.1, top - 0.2, x1 - 0.1, top - 0.1, '#dfe3ea'); wb(x0 + 0.1, bot + 0.1, x1 - 0.1, bot + 0.2, '#7c8291');
+    for (const x of [x0 + 0.5, (x0 + x1) / 2 - 0.15, x1 - 0.8]) mass(x, bot, x + 0.3, top + 0.07, '#7c8291', { lip: '#aab0bd', side: 0 });
+  },
+};
+// steel wheels on a bogie under each end of a rail car, and the couplers that meet half-way across the gap
+function railcar(x0, x1, loco) {
+  wb(x0 - 1.1, 0.5, x0 + 0.3, 0.7, '#3a3d48'); if (!loco) wb(x1 - 0.3, 0.5, x1 + 1.1, 0.7, '#3a3d48');
+  for (const b of loco ? [x0 + 1.9, (x0 + x1) / 2, x1 - 1.9] : [x0 + 1.9, x1 - 1.9]) {
+    wb(b - 1.3, 0.3, b + 1.3, 0.9, '#2a2731');
+    for (const w of [b - 0.64, b + 0.64]) { disc(w, 0.42, 0.42, '#5d6373'); disc(w, 0.42, 0.17, '#23202b', null); }
   }
 }
-// what's under the floor of each place
+// a chunky wire-mesh moon wheel
+function mwheel(x, y) { disc(x, y, 0.62, '#4a4f5c'); disc(x, y, 0.36, '#aab0bd'); disc(x, y, 0.12, '#4a4f5c', null); }
+function drawSolid(G, s) { if (AX(s.x1) > -HW - 100 && AX(s.x0) < HW + 100) (LOOK[s.style] || LOOK._)(s, G); }
+// ---- scenery right behind the play layer: flat and un-outlined, so it never reads as footing ----
+function fronts(x0, x1, y, seed, cols, win, hmin, hmax) {
+  for (let x = x0, i = 0; x < x1; i++) {
+    const w = 6 + Math.round(hsh(i * 3 + seed) * 5), h = hmin + hsh(i * 7 + seed) * (hmax - hmin), e = Math.min(x + w, x1);
+    if (onView(x, e)) {
+      const c = cols[i % cols.length]; wb(x, y, e, y + h, c); wb(x, y + h - 0.3, e, y + h, shade(c, 0.12)); wb(e - 0.12, y, e, y + h, shade(c, -0.08));
+      for (let wy = y + 2.6; wy + 1.5 < y + h; wy += 2.6) for (let wx = x + 1; wx + 1.2 < e - 0.5; wx += 2.2) wb(wx, wy, wx + 1.2, wy + 1.5, win);
+    }
+    x = e;
+  }
+}
+function lamp(x, y, h = 4.2, col = '#4a5166') { wb(x - 0.08, y, x + 0.08, y + h, col); wb(x - 0.08, y + h - 0.12, x + 0.9, y + h, col); wb(x + 0.5, y + h - 0.3, x + 1.0, y + h - 0.12, '#fff3b0'); wb(x - 0.2, y, x + 0.2, y + 0.25, col); }
+function dome(x, y, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(px(x), py(y), r * PPM, Math.PI, 0); ctx.fill(); }
+// evenly spaced flat panels along a wall (windows, ribs): n(x) draws one
+const along = (x0, x1, step, fn) => { for (let x = x0; x < x1; x += step) if (onView(x, x + step)) fn(x); };
+const SCENE = {
+  harbor: { back(G) {
+    fronts(-9, 112, 0, 3, ['#f0e2c8', '#e6d3c2', '#dbe5e6', '#ecd9b6'], '#cbd6da', 6, 10.5);
+    for (const x of [1.5, 24.5, 38.5, 81.5]) lamp(x, 0);
+    // the corner shop's ground floor is a dark recess you hop through, under the flat above
+    wb(42.3, 0, 51.7, 4.2, '#3b3247'); wb(42.3, 3.5, 51.7, 4.2, '#2c2536');
+    mass(43.2, 0, 44.7, 2.7, '#8a5a3a', { lip: '#b98052' }); wb(43.5, 1.5, 44.4, 2.4, '#ffe9a8'); wb(44.4, 1.2, 44.55, 1.4, '#ffd23a');
+    mass(45.5, 0.9, 51, 3.2, '#ffe9a8', { lip: '#fff6d6', foot: 0, side: 0 }); seam(45.6, 50.9, 2.0, '#c9a45a');
+    ['#e8463c', '#43b05a', '#3f6fd0', '#ff8a2a', '#e8463c', '#ffd23a', '#43b05a'].forEach((c, i) => { wb(46 + i * 0.7, 2.05, 46.4 + i * 0.7, 2.55, c); wb(46.2 + i * 0.7, 1.0, 46.6 + i * 0.7, 1.45, c); });
+  } },
+  alley: { back(G) {
+    fronts(-9, 79, 0, 8, ['#c9d8e6', '#bccde0', '#d3dfe9'], '#e3edf5', 9, 15);
+    for (const x of [3, 15, 47, 66]) lamp(x, 0);
+    // down the steps: the station's tiled wall, one long blue stripe, lights in the ceiling
+    wb(72, -5.2, 79, 0, '#c9d1d8'); wb(79, -5.2, 122, 0.4, '#c9d1d8');
+    along(72, 122, 1.2, x => rib(x, -5.2, x < 79 ? 0 : 0.4, '#b4bec7'));
+    wb(72, -1.9, 122, -1.5, '#3f6fd0'); wb(72, -1.58, 122, -1.5, '#7fa2ee');
+    mass(80.2, -1.2, 85.2, -0.2, '#2b3350', { lip: '#4a5680', foot: 0, side: 0 }); txt('CENTRAL', px(82.7), py(-0.7) + 1, 7, CREAM, { outline: false });
+    wb(78, -3.75, 80, -3.6, '#8a5a3a'); wb(78.1, -4.2, 78.25, -3.75, '#4a4f5c'); wb(79.75, -4.2, 79.9, -3.75, '#4a4f5c'); wb(78, -3.2, 80, -3.05, '#8a5a3a');
+    along(82, 122, 6, x => wb(x, 0.1, x + 1.6, 0.3, '#fff3b0'));
+  } },
+  spire: { back(G) {
+    // the tower carries on up behind its core
+    wb(8.6, 10, 19.4, 40, '#9fc0e8'); wb(18.9, 10, 19.4, 40, '#86aad6');
+    for (let y = 11.6; y < 40; y += 1.6) if (AY(y) > -HH - 4 && AY(y) < HH + 4) wb(8.6, y, 18.9, y + 0.14, '#c3daf3');
+    // lobby and atrium
+    wb(8, 0, 35, 4.6, '#2f3a5c'); wb(20, 4.6, 35, 9.6, '#3a4770'); wb(8, 0, 35, 0.3, '#232c47');
+    for (const x of [10.5, 14]) { mass(x, 0, x + 2.4, 3.1, '#d9a93a', { lip: '#ffe08a' }); rib(x + 1.2, 0.1, 2.95, '#9c7524'); wb(x + 1.0, 3.3, x + 1.4, 3.5, '#43f07a'); }
+    mass(22.5, 3.3, 25.2, 4.0, '#e8463c', { lip: '#ff8a80', foot: 0, side: 0 }); txt('EXIT', px(23.85), py(3.65) + 1, 6, CREAM, { outline: false });
+    along(21.5, 34, 4.2, x => wb(x, 6.0, x + 3, 8.8, '#52639a'));
+    // the office floor: pale wall, wide windows, columns
+    wb(35, 5, 69, 9.6, '#e3e7ef'); wb(58, 9.6, 69, 10, '#e3e7ef');
+    along(36.5, 66, 7.5, x => { wb(x, 6.4, x + 5, 9.0, '#bfe6fb'); wb(x, 8.9, x + 5, 9.0, '#e9f6ff'); rib(x + 2.5, 6.4, 9.0, '#e3e7ef'); });
+    along(35, 69, 7.5, x => wb(x + 0.1, 5, x + 0.7, 9.6, '#cfd4de'));
+  } },
+  airport: { back(G) {
+    // check-in hall
+    wb(-9, 0, 30, 4.9, '#dfe4ec'); along(-7.5, 30, 2.5, x => rib(x, 0.4, 4.9, '#cbd1dc')); wb(-9, 0, 30, 0.35, '#b9c0cc');
+    mass(0.5, 2.9, 7.5, 4.4, '#23202b', { lip: '#4a4f5c', foot: 0, side: 0 });
+    for (let i = 0; i < 4; i++) { const y = 4.05 - i * 0.28; wb(0.9, y, 3.6, y + 0.12, '#ffd23a'); wb(4, y, 5.6, y + 0.12, '#c9cdd8'); wb(6.1, y, 7.1, y + 0.12, i === 2 ? '#e8463c' : '#43f07a'); }
+    // concourse, two storeys of it behind the escalators
+    wb(30, 0, 72.25, 10, '#d5dbe5'); wb(60, 10, 72.25, 10.5, '#d5dbe5'); wb(30, 0, 42.25, 0.35, '#b9c0cc');
+    along(31, 71, 5.2, x => { wb(x, 6.5, x + 4, 9.4, '#bfe6fb'); wb(x, 9.3, x + 4, 9.4, '#e9f6ff'); });
+    along(30, 72, 5.2, x => wb(x + 0.05, 0, x + 0.55, 10, '#c3cad6'));
+    mass(22.5, 2.9, 28, 4.2, '#3f6fd0', { lip: '#7fa2ee', foot: 0, side: 0 }); txt('GATES >', px(25.25), py(3.55) + 1, 7, CREAM, { outline: false });
+    // the gate sign out on the roof
+    wb(120.9, 11.4, 121.1, 13.0, '#6b7180'); wb(123.5, 11.4, 123.7, 13.0, '#6b7180');
+    mass(120.3, 13.0, 124.3, 14.2, '#2b3350', { lip: '#4a5680', foot: 0, side: 0 }); txt('GATE C4', px(122.3), py(13.6) + 1, 7, '#ffd23a', { outline: false });
+  } },
+  plane: { back(G) {
+    // white belly, wing and engine under the floor line
+    shape([[26, -2.6], [48, -2.6], [52, -3.3], [30, -3.3]], '#d5d9e2', null);
+    rbox(33, -5.2, 39.5, -3.5, 0.8, '#e9ebf1', null); wb(33.1, -4.9, 33.9, -3.8, '#3a3d48'); wb(34.2, -3.75, 39, -3.62, '#ffffff');
+    rbox(-12, -3.6, 70, -2.2, [0, 0, 0.3, 1.3], '#e9ebf1', null); rbox(76, -3.6, 90, -2.2, [0, 0, 1.3, 0.3], '#e9ebf1', null);
+    // the hold: dark ribbed wall
+    wb(-8, 0, 32.8, 4.6, '#565b6b'); along(-6, 32, 3, x => rib(x, 0, 4.6, '#454a58')); wb(-8, 2.2, 24.5, 2.3, '#454a58');
+    wb(24.5, 0, 32.8, 10.2, '#aab0bd'); wb(24.5, 4.6, 24.7, 10.2, '#8d93a0');
+    // upper cabins: pale wall, round-cornered windows, bins overhead
+    wb(-8, 5.6, 24.5, 10.2, '#e3e7ee'); wb(32.8, 5.6, 70, 10.2, '#e9ecf2');
+    const cabin = (a, b) => { along(a + 1.5, b - 1.5, 3, x => rbox(x, 7.2, x + 1.1, 8.6, 0.4, '#9fdcff', '#aab0bd')); wb(a, 9.4, b, 10.2, '#cfd4de'); along(a + 2.2, b, 2.2, x => rib(x, 9.4, 10.2, '#aab0bd')); seam(a, b, 9.4, '#aab0bd'); };
+    cabin(-8, 24.5); cabin(32.8, 70);
+    // the blown-out side: a ragged edge, open sky from here to the cockpit wall
+    ctx.fillStyle = '#e9ecf2'; ctx.beginPath(); ctx.moveTo(px(70), py(5.6));
+    for (let i = 0; i <= 8; i++) ctx.lineTo(px(70 + (i % 2 ? 0.75 : 0.15) + hsh(i * 5.3) * 0.3), py(5.6 + i * 0.575));
+    ctx.lineTo(px(70), py(10.2)); ctx.fill();
+  } },
+  meadow: { back(G) {
+    const R = '#c2584c', RD = '#9b4138';
+    // mission control, way back from the pad
+    wb(44, 0, 53, 3.4, '#e3dccb'); wb(44, 3.1, 53, 3.4, '#f1ecdf'); along(45, 52, 1.9, x => wb(x, 1.5, x + 1.2, 2.4, '#9fd0e6')); wb(52.3, 0, 53, 3.4, '#cfc7b3');
+    // red steel under the gantry floors: legs, then cross-braces between them
+    const legs = (L, base = 0) => {
+      for (const [x, h] of L) wb(x, base, x + 0.3, h, R);
+      for (let i = 0; i + 1 < L.length; i++) { const [a, ha] = L[i], [b, hb] = L[i + 1], top = Math.min(ha, hb) - 0.3; for (let y = base; y + 1.9 <= top + 0.01; y += 2) { seg(a + 0.15, y + 0.1, b + 0.15, y + 1.9, RD, 2); seg(a + 0.15, y + 1.9, b + 0.15, y + 0.1, RD, 2); } }
+    };
+    legs([[16.2, 2], [18.7, 4], [21.2, 6], [23.7, 8], [26.6, 8], [29.5, 8]]);
+    legs([[55.2, 7.7], [58.2, 9.7], [61.2, 11.7], [66.5, 11.7]]);
+    // the launch island the rocket stands on (the water is still open between it and the gantry)
+    mass(78.8, -3, 92, 0.5, '#9a9ca6', { lip: '#d3d5dc', top: 3 }); stripes(78.8, 0.02, 92, 0.3, '#ffd23a', '#23202b', 0.6);
+  } },
+  moon: { back(G) {
+    const A = '#8c8799', D = '#75707f';
+    wb(3.42, 0, 3.58, 3.2, '#c9c2b6'); wb(3.58, 2.3, 5.0, 3.2, ORANGE); wb(3.58, 2.3, 5.0, 2.5, '#d96f1c');
+    wb(91, 0.3, 97, 1.7, D); dome(88, 0, 3.2, A); dome(100, 0, 4.2, A);
+    for (const [x, y] of [[86.6, 1.0], [88.6, 1.0], [98.2, 1.2], [100.2, 1.2], [102.2, 1.2]]) wb(x, y, x + 0.8, y + 0.6, '#ffe9a8');
+    wb(87.2, 0, 88.5, 0.8, D); wb(99.3, 0, 100.8, 0.9, D);
+    wb(110.4, 0, 110.6, 6, D); wb(109.6, 0, 111.4, 0.3, D); shape([[109.1, 6.9], [110.5, 5.6], [111.9, 6.9], [110.5, 6.3]], A, null);
+    for (const x of [143, 145.6]) { wb(x + 0.9, 0, x + 1.1, 1.6, D); shape([[x, 1.3], [x + 2, 2.5], [x + 2, 2.8], [x, 1.6]], '#4a5f9a', null); }
+    for (const x of [68, 112, 134]) lamp(x, 0, 3.6, D);
+  } },
+};
+// ---- under the level: only the freight line needs anything (the track rushing by under the train) ----
 function drawUnder(G) {
-  const M = G.M, lo = CAMY - HH / PPM - 1;
-  if (M.theme === 'rail') {   // the track rushing by under the train
-    wb(CAMX - HW / PPM - 1, lo, CAMX + HW / PPM + 1, 0.55, '#8a6a4a'); wb(CAMX - HW / PPM - 1, 0.55, CAMX + HW / PPM + 1, 0.7, '#9a9aa6');
-    const off = (G.t * 34) % 1.2; for (let x = Math.floor(CAMX - HW / PPM) - 2 + off; x < CAMX + HW / PPM + 2; x += 1.2) wb(x, 0.1, x + 0.35, 0.55, '#5a3a22');
-  } else if (M.theme === 'spire' || M.theme === 'alley' || M.theme === 'moon' || M.theme === 'airport') {
-    const g = ctx.createLinearGradient(0, AY(-0.5), 0, AY(-4)); g.addColorStop(0, 'rgba(10,8,20,0)'); g.addColorStop(1, M.theme === 'moon' ? '#05040c' : '#0e0c18');
-    ctx.fillStyle = g; ctx.fillRect(-HW - 2, AY(-0.5), HW * 2 + 4, HH * 2 + 4 - (AY(-0.5) + HH));
-  }
+  if (G.M.theme !== 'rail') return;
+  const L = CAMX - HW / PPM - 1, R = CAMX + HW / PPM + 1, lo = CAMY - HH / PPM - 1;
+  wb(L, lo, R, -0.6, '#e2bf85'); seam(L, R, -0.6, '#f0d6a4');
+  wb(L, -0.6, R, -0.16, '#8f8272'); seam(L, R, -0.6, '#a89a88');
+  const off = (G.t * 9) % 1.3;   // slow enough that the sleepers slide instead of strobing
+  for (let x = Math.floor(L / 1.3) * 1.3 - off; x < R; x += 1.3) wb(x, -0.4, x + 0.32, -0.16, '#5e4a3a');
+  wb(L, -0.16, R, 0, '#c3c8d2'); wb(L, -0.16, R, -0.1, '#7c8291');
 }
 function drawWater(G) {
   const M = G.M; if (M.water == null) return;
@@ -2416,91 +2613,120 @@ function drawWater(G) {
 }
 
 // ---- the getaway ride (what you're racing to) and the goal marker
+// a closed outline from world-space points: [x, y] is a corner, [cx, cy, x, y] bends through a control point
+function trace(pts) {
+  ctx.beginPath();
+  pts.forEach((p, i) => { if (!i) ctx.moveTo(px(p[0]), py(p[1])); else if (p.length === 2) ctx.lineTo(px(p[0]), py(p[1])); else ctx.quadraticCurveTo(px(p[0]), py(p[1]), px(p[2]), py(p[3])); });
+  ctx.closePath();
+}
+// a curved hull: flat fill, whatever paint() draws cut to its outline, then one ink line round it
+function shell(pts, col, paint) {
+  trace(pts); ctx.fillStyle = col; ctx.fill();
+  if (paint) { ctx.save(); ctx.clip(); paint(); ctx.restore(); trace(pts); }
+  ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.lineJoin = 'round'; ctx.stroke();
+}
+const CUT = '#2b2533';   // the dark inside of a vehicle you can see into
+const puffs = (x, y, n, t, col) => { for (let i = 0; i < n; i++) { const k = (t * 1.4 + i / n) % 1; ctx.fillStyle = `rgba(${col},${(0.6 * (1 - k)).toFixed(2)})`; ctx.beginPath(); ctx.arc(px(x - k * 3.2), py(y + k * 0.9), 2 + k * 6, 0, 7); ctx.fill(); } };
+const RIDE = {
+  van(G, c) {   // a white box truck, the roller door up
+    const x = c.x;
+    contact(x + 0.3, x + 10.5, 0); if (c.away) puffs(x - 0.3, 0.6, 5, c.t, '205,205,215');
+    wb(x + 0.2, 0.5, x + 10.3, 0.92, '#2a2731');
+    rbox(x + 7.5, 0.9, x + 10.5, 3.25, [0.5, 0.9, 0.15, 0], '#e9ebf1'); glass(x + 8.5, 1.95, x + 10.25, 2.95, [0.15, 0.65, 0.1, 0.1]);
+    wb(x + 7.55, 1.3, x + 10.45, 1.6, '#e8463c'); rib(x + 8.3, 1.0, 3.05, '#b9bec9'); wb(x + 8.0, 1.75, x + 8.25, 1.85, '#6b7180');
+    wb(x + 10.3, 1.0, x + 10.5, 1.25, '#ffd23a'); rbox(x + 10.15, 0.55, x + 10.75, 0.9, 0.08, '#6b7180');
+    mass(x, 0.9, x + 7.5, 4.4, '#f4f5f8', { lip: '#ffffff', top: 3 });
+    wb(x + 3.6, 1.3, x + 7.45, 1.6, '#e8463c'); txt('MOVERS', px(x + 5.55), py(2.9), 7, '#e8463c', { outline: false });
+    wb(x, 1.02, x + 3.5, 4.22, CUT); wb(x, 1.02, x + 3.5, 1.14, '#5d6373'); rib(x + 3.5, 1.02, 4.22, INK);
+    wb(x, 3.85, x + 3.5, 4.22, '#b9bec9'); seam(x, x + 3.5, 3.97, '#8d93a0'); seam(x, x + 3.5, 4.09, '#8d93a0');   // the rolled-up door
+    c.crew(x + 1.85, 2.3);
+    tyre(x + 2.0, 0.55, 0.55); tyre(x + 8.9, 0.55, 0.55);
+  },
+  train(G, c) {   // a subway car waiting at the platform, the end of it open
+    const x = c.x, fl = c.g.y0, L = 17;
+    for (const b of [x + 2.6, x + L - 2.6]) { wb(b - 1.5, fl - 0.75, b + 1.5, fl - 0.28, '#2a2731'); for (const w of [b - 0.8, b + 0.8]) { disc(w, fl - 0.5, 0.36, '#5d6373'); disc(w, fl - 0.5, 0.14, '#23202b', null); } }
+    wb(x + 0.3, fl - 0.3, x + L - 0.3, fl, '#3a3d48');
+    rbox(x, fl, x + L, fl + 3.4, [0.25, 0.9, 0.1, 0.1], '#d5d9e2');
+    wb(x + 0.3, fl + 3.2, x + L - 1.1, fl + 3.3, '#ffffff'); wb(x + 0.06, fl + 0.5, x + L - 0.06, fl + 0.9, ORANGE);
+    for (let w = x + 4.4; w + 2.2 < x + L - 1; w += 3.1) glass(w, fl + 1.5, w + 2.2, fl + 2.7, 0.15);
+    rbox(x + L - 1.0, fl + 1.7, x + L - 0.15, fl + 2.7, [0.1, 0.5, 0.1, 0.1], '#7fd7ff'); disc(x + L - 0.3, fl + 1.15, 0.16, '#fff6e0');
+    wb(x, fl + 0.12, x + 3.6, fl + 3.1, '#343848'); wb(x, fl + 0.12, x + 3.6, fl + 0.24, '#5d6373'); rib(x + 3.6, fl + 0.12, fl + 3.1, INK);
+    wb(x + 2.5, fl + 0.24, x + 3.55, fl + 0.85, '#3f6fd0'); wb(x + 3.3, fl + 0.85, x + 3.55, fl + 1.6, '#3f6fd0'); wb(x + 2.5, fl + 0.78, x + 3.3, fl + 0.85, '#7fa2ee');
+    wb(x + 1.0, fl + 0.24, x + 1.1, fl + 3.1, '#ffd23a');
+    c.crew(x + 1.85, fl + 1.3);
+  },
+  heli(G, c) { chopper(c, c.g.x0, c.g.y0 + (c.away ? 0 : 0.12 * Math.sin(c.t * 2)), '#4fae5a', '#2f7a3c', '#8ad98f'); },   // hovering just ahead of the engine
+  chopper(G, c) { chopper(c, c.g.x0, c.g.y0 + 0.8, '#3f7fe0', '#2a57a8', '#8fb6f5'); },   // sat on the roof, skids down
+  jet(G, c) {   // a little business jet parked on the gate roof, airstair down
+    const y = c.g.y0, W = '#f1f2f6', D = '#c9cdd8', t = c.t;
+    contact(132.6, 139.6, y);
+    if (c.away) for (let i = 0; i < 4; i++) { const k = (t * 2 + i / 4) % 1; ctx.fillStyle = `rgba(255,255,255,${(0.5 * (1 - k)).toFixed(2)})`; ctx.fillRect(px(127.4 - k * 5), py(y + 3.3 - i * 0.12), Math.round(18 + k * 30), 1); }
+    for (const [gx, r] of [[133.2, 0.32], [139, 0.27]]) { wb(gx - 0.08, y + r, gx + 0.08, y + 0.75, '#3a3d48'); tyre(gx, y + r, r); }
+    shape([[125.9, y + 3.0], [124.5, y + 6.0], [126.0, y + 6.0], [128.3, y + 3.3]], W); rbox(123.9, y + 5.9, 126.7, y + 6.2, 0.14, '#3f6fd0');   // T-tail
+    shell([[125.4, y + 2.5], [127.2, y + 3.3], [137.6, y + 3.3], [140.2, y + 3.2, 141.3, y + 1.5], [140.9, y + 0.65, 138.6, y + 0.6], [127.6, y + 0.6]], W, () => {
+      wb(124, y + 0.5, 142, y + 0.85, D); wb(124, y + 1.5, 142, y + 1.65, '#3f6fd0'); wb(124, y + 1.32, 142, y + 1.4, '#e8463c');
+    });
+    for (let x = 131.5; x < 137.4; x += 1.25) rbox(x, y + 2.0, x + 0.7, y + 2.7, 0.3, '#7fd7ff');
+    shape([[138.3, y + 2.15], [140.55, y + 2.15], [139.4, y + 3.02], [138.3, y + 3.02]], '#7fd7ff'); seg(139.3, y + 2.15, 139.3, y + 3.02, INK, 1);
+    rbox(127.7, y + 2.85, 130.7, y + 3.85, 0.45, D); rbox(130.3, y + 2.95, 130.7, y + 3.75, 0.15, '#4a4f5c'); wb(128.2, y + 3.62, 130.2, y + 3.7, '#ffffff');   // engine up on its pylon
+    rbox(127.7, y + 0.9, 130.6, y + 2.7, 0.3, CUT); wb(127.8, y + 0.9, 130.5, y + 1.02, '#5d6373');   // open cabin
+    c.crew(129.15, y + 1.85);
+    shape([[126.0, y], [127.7, y + 0.9], [127.7, y + 0.62], [126.5, y]], '#8d93a0'); for (let i = 1; i < 4; i++) seam(126.0 + i * 0.42, 126.5 + i * 0.42, y + i * 0.22, INK);   // airstair
+    shape([[130.9, y + 1.1], [136.4, y + 1.1], [134.9, y + 0.7], [130.0, y + 0.7]], D);   // wing
+  },
+  chute(G, c) { if (!c.away) txt('JUMP!', px((c.g.x0 + c.g.x1) / 2), py(8.7 + Math.sin(c.t * 5) * 0.15), 9, '#ffd23a'); },   // no vehicle: the way out is the hole
+  rocket(G, c) {   // the map's hull solid is the rocket's body
+    const x0 = 79, x1 = 85.4, cx = 82.2, R = '#e8463c', W = '#f1f2f6';
+    if (c.away) flame(cx, 0.7, 2.6, c.t);
+    shape([[x0 + 0.1, 6.2], [x0 - 1.7, 1.5], [x0 - 1.7, 0.5], [x0 + 0.1, 1.7]], R); shape([[x1 - 0.1, 6.2], [x1 + 1.7, 1.5], [x1 + 1.7, 0.5], [x1 - 0.1, 1.7]], R);
+    for (const n of [80.5, 82.2, 83.9]) shape([[n - 0.5, 1.7], [n + 0.5, 1.7], [n + 0.8, 0.6], [n - 0.8, 0.6]], '#4a4f5c');
+    shell([[x0, 1.6], [x0, 19], [x0 + 0.1, 23.4, cx, 25.6], [x1 - 0.1, 23.4, x1, 19], [x1, 1.6]], W, () => {
+      wb(x1 - 1.2, 1.6, x1, 19, '#d3d7e0'); wb(x0 + 0.5, 1.6, x0 + 0.85, 19, '#ffffff');
+      wb(x0, 19, x1, 26, R); wb(x1 - 1.2, 19, x1, 26, '#bf362e'); wb(x0, 18.3, x1, 19, ORANGE);
+      stripes(x0, 9.4, x1, 10.0, '#23202b', W, 0.8); stripes(x0, 10.0, x1, 10.6, W, '#23202b', 0.8);
+      wb(x0, 3.4, x1, 4.2, ORANGE); wb(x0, 1.6, x1, 2.0, '#8d93a0');
+    });
+    seam(x0, x1, 19, INK); seam(x0, x1, 7.0, '#b9bec9'); seam(x0, x1, 13.2, '#b9bec9');
+    glass(80.5, 15.6, 83.9, 17.4, 0.6); c.crew(cx, 16.4);
+    rbox(x0 - 0.05, 12.0, x0 + 1.5, 14.5, [0.1, 0.5, 0.5, 0.1], CUT); wb(x0, 12.0, x0 + 1.5, 12.12, '#5d6373');   // the hatch, at the end of the access arm
+  },
+  pod(G, c) {   // a lunar lander on its legs
+    const cx = 139.2, A = '#c9cdd8', F = '#d9a93a';
+    if (c.away) flame(cx, 0.35, 1.3, c.t);
+    for (const s of [-1, 1]) { seg(cx + s * 1.7, 2.0, cx + s * 2.75, 0.22, '#8d93a0', 2); seg(cx + s * 1.9, 0.95, cx + s * 2.4, 0.8, '#8d93a0', 1); rbox(cx + s * 2.75 - 0.5, 0.02, cx + s * 2.75 + 0.5, 0.24, 0.1, A); }
+    shape([[cx - 0.5, 0.95], [cx + 0.5, 0.95], [cx + 0.8, 0.3], [cx - 0.8, 0.3]], '#4a4f5c');
+    mass(cx - 2.0, 0.9, cx + 2.0, 2.3, F, { lip: '#ffe08a' }); for (const x of [cx - 1.0, cx, cx + 1.0]) rib(x, 0.95, 2.2, '#9c7524'); seam(cx - 1.9, cx + 1.9, 1.6, '#9c7524');
+    for (let ry = 0.5; ry < 2.3; ry += 0.36) seam(cx - 2.55, cx - 2.0, ry, A); rib(cx - 2.55, 0.3, 2.3, A);   // the ladder
+    rbox(cx - 1.5, 2.3, cx + 1.5, 4.9, [0.8, 0.8, 0.1, 0.1], A); wb(cx - 1.42, 2.36, cx + 1.42, 2.62, ORANGE); wb(cx + 1.2, 2.7, cx + 1.44, 4.3, '#aab0bd');
+    glass(cx - 1.0, 3.1, cx + 1.0, 4.3, 0.3); c.crew(cx, 3.65);
+    rib(cx + 0.9, 4.9, 5.9, '#8d93a0'); shape([[cx + 0.2, 6.4], [cx + 0.9, 5.8], [cx + 1.6, 6.4], [cx + 0.9, 6.1]], '#e9ebf1'); rib(cx - 1.0, 4.9, 5.6, '#8d93a0'); disc(cx - 1.0, 5.65, 0.1, '#ff4a2a', null);
+  },
+};
+// one helicopter for both chopper maps: gx is the back of the cabin, fl its floor
+function chopper(c, gx, fl, col, dk, lip) {
+  const X = x => gx + x, Y = y => fl + y, t = c.t;
+  shape([[X(-0.4), Y(3.1)], [X(-6.4), Y(3.45)], [X(-6.4), Y(3.05)], [X(-0.4), Y(2.2)]], col);   // tail boom, well over the heads of anyone on the roof
+  shape([[X(-6.4), Y(3.05)], [X(-7.0), Y(4.4)], [X(-6.3), Y(4.4)], [X(-5.6), Y(3.35)]], dk);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(px(X(-6.6)), py(Y(3.3)), 0.75 * PPM, 0, 7); ctx.fill(); disc(X(-6.6), Y(3.3), 0.14, '#3a3d48');
+  seg(X(1.0), Y(-0.1), X(0.8), Y(-0.7), '#3a3d48', 2); seg(X(4.0), Y(-0.1), X(4.2), Y(-0.7), '#3a3d48', 2); rbox(X(0.2), Y(-0.8), X(5.0), Y(-0.64), 0.08, '#3a3d48');
+  shell([[X(-0.5), Y(0.1)], [X(4.6), Y(-0.25)], [X(6.4), Y(-0.3), X(6.6), Y(0.9)], [X(6.7), Y(2.6), X(4.6), Y(3.0)], [X(0.2), Y(3.2)], [X(-0.6), Y(2.4)]], col, () => {
+    wb(X(-1), Y(-0.4), X(7), Y(0.25), dk); wb(X(-1), Y(2.9), X(5), Y(3.3), lip); wb(X(-1), Y(0.55), X(7), Y(0.75), CREAM);
+  });
+  shell([[X(3.9), Y(1.2)], [X(6.35), Y(1.2)], [X(6.5), Y(2.5), X(4.7), Y(2.85)], [X(3.9), Y(2.85)]], '#7fd7ff', () => { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(px(X(4.1)), py(Y(2.7)), 14, 1); ctx.fillRect(px(X(4.1)), py(Y(2.7)), 1, 8); });
+  rbox(X(0.15), Y(0.15), X(3.4), Y(2.6), 0.2, CUT); wb(X(0.22), Y(0.15), X(3.34), Y(0.28), '#5d6373');   // the open door
+  c.crew(X(1.75), Y(1.4));
+  wb(X(2.5), Y(3.05), X(2.9), Y(3.72), '#3a3d48'); rbox(X(2.3), Y(3.68), X(3.1), Y(3.9), 0.08, '#3a3d48');
+  const r = 4.7 * Math.abs(Math.cos(t * 10));   // the blade sweeping round, seen edge-on: it shortens and lengthens, it never blinks
+  ctx.fillStyle = 'rgba(20,16,25,0.22)'; ctx.fillRect(px(X(-2.0)), py(Y(3.86)), Math.round(9.4 * PPM), 2);   // the whole disc, faint, so the rotor never shrinks to a stub
+  wb(X(2.7) - r, Y(3.76), X(2.7) + r, Y(3.86), '#2a2731');
+}
 function drawRide(G, front) {
-  const M = G.M, g = M.goal, fx = G.rideFx(), t = G.t, gx = (g.x0 + g.x1) / 2, away = G.state === 'away' || G.state === 'over';
-  const B = (G.boarded || []).filter(p => !p.chute), inside = B.length > 0, W = B[0];
-  ctx.save(); ctx.translate(fx.dx * PPM, -fx.dy * PPM);
-  const face = () => { if (inside) drawCrew(B, AX(gx), AY(g.y0 + 1.2)); };
-  switch (M.ride) {
-    case 'van': {
-      if (front) break;
-      const x0 = M.rideX, y = g.y0;
-      wb(x0, y + 0.35, x0 + 6.4, y + 2.9, '#f4f1ea'); wb(x0 + 0.2, y + 0.45, g.x1, y + 2.6, '#2a2834'); face();
-      wb(x0 + 4.6, y + 1.5, x0 + 6.1, y + 2.6, '#9fd0f0'); wb(x0, y + 1.2, x0 + 6.4, y + 1.4, '#e8423a'); outlineBox(x0, y + 0.35, x0 + 6.4, y + 2.9);
-      if (!away) { wb(x0 - 0.9, y + 0.5, x0 - 0.1, y + 2.7, '#e4e0d8'); outlineBox(x0 - 0.9, y + 0.5, x0 - 0.1, y + 2.7); } else wb(x0, y + 0.45, x0 + 0.25, y + 2.6, '#e4e0d8');
-      wheel(x0 + 1.1, y + 0.35, 0.38); wheel(x0 + 5.2, y + 0.35, 0.38);
-      if (away) for (let i = 0; i < 2; i++) rr(AX(x0 - 0.3 - i * 0.5 - (t * 6 % 1)), AY(y + 0.5 + i * 0.2), 4, 4, 'rgba(180,180,190,0.6)');
-      break;
-    }
-    case 'train': {
-      if (front) break;
-      const x0 = M.rideX, y = g.y0;
-      for (let c = 0; c < 3; c++) {
-        const a = x0 + c * 12.5; wb(a, y + 0.6, a + 12, y + 3.6, c === 0 ? '#2f6bd8' : '#9a4a2e'); outlineBox(a, y + 0.6, a + 12, y + 3.6);
-        for (let k = 0; k < 4; k++) wheel(a + 1 + k * (k < 2 ? 0.9 : 1) + (k >= 2 ? 8 : 0), y + 0.3, 0.3);
-      }
-      wb(g.x0, y + 0.7, g.x1, y + 3.3, '#1c1a24'); face(); txt('FREIGHT', AX(x0 + 2.5), AY(y + 2.4), 6, '#fff6e0'); wb(g.x0 - 0.1, y - 0.1, g.x1 + 0.1, y + 0.08, '#9a9aa6');
-      if (!away) wb(g.x1, y + 0.7, g.x1 + 3.6, y + 3.3, '#7a3a24');
-      break;
-    }
-    case 'heli': case 'chopper': {
-      const cx = M.ride === 'heli' ? M.rideX : gx + 0.5, cy = M.ride === 'heli' ? M.rideY + 0.6 : g.y0 + 0.4;
-      if (!front) {
-        if (M.ride === 'heli') { // the rope ladder you grab
-          const sw = Math.sin(t * 2) * 0.15; for (let y = cy; y > g.y0 - 0.2; y -= 0.45) wb(cx - 0.6 + sw * (cy - y), y - 0.05, cx + 0.6 + sw * (cy - y), y, '#c8a060');
-          wb(cx - 0.62, g.y0, cx - 0.55, cy, '#8a6a3a'); wb(cx + 0.55, g.y0, cx + 0.62, cy, '#8a6a3a');
-        }
-        break;
-      }
-      ctx.fillStyle = M.ride === 'heli' ? '#3a5a3a' : '#e8423a'; ctx.beginPath(); ctx.roundRect(AX(cx - 2), AY(cy + 2.2), 4 * PPM, 2.2 * PPM, 12); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke();
-      wb(cx + 1.8, cy + 1.3, cx + 5.2, cy + 1.75, M.ride === 'heli' ? '#3a5a3a' : '#e8423a'); wb(cx + 4.9, cy + 1.1, cx + 5.3, cy + 2.4, '#2a2834');
-      ctx.fillStyle = '#9fd0f0'; ctx.beginPath(); ctx.roundRect(AX(cx - 1.8), AY(cy + 2), 1.6 * PPM, 1.1 * PPM, [10, 2, 2, 2]); ctx.fill();
-      if (inside) drawCrew(B, AX(cx - 0.3), AY(cy + 0.8));
-      wb(cx - 0.1, cy + 2.2, cx + 0.1, cy + 2.5, '#2a2834'); const r = Math.abs(Math.sin(t * 30)) * 3.2 + 0.4; wb(cx - r, cy + 2.5, cx + r, cy + 2.62, '#2a2834');
-      if (M.ride === 'chopper') { wb(cx - 1.6, cy - 0.05, cx + 1.6, cy + 0.08, '#2a2834'); wb(cx - 1.2, cy, cx - 1.1, cy + 0.35, '#2a2834'); wb(cx + 1.1, cy, cx + 1.2, cy + 0.35, '#2a2834'); }
-      break;
-    }
-    case 'jet': {
-      if (front) break;
-      const x0 = g.x0, y = g.y0;
-      ctx.fillStyle = '#f4f6fa'; ctx.beginPath(); ctx.roundRect(AX(x0 - 1.5), AY(y + 3.4), 26 * PPM, 3.6 * PPM, [40, 6, 6, 40]); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke();
-      wb(x0 - 1, y + 0.6, x0 + 24, y + 0.9, '#2f6bd8'); for (let x = x0 + 3; x < x0 + 22; x += 1.3) wb(x, y + 1.8, x + 0.5, y + 2.4, '#5a7aa8');
-      wb(g.x0, g.y0, g.x1, g.y1 - 0.4, '#2a2834'); face(); txt('FLOPPY AIR', AX(x0 + 12), AY(y + 3), 7, '#2f6bd8', { outline: false });
-      ctx.fillStyle = '#c9ced6'; ctx.beginPath(); ctx.moveTo(AX(x0 + 9), AY(y + 0.8)); ctx.lineTo(AX(x0 + 15), AY(y + 0.8)); ctx.lineTo(AX(x0 + 19), AY(y - 1.4)); ctx.lineTo(AX(x0 + 16), AY(y - 1.4)); ctx.fill();
-      wheel(x0 + 2, y - 2.4, 0.3); wb(x0 + 1.95, y - 2.3, x0 + 2.05, y - 0.2, '#5a5862'); wheel(x0 + 14, y - 2.4, 0.3); wb(x0 + 13.95, y - 2.3, x0 + 14.05, y - 0.2, '#5a5862');
-      break;
-    }
-    case 'chute': {   // the open cargo door: a big bright hole and a JUMP sign
-      if (front) break;
-      if (!away) { const k = 0.5 + 0.5 * Math.sin(t * 6); txt('JUMP!', AX(g.x0 + 1.5), AY(2.4) + k * 2, 9, '#ffd23a'); txt('>>>', AX(g.x0 + 1.5), AY(1.2), 7, '#fff6e0'); }
-      break;
-    }
-    case 'rocket': {
-      if (front) break;
-      const x0 = 75, x1 = 81, cx = 78;
-      // the launch tower behind the walkways
-      ctx.restore(); ctx.save();
-      for (let y = 0; y < 13; y += 1.2) { wb(65.8, y, 66, y + 1.2, '#8a2a1a'); wb(74.6, y, 74.8, y + 1.2, '#8a2a1a'); ctx.strokeStyle = '#8a2a1a'; ctx.beginPath(); ctx.moveTo(AX(66), AY(y)); ctx.lineTo(AX(74.6), AY(y + 1.2)); ctx.stroke(); }
-      ctx.translate(fx.dx * PPM, -fx.dy * PPM);
-      wb(x0, 0.5, x1, 19, '#f4f6fa'); wb(x0, 4, x1, 5, '#e8423a'); wb(x0, 14, x1, 14.6, '#2f6bd8'); txt('FLOPPY', AX(cx), AY(10.8), 7, '#2a2834', { outline: false });
-      wb(x0, 18.2, x1, 19, '#c9ccd6'); wb(x0 + 0.3, 2.2, x1 - 0.3, 2.5, '#c9ccd6'); wb(x0 + 0.3, 7.6, x1 - 0.3, 7.9, '#c9ccd6');   // (hull seams)
-      for (const py of [8.9, 16.6]) { ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(AX(cx), AY(py), 0.75 * PPM, 0, 7); ctx.fill(); ctx.fillStyle = '#9fd8ff'; ctx.beginPath(); ctx.arc(AX(cx), AY(py), 0.55 * PPM, 0, 7); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.fillRect(AX(cx - 0.35), AY(py + 0.35), 3, 3); }   // (portholes)
-      ctx.fillStyle = '#e8423a'; ctx.beginPath(); ctx.moveTo(AX(x0), AY(19)); ctx.lineTo(AX(cx), AY(23)); ctx.lineTo(AX(x1), AY(19)); ctx.fill(); ctx.strokeStyle = INK; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(AX(x0), AY(4)); ctx.lineTo(AX(x0 - 1.5), AY(0.3)); ctx.lineTo(AX(x0), AY(1.4)); ctx.fill(); ctx.beginPath(); ctx.moveTo(AX(x1), AY(4)); ctx.lineTo(AX(x1 + 1.5), AY(0.3)); ctx.lineTo(AX(x1), AY(1.4)); ctx.fill();
-      outlineBox(x0, 0.5, x1, 19); wb(x0, g.y0, x0 + 0.8, g.y1, '#2a2834'); if (inside) drawCrew(B, AX(x0 + 0.4), AY(g.y0 + 1.2));
-      if (away) flame(cx, 0.5, 1.6, t);
-      break;
-    }
-    case 'pod': {
-      if (front) break;
-      const x0 = g.x0 - 0.6, x1 = g.x1 + 1.2, y = g.y0;
-      ctx.fillStyle = '#dedae2'; ctx.beginPath(); ctx.roundRect(AX(x0), AY(y + 4.2), (x1 - x0) * PPM, 4 * PPM, [30, 30, 4, 4]); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.stroke();
-      wb(g.x0 + 0.2, y + 0.4, g.x1 - 0.2, y + 3.0, '#2a2834'); face(); wb(x0, y + 0.2, x1, y + 0.45, '#e8423a'); txt('POD', AX(x1 - 0.7), AY(y + 3.4), 5, '#e8423a', { outline: false });
-      if (away) flame((x0 + x1) / 2, y + 0.2, 1.4, t);
-      break;
-    }
-  }
-  ctx.restore();
+  if (front) return;   // racers hop in front of the ride, so it is all one layer
+  const M = G.M, fx = G.rideFx(), B = (G.boarded || []).filter(p => !p.chute);
+  SHX = Math.round(fx.dx * PPM); SHY = Math.round(-fx.dy * PPM);
+  ctx.save(); ctx.translate(SHX, SHY);
+  RIDE[M.ride]?.(G, { g: M.goal, x: M.rideX, t: G.t, away: G.state === 'away' || G.state === 'over', crew: (x, y) => { if (B.length) drawCrew(B, AX(x), AY(y)); } });
+  ctx.restore(); SHX = SHY = 0;
 }
 function flame(x, y, w, t) { for (let i = 0; i < 6; i++) { const k = Math.random(); wb(x - w * (0.5 - i * 0.08), y - 0.2 - k * 2.5 * (1 - i * 0.12), x + w * (0.5 - i * 0.08), y, ['#fff6e0', '#ffd23a', '#ff8a2a', '#ff4a2a', '#ff8a2a', '#ffd23a'][i]); } }
 function drawCrew(B, x, y) { B.forEach((p, i) => drawMiniDude(p, x + (i - (B.length - 1) / 2) * 7, y - (i % 2) * 2)); }
@@ -2568,7 +2794,7 @@ function drawDude(G, p) {
     limb(sp.arm, AX(sh.x), AY(sh.y), AX(hd.x), AY(hd.y));
     const spr = itemSprite(p.item), held = !['bomb', 'shield', 'medkit', 'swap'].includes(p.item);
     drawSpr(spr, AX(hd.x), AY(hd.y), held ? -g : 0, false, held && Math.cos(g) < 0);
-    if (p.muzzle > 0) { p.muzzle -= G.dt; const m = { x: hd.x + Math.cos(g) * 0.75, y: hd.y + Math.sin(g) * 0.75 }; rr(AX(m.x) - 3, AY(m.y) - 3, 6, 6, '#fff6c0'); rr(AX(m.x) - 2, AY(m.y) - 2, 4, 4, '#ffd23a'); }
+    if (p.muzzle > 0) { const m = { x: hd.x + Math.cos(g) * 0.75, y: hd.y + Math.sin(g) * 0.75 }; rr(AX(m.x) - 3, AY(m.y) - 3, 6, 6, '#fff6c0'); rr(AX(m.x) - 2, AY(m.y) - 2, 4, 4, '#ffd23a'); }
   } else {
     const fw = -Math.PI / 2 - p.av * 0.1 + fl * Math.sin(t * 17 + 1) * 1.2 + (air ? -d * 0.8 + Math.sin(t * 8 + 2) * 0.3 : 0) + (p.holdDir ? p.holdDir * 0.5 : 0) + (p.chute ? -Math.PI * 0.95 : 0);
     const fh = { x: sh.x + Math.cos(fw) * BODY.armLen, y: sh.y + Math.sin(fw) * BODY.armLen };
@@ -2615,7 +2841,7 @@ function drawFx(G) {
       if (q.t < 0.7 && Math.floor(G.t * (q.t < 0.3 ? 24 : 12)) % 2) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(AX(q.x), AY(q.y), 5, 0, Math.PI * 2); ctx.fill(); }
     }
   }
-  if (G.boomFx) { const b = G.boomFx; b.t -= G.dt; const k = 1 - b.t / 0.3; ctx.strokeStyle = `rgba(255,240,200,${1 - k})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(AX(b.x), AY(b.y), b.r * PPM * k, 0, Math.PI * 2); ctx.stroke(); if (b.t <= 0) G.boomFx = null; }
+  if (G.boomFx) { const b = G.boomFx, k = 1 - b.t / 0.3; ctx.strokeStyle = `rgba(255,240,200,${1 - k})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(AX(b.x), AY(b.y), b.r * PPM * k, 0, Math.PI * 2); ctx.stroke(); }
   for (const q of G.parts) { ctx.globalAlpha = clamp(q.t / q.T * 1.5, 0, 1); if (q.conf) { ctx.save(); ctx.translate(AX(q.x), AY(q.y)); ctx.rotate(q.t * 9); rr(-2, -1, 4, 2, q.col); ctx.restore(); } else rr(AX(q.x) - q.s / 2, AY(q.y) - q.s / 2, q.s, q.s, q.col); }
   ctx.globalAlpha = 1;
   for (const q of G.pops) { ctx.globalAlpha = clamp(q.t / q.T * 2.5, 0, 1); txt(q.text, AX(q.x), AY(q.y), Math.round(7 * q.size), q.col); }
@@ -2644,27 +2870,11 @@ function drawView(G, cam, vp, zoom) {
   (BACKDROP[G.M.theme] || BACKDROP.harbor)(G);
   drawAmbient(G);
   drawUnder(G);
-  if (G.M.theme === 'plane') {   // the inside of the cargo hold, with the ramp end open to the sky
-    wb(-9, -0.5, 63, 9, '#6a6e78'); for (let x = -9; x < 63; x += 2.2) wb(x, -0.5, x + 0.3, 9, '#5a5e68');
-    for (let x = -7; x < 63; x += 6.6) { wb(x, 2.4, x + 1.2, 3.6, '#3a3d46'); wb(x + 0.15, 2.55, x + 1.05, 3.45, '#9fd0f0'); }
-    ctx.strokeStyle = 'rgba(30,32,40,0.5)'; ctx.lineWidth = 1;
-    for (let x = -7; x < 63; x += 6.6) {   // netting between the ribs
-      const a = AX(x + 0.3), b = AX(x + 5.9), y0 = AY(7.6), y1 = AY(4.2); ctx.beginPath();
-      for (let i = 0; i < 6; i++) { ctx.moveTo(a + (b - a) * i / 6, y0); ctx.lineTo(a + (b - a) * (i + 1) / 6, y1); ctx.moveTo(a + (b - a) * (i + 1) / 6, y0); ctx.lineTo(a + (b - a) * i / 6, y1); } ctx.stroke();
-    }
-    for (let x = -5; x < 62; x += 6.6) {   // jump seats with crew in orange vests, strapped in
-      if (hsh(x * 1.9) > 0.6) person(Math.round(AX(x + 0.3)) - 4, Math.round(AY(0.5)) + 3, Math.round(x * 7), G.t, CROWD_PAL.plane, { sc: 2, ol: true, prop: 'vest' });
-      wb(x - 0.3, 0.5, x + 1.1, 1.0, '#8a3a2a'); wb(x - 0.3, 0.95, x + 1.1, 1.0, '#b05a3a'); wb(x - 0.35, 0, x - 0.2, 0.5, '#3a3d46'); wb(x + 0.95, 0, x + 1.1, 0.5, '#3a3d46'); outlineBox(x - 0.3, 0.5, x + 1.1, 1.0);
-      wb(x + 1.1, 0.4, x + 1.25, 2.4, '#3a3d46'); wb(x + 0.5, 2.3, x + 1.25, 2.4, '#3a3d46'); wb(x + 0.5, 2.4, x + 0.6, 1.3, '#ffd23a');
-    }
-    for (let x = 24; x < 38; x += 0.8) wb(x, -0.5, x + 0.4, -0.35, '#ffd23a');
-  }
-  if (G.M.theme === 'airport') drawTerminal(G);
+  SCENE[G.M.theme]?.back(G);
   drawRide(G, false);
   drawCrowd(G);
-  for (const s of G.S) if (!s.ceil && s.style !== 'tile' && s.style !== 'tarmac') { if (AX(s.x1) > -HW - 4 && AX(s.x0) < HW + 4) drawSolid(G, s); }
-  for (const s of G.S) if (s.style === 'tile' || s.style === 'tarmac') drawSolid(G, s);
-  if (G.M.strip) { const st = G.M.strip; wb(st.x0, 0, st.x1, 0.04, '#e8423a'); wb(st.x0 - 0.2, 0, st.x0, 3.6, '#9a96a0'); wb(st.x1, 0, st.x1 + 0.2, 3.6, '#9a96a0'); wb(st.x0 - 0.2, 3.4, st.x1 + 0.2, 3.7, '#9a96a0'); txt('SECURITY', AX((st.x0 + st.x1) / 2), AY(4.1), 5, '#e8423a'); txt('NO ITEMS', AX((st.x0 + st.x1) / 2), AY(3.2), 4, '#fff6e0'); ctx.fillStyle = `rgba(255,80,80,${0.08 + 0.06 * Math.sin(G.t * 8)})`; ctx.fillRect(AX(st.x0), AY(3.4), (st.x1 - st.x0) * PPM, 3.4 * PPM); }
+  for (const s of G.S) if (!s.ceil) drawSolid(G, s);
+  drawStrip(G);
   drawZips(G);
   if (G.M.pack) drawPackRack(G, G.M.pack);
   drawProps(G);
@@ -2688,33 +2898,17 @@ const FORE_INK = 'rgba(16,14,26,0.88)';
 const VIG = { c: null, w: 0, h: 0 };
 function drawFore(G) {
   const th = G.M.theme, t = G.t, B = HH + 1;
-  if (th === 'meadow') {   // a bank of tall grass and flowers right in front
-    par(1.3, 9, (k, x) => { const h = 5 + hsh(k) * 9, X = Math.round(x), sw = Math.round(Math.sin(t * 1.6 + k) * 1.5); ctx.fillStyle = hsh(k + 2) > 0.5 ? '#2f7a30' : '#3a8f38'; ctx.beginPath(); ctx.moveTo(X, B); ctx.lineTo(X + 2, B); ctx.lineTo(X + 1 + sw, B - h); ctx.fill(); if (hsh(k + 4) > 0.8) rr(X + sw, B - h - 2, 3, 3, hsh(k + 6) > 0.5 ? '#ff7aa8' : '#ffe34a'); });
-    for (let i = 0; i < 7; i++) {   // dandelion seeds and a couple of butterflies
-      const u = ((t * (6 + i * 1.3) + i * 97) % (HW * 2 + 40)), x = Math.round(-HW - 20 + u), y = Math.round(-HH + 30 + hsh(i * 3) * (HH * 1.4) + Math.sin(t * 1.1 + i) * 6);
-      if (i < 5) { rr(x, y, 1, 1, 'rgba(255,255,255,0.8)'); rr(x - 1, y - 1, 3, 1, 'rgba(255,255,255,0.35)'); rr(x, y - 2, 1, 1, 'rgba(255,255,255,0.35)'); }
-      else { const f = Math.sin(t * 14 + i) > 0 ? 1 : 2, c = i === 5 ? '#ffa030' : '#80c0ff'; rr(x - f, y, f, 2, c); rr(x + 1, y, f, 2, c); rr(x, y, 1, 2, INK); }
-    }
-  } else if (th === 'harbor') {   // mooring posts and rope loops, a little spray
-    par(1.35, 230, (k, x) => { const X = Math.round(x); rr(X, B - 30, 7, 30, FORE_INK); rr(X - 1, B - 32, 9, 3, FORE_INK); ctx.strokeStyle = FORE_INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X + 7, B - 24); ctx.quadraticCurveTo(X + 40, B - 4, X + 70, B - 28); ctx.stroke(); });
-  } else if (th === 'alley') {   // bollards, a hydrant, a leaning bike; steam curling out of the manholes
-    par(1.3, 170, (k, x) => { const X = Math.round(x), v = hsh(k + 1); if (v < 0.4) { rr(X, B - 16, 5, 16, FORE_INK); rr(X - 1, B - 18, 7, 3, FORE_INK); } else if (v < 0.7) { rr(X, B - 22, 7, 22, FORE_INK); rr(X - 3, B - 15, 13, 3, FORE_INK); rr(X + 1, B - 25, 5, 3, FORE_INK); } else { ctx.strokeStyle = FORE_INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X, B - 7, 7, 0, 7); ctx.moveTo(X + 20, B); ctx.arc(X + 20, B - 7, 7, 0, 7); ctx.moveTo(X, B - 7); ctx.lineTo(X + 8, B - 20); ctx.lineTo(X + 20, B - 7); ctx.stroke(); } });
-    for (let x = Math.ceil((CAMX - HW / PPM - 5) / 11) * 11 + 5; x < CAMX + HW / PPM + 5; x += 11) {
-      const f = G.floorAt(x); if (!f || f.style !== 'street') continue;
-      for (let i = 0; i < 3; i++) { const u = ((t * 0.35 + i / 3 + hsh(x)) % 1), r = 3 + u * 7; ctx.fillStyle = `rgba(200,200,220,${(0.16 * (1 - u)).toFixed(2)})`; ctx.beginPath(); ctx.arc(AX(x) + Math.sin(t + i * 2 + x) * 4 * u, AY(f.top) - 4 - u * 26, r, 0, 7); ctx.fill(); }
-    }
+  if (th === 'meadow') {   // seeds drifting on the sea breeze
+    for (let i = 0; i < 5; i++) { const u = ((t * (6 + i * 1.3) + i * 97) % (HW * 2 + 40)), x = Math.round(-HW - 20 + u), y = Math.round(-HH + 30 + hsh(i * 3) * (HH * 1.4) + Math.sin(t * 1.1 + i) * 6); rr(x, y, 1, 1, 'rgba(255,255,255,0.8)'); rr(x - 1, y - 1, 3, 1, 'rgba(255,255,255,0.35)'); }
   } else if (th === 'rail') {   // fence posts whipping past, dust streaks
-    par(1.5, 70, (k, x) => { const X = Math.round(x); rr(X, B - 14, 3, 14, 'rgba(50,30,20,0.85)'); ctx.strokeStyle = 'rgba(50,30,20,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X + 3, B - 11); ctx.lineTo(X + 70, B - 9); ctx.moveTo(X + 3, B - 6); ctx.lineTo(X + 70, B - 4); ctx.stroke(); });
+    par(1.5, 70, (k, x) => { const X = Math.round(x); rr(X, B - 14, 3, 14, 'rgba(50,30,20,0.85)'); ctx.strokeStyle = 'rgba(50,30,20,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X + 3, B - 11); ctx.lineTo(X + 70, B - 9); ctx.moveTo(X + 3, B - 6); ctx.lineTo(X + 70, B - 4); ctx.stroke(); }, t * 260);
     for (let i = 0; i < 6; i++) { const u = (t * (90 + i * 20) + i * 131) % (HW * 2 + 60), x = Math.round(HW + 30 - u), y = Math.round(-HH + 40 + hsh(i * 5) * HH * 1.3); rr(x, y, 10 + i * 3, 1, 'rgba(255,225,170,0.35)'); }
-  } else if (th === 'spire') {   // wind-blown paper
-    for (let i = 0; i < 4; i++) { const u = (t * (26 + i * 7) + i * 173) % (HW * 2 + 60), x = Math.round(HW + 30 - u), y = Math.round(-HH + 20 + hsh(i * 7) * HH * 1.5 + Math.sin(t * 3 + i) * 8), f = Math.round(Math.sin(t * 6 + i) * 2); rr(x, y, 3 + f, 2, '#f4f1ea'); }
-    shafts(G, 0.05);
-  } else if (th === 'airport') { shafts(G, 0.07); motes(G, 12); }
-  else if (th === 'plane') {   // wind tearing past the open ramp
-    for (let i = 0; i < 8; i++) { const u = (t * (160 + i * 30) + i * 97) % 90, x = AX(40 - u / PPM * 1.3), y = Math.round(-HH + 10 + hsh(i * 3) * HH * 1.8); if (x > AX(22)) rr(x, y, 12 + i * 2, 1, `rgba(255,255,255,${(0.5 - u / 200).toFixed(2)})`); }
+  } else if (th === 'plane') {   // air tearing in through the hole in the side
+    const gx = G.M.goal;
+    for (let i = 0; i < 8; i++) { const u = (t * (160 + i * 30) + i * 97) % ((gx.x1 - gx.x0) * PPM), w = 10 + i * 2, x = Math.round(AX(gx.x1) - u), y = Math.round(AY(10 - hsh(i * 3) * 9)); if (x - w > AX(gx.x0)) rr(x - w, y, w, 1, `rgba(255,255,255,${(0.55 - u / 220).toFixed(2)})`); }
   } else if (th === 'moon') {   // boulders in front, a satellite crossing
     par(1.3, 210, (k, x) => { const X = Math.round(x), w = 14 + hsh(k) * 16, h = 8 + hsh(k + 1) * 8; ctx.fillStyle = 'rgba(22,20,32,0.9)'; ctx.beginPath(); ctx.ellipse(X, B, w, h, 0, Math.PI, 0); ctx.fill(); });
-    const u = (t * 4) % (HW * 2 + 80), sx = Math.round(-HW - 40 + u), sy = Math.round(-HH + 14 + Math.sin(u * 0.01) * 6); rr(sx - 4, sy, 3, 2, '#3a6ab0'); rr(sx + 2, sy, 3, 2, '#3a6ab0'); rr(sx - 1, sy, 3, 2, '#c8c8d0'); if (Math.floor(t * 2) % 2) rr(sx, sy - 1, 1, 1, '#ff6a6a');
+    const u = (t * 4) % (HW * 2 + 80), sx = Math.round(-HW - 40 + u), sy = Math.round(-HH + 14 + Math.sin(u * 0.01) * 6); rr(sx - 4, sy, 3, 2, '#3a6ab0'); rr(sx + 2, sy, 3, 2, '#3a6ab0'); rr(sx - 1, sy, 3, 2, '#c8c8d0');
   }
   // vignette
   if (!VIG.c || VIG.w !== HW || VIG.h !== HH) {   // the vignette is baked once per viewport size
@@ -2799,7 +2993,7 @@ function drawMine(G, p, x, y) {
   }
   if (!p.alive && !p.gone) { const s = Math.ceil(p.deadT); if (s > 0) txt(`BACK IN ${s}`, x + 17 + (p.item ? 30 : 0), y + 9, 6, '#ff8a7a'); }
 }
-const MAP_TAG = { van: 'GET IN THE VAN', train: 'CATCH THE TRAIN', heli: 'GRAB THE LADDER', chopper: 'REACH THE CHOPPER', jet: 'BOARD THE JET', chute: 'JUMP OUT THE DOOR', rocket: 'GET ON THE ROCKET', pod: 'GET TO THE POD' };
+const MAP_TAG = { van: 'GET IN THE TRUCK', train: 'CATCH THE SUBWAY', heli: 'REACH THE CHOPPER', chopper: 'REACH THE CHOPPER', jet: 'BOARD THE JET', chute: 'GRAB A CHUTE AND JUMP', rocket: 'GET ON THE ROCKET', pod: 'GET TO THE LANDER' };
 function drawBanner(G) {
   const st = G.state, t = G.stateT;
   if (st === 'ready') {
@@ -2959,7 +3153,7 @@ function render(G) {
   ctx.setTransform(S, 0, 0, S, OX, OY);
   if (G.screen === 'title') drawTitle(G);
   else if (G.screen === 'how') drawHelp();
-  else { drawHUD(G); drawOver(G); if (G.paused) drawPause(); }
+  else if (!G.nohud) { drawHUD(G); drawOver(G); if (G.paused) drawPause(); }   // (nohud: the test harness wants the bare picture)
   if (SET.muted) txt('MUTED', 312, 174, 5, '#8a8496', { align: 'right' });
   // letterbox bars stay clean
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#0b0d14';
@@ -3001,7 +3195,7 @@ addEventListener('keydown', e => {
   G.sfx.init();
   if (G.menuOpen) { if (e.code === 'Escape') { e.preventDefault(); closeMenu(); } return; }
   if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-  if (e.code === 'KeyM' && !e.repeat) { SET.muted = SET.muted ? 0 : 1; G.sfx.setMuted(!!SET.muted); saveSettings(); return; }
+  if (e.code === 'KeyM' && !e.repeat) { SET.muted = SET.muted ? 0 : 1; G.sfx.setMuted(!!SET.muted); saveSettings(SET); return; }
   if (e.repeat) return;
   if (G.screen === 'how') { G.screen = 'title'; G.sfx.click(); return; }
   if (G.screen === 'title') {
@@ -3061,7 +3255,7 @@ function syncMenu() {
   menuEl.querySelectorAll('.chips').forEach(c => c.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(draft.pools[c.dataset.pool].includes(b.dataset.id)))));
 }
 function openMenu() { draft = JSON.parse(JSON.stringify(SET)); G.menuOpen = true; letGo(); menuEl.hidden = false; syncMenu(); document.getElementById('done').focus(); }
-function closeMenu() { Object.assign(SET, draft); saveSettings(); menuEl.hidden = true; G.menuOpen = false; G.sfx.setMuted(!!SET.muted); if (G.screen === 'title') G.newMatch('cvc', true); cv.focus(); }
+function closeMenu() { Object.assign(SET, draft); saveSettings(SET); menuEl.hidden = true; G.menuOpen = false; G.sfx.setMuted(!!SET.muted); if (G.screen === 'title') G.newMatch('cvc', true); cv.focus(); }
 menuEl.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.id === 'done') { closeMenu(); return; }
