@@ -2429,7 +2429,13 @@ const LOOK = {
       wb(x + 1.2, top - 2.95, x + 1.42, top - 2.6, '#c9cdd8'); wb(x + 1.78, top - 2.95, x + 2.0, top - 2.6, '#c9cdd8');
     }
   },
-  seat(s) { const { x0, x1, top, bot } = s; mass(x0, bot, x1, top, '#3f6fd0', { lip: '#7fa2ee' }); mass(x0, top, x0 + 0.34, top + 0.9, '#3f6fd0', { lip: '#fff6e0', foot: 0, side: 0 }); },
+  seat(s) {   // an airline seat: pedestal, padded cushion, tall back with a headrest cover, an armrest
+    const { x0, x1, top, bot } = s, C = '#3f6fd0', D = '#2c4f9e';
+    mass(x0 + 0.25, bot, x1 - 0.25, bot + 0.32, '#4a4f5c', { foot: 0, side: 0, top: 0 });
+    rbox(x0, bot + 0.3, x1, top, [0.06, 0.28, 0.12, 0.06], C); wb(x0 + 0.36, top - 0.13, x1 - 0.22, top - 0.06, '#7fa2ee'); wb(x0 + 0.1, bot + 0.36, x1 - 0.1, bot + 0.42, D);
+    rbox(x0, top - 0.12, x0 + 0.38, top + 0.95, [0.16, 0.16, 0, 0], C); wb(x0 + 0.05, top + 0.62, x0 + 0.33, top + 0.88, '#fff6e0'); wb(x0 + 0.28, top - 0.05, x0 + 0.33, top + 0.55, D);
+    mass(x0 + 0.34, top + 0.22, x0 + 0.9, top + 0.34, D, { foot: 0, side: 0, top: 0 });
+  },
   // ---- launch pad ----
   ledge(s) {   // a grated steel ledge bolted to the fuel tank, braced back to its wall
     const { x0, x1, top, bot } = s;
@@ -2581,6 +2587,9 @@ const SCENE = {
     wb(-8, 5.6, 24.5, 10.2, '#e3e7ee'); wb(32.8, 5.6, 70, 10.2, '#e9ecf2');
     const cabin = (a, b) => { along(a + 1.5, b - 1.5, 3, x => rbox(x, 7.2, x + 1.1, 8.6, 0.4, '#9fdcff', '#aab0bd')); wb(a, 9.4, b, 10.2, '#cfd4de'); along(a + 2.2, b, 2.2, x => rib(x, 9.4, 10.2, '#aab0bd')); seam(a, b, 9.4, '#aab0bd'); };
     cabin(-8, 24.5); cabin(32.8, 70);
+    // rows of seats further back in the cabin (pale: they're behind the aisle you hop along)
+    const bseat = x => { wb(x + 0.38, 5.6, x + 0.52, 5.95, '#b9bfcc'); rbox(x, 5.92, x + 0.95, 6.32, [0.04, 0.2, 0.08, 0.04], '#9cb2e2', '#8f9fc4'); rbox(x, 6.2, x + 0.3, 7.05, [0.12, 0.12, 0, 0], '#9cb2e2', '#8f9fc4'); wb(x + 0.04, 6.78, x + 0.26, 6.98, '#f4f6fa'); };
+    along(-6.5, 23.5, 2.2, bseat); along(34.4, 68.5, 2.2, x => { if (!G.S.some(q => q.style === 'seat' && x + 1 > q.x0 - 0.6 && x < q.x1 + 0.6)) bseat(x); });
     // the blown-out side: a ragged edge, open sky from here to the cockpit wall
     ctx.fillStyle = '#e9ecf2'; ctx.beginPath(); ctx.moveTo(px(70), py(5.6));
     for (let i = 0; i <= 8; i++) ctx.lineTo(px(70 + (i % 2 ? 0.75 : 0.15) + hsh(i * 5.3) * 0.3), py(5.6 + i * 0.575));
@@ -3012,10 +3021,10 @@ function drawProgress(G, x, y, w) {
   for (const p of G.P.slice().sort((q, r) => (q.human ? 1 : 0) - (r.human ? 1 : 0) || q.x - r.x)) {
     const px = Math.round(u(p.gone ? b : p.x)), live = p.alive || p.gone;
     let lift = 0; while (taken.some(q => Math.abs(q.x - px) < 10 && q.lift === lift)) lift++;   // (bump up a row if someone's already there)
-    taken.push({ x: px, lift }); const yy = y + lift * 8;   // (down, away from the scoreboard)
-    rr(px - 5, yy - 4, 11, 10, INK); rr(px - 4, yy - 3, 9, 8, live ? p.T.jersey : '#241e2c');
-    const a0 = ctx.globalAlpha; if (!live) ctx.globalAlpha = a0 * 0.45; headIcon(p, px + 0.5, yy + 1, 1); ctx.globalAlpha = a0;
-    rr(px - 4, yy + 5, 9, 2, live ? p.T.dark : '#241e2c'); if (p.human) { rr(px - 1, yy - 7, 3, 3, INK); rr(px, yy - 6, 1, 1, CREAM); }
+    taken.push({ x: px, lift }); const yy = y + lift * 4, xx = px + lift * 3;   // (a bunch fans out like a hand of cards, down and away from the scoreboard)
+    rr(xx - 5, yy - 4, 11, 10, INK); rr(xx - 4, yy - 3, 9, 8, live ? p.T.jersey : '#241e2c');
+    const a0 = ctx.globalAlpha; if (!live) ctx.globalAlpha = a0 * 0.45; headIcon(p, xx + 0.5, yy + 1, 1); ctx.globalAlpha = a0;
+    rr(xx - 4, yy + 5, 9, 2, live ? p.T.dark : '#241e2c'); if (p.human) { rr(xx - 1, yy - 7, 3, 3, INK); rr(xx, yy - 6, 1, 1, CREAM); }
   }
 }
 // an arrow on the edge of the view pointing at the getaway when it's off screen
