@@ -2101,6 +2101,10 @@ const BACKDROP = {
   },
   moon(G) {
     sky('#06050e', '#15122a');
+    // a faint band of the galaxy behind the stars, and now and then a shooting star
+    par(0.01, 7, (k, x) => { const y = Math.round(-HH * 0.85 + (x + HW) * 0.22 + (hsh(k * 1.7) - 0.5) * 22); rr(Math.round(x), y, 1, 1, hsh(k + 3) > 0.5 ? '#3c3866' : '#2c2a4e'); });
+    { const T = G.t % 6.5; if (T < 0.55) { const k = Math.floor(G.t / 6.5), x0 = -HW * 0.8 + hsh(k * 4.1) * HW * 1.2, y0 = -HH * 0.9 + hsh(k * 2.3) * HH * 0.3, d = T / 0.55;
+      ctx.save(); ctx.globalAlpha = 1 - d; ctx.strokeStyle = '#fff6e0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0 + d * 60, y0 + d * 22); ctx.lineTo(x0 + d * 60 - 18, y0 + d * 22 - 6.6); ctx.stroke(); ctx.restore(); } }
     par(0.02, 29, (k, x) => { const s = hsh(k * 3.3) > 0.72 ? 2 : 1; rr(x + hsh(k) * 20, -HH + hsh(k + 7) * HH * 1.5, s, s, hsh(k + 2) > 0.5 ? '#fff6e0' : '#8f9ad0'); });
     const ex = Math.round(HW * 0.5), ey = Math.round(-HH * 0.48);   // the Earth
     ctx.save(); ctx.beginPath(); ctx.arc(ex, ey, 15, 0, 7); ctx.clip(); ctx.fillStyle = '#3f8fe0'; ctx.fillRect(ex - 16, ey - 16, 32, 32);
@@ -2578,6 +2582,13 @@ const SCENE = {
     wb(35, 5, 69, 9.6, '#e3e7ef'); wb(58, 9.6, 69, 10, '#e3e7ef');
     along(36.5, 66, 7.5, x => { wb(x, 6.4, x + 5, 9.0, '#bfe6fb'); wb(x, 8.9, x + 5, 9.0, '#e9f6ff'); rib(x + 2.5, 6.4, 9.0, '#e3e7ef'); });
     along(35, 69, 7.5, x => wb(x + 0.1, 5, x + 0.7, 9.6, '#cfd4de'));
+    // the helipad: landing lights chasing toward the chopper along the roof edge, and a windsock on a mast
+    for (let i = 0; i < 9; i++) { const x = 78.6 + i * 1.3, on = Math.floor(G.t * 8 - i) % 9 === 0; wb(x, 10, x + 0.26, 10.16, '#4a4f5c'); wb(x + 0.04, 10.16, x + 0.22, 10.3, on ? '#fff3a0' : '#e8a93a'); if (on) disc(x + 0.13, 10.23, 0.22, 'rgba(255,240,160,0.35)', null); }
+    { const mx = 70.4, top = 13.0, fl = Math.sin(G.t * 3.1) * 0.12 + Math.sin(G.t * 7.3) * 0.05;
+      wb(mx - 0.06, 10, mx + 0.06, top, '#8d93a0'); wb(mx - 0.18, top - 0.08, mx + 0.18, top + 0.04, '#5b6170');
+      const pts = k => [mx + 0.05 + k * 0.42, top - 0.12 - k * (0.07 + fl)];
+      for (let k = 0; k < 4; k++) { const [a, b] = pts(k), [c, d] = pts(k + 1), h = 0.26 - k * 0.04; shape([[a, b + h], [c, d + h - 0.03], [c, d - h + 0.03], [a, b - h]], k % 2 ? '#ffffff' : '#ff7a2a', null); }
+      const [a, b] = pts(0), [c, d] = pts(4); shape([[a, b + 0.26], [c, d + 0.13], [c, d - 0.13], [a, b - 0.26]], null, INK); }
   } },
   airport: { back(G) {
     // check-in hall
@@ -2983,7 +2994,12 @@ function drawFore(G) {
     const gx = G.M.goal;
     for (let i = 0; i < 8; i++) { const u = (t * (160 + i * 30) + i * 97) % ((gx.x1 - gx.x0) * PPM), w = 10 + i * 2, x = Math.round(AX(gx.x1) - u), y = Math.round(AY(10 - hsh(i * 3) * 9)); if (x - w > AX(gx.x0)) rr(x - w, y, w, 1, `rgba(255,255,255,${(0.55 - u / 220).toFixed(2)})`); }
   } else if (th === 'moon') {   // boulders in front, a satellite crossing
-    par(1.3, 210, (k, x) => { const X = Math.round(x), w = 14 + hsh(k) * 16, h = 8 + hsh(k + 1) * 8; ctx.fillStyle = 'rgba(22,20,32,0.9)'; ctx.beginPath(); ctx.ellipse(X, B, w, h, 0, Math.PI, 0); ctx.fill(); });
+    par(1.3, 210, (k, x) => {   // (a moon rock in shadow: an outline, a sunlit rim and a pit, so it reads as a rock and not a hole)
+      const X = Math.round(x), w = Math.round(14 + hsh(k) * 16), h = Math.round(8 + hsh(k + 1) * 8);
+      ctx.fillStyle = '#2f2c40'; ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(X, B, w, h, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#5d5876'; ctx.beginPath(); ctx.ellipse(X, B + 1, w - 2, h - 2, 0, Math.PI * 1.15, Math.PI * 1.6); ctx.stroke();
+      ctx.fillStyle = '#242133'; ctx.beginPath(); ctx.ellipse(X + w * 0.3, B - h * 0.45, 3, 1.5, 0, 0, 7); ctx.fill();
+    });
     const u = (t * 4) % (HW * 2 + 80), sx = Math.round(-HW - 40 + u), sy = Math.round(-HH + 14 + Math.sin(u * 0.01) * 6); rr(sx - 4, sy, 3, 2, '#3a6ab0'); rr(sx + 2, sy, 3, 2, '#3a6ab0'); rr(sx - 1, sy, 3, 2, '#c8c8d0');
   }
   // vignette
