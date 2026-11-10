@@ -597,14 +597,16 @@ const MEME_LOOKS = [
   { name: 'Cam', skin: '#e2ad84', hair: '#231812', style: 'short', bulge: true },
   { name: 'Zayne', skin: '#c48a5c', hair: '#1e130c', style: 'curly', outfit: 'premier', shoes: 'sambas' },
 ];
-function memeLook(used) {
-  const m = pick(MEME_LOOKS.filter(q => !used.has('meme:' + q.name)));
+function memeLook(used, want) {
+  const m = want || pick(MEME_LOOKS.filter(q => !used.has('meme:' + q.name)));
   used.add('meme:' + m.name);
   if (m.teacher) { used.add(13); return { ...m, num: 13 }; }
   let num; do { num = pick([1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 21, 23, 44]); } while (used.has(num));
   used.add(num);
   return { ...m, num };
 }
+// what a human can pick before a match: a random meme, one of the crew by name, or a plain floppy guy
+const CHAR_OPTS = ['random', ...MEME_LOOKS.map(m => m.name), 'classic'];
 function makeLook(used) {
   let num; do { num = pick([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 23]); } while (used.has(num) && used.size < 12);
   used.add(num);
@@ -778,7 +780,7 @@ const POOLS = { maps: MAPS, items: ITEMS };
 
 // ---------------------------------------------------------------- settings
 const SETTINGS_KEY = 'floppy-getaway-settings-v1';
-const DEFAULTS = { target: 3, level: 'normal', memes: 'on', itemRate: 1, turn: 1, muted: 0,
+const DEFAULTS = { target: 3, level: 'normal', memes: 'on', chars: ['random', 'random', 'random', 'random'], itemRate: 1, turn: 1, muted: 0,
   pools: { maps: MAPS.map(m => m.id), items: ITEMS.map(w => w.id) } };
 // noise: how far off a bot's lean time is; settle: how wobbly it'll hop from; react: seconds to notice a shot
 const CPU_LEVELS = {
@@ -798,6 +800,7 @@ function loadSettings() {
   if (![3, 5, 7].includes(+out.target)) out.target = 3;
   if (!CPU_LEVELS[out.level]) out.level = 'normal';
   out.memes = out.memes === 'off' ? 'off' : 'on';
+  out.chars = [0, 1, 2, 3].map(i => CHAR_OPTS.includes((out.chars || [])[i]) ? out.chars[i] : 'random');   // (who each player picked last time)
   out.itemRate = [0, 1, 2].includes(+out.itemRate) ? +out.itemRate : 1;
   out.turn = [0.6, 1, 1.4].includes(+out.turn) ? +out.turn : 1;   // how fast a held key leans you (the original's Turn Sensitivity)
   return out;
@@ -810,7 +813,14 @@ const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return (m ? m 
 function saveSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable */ } }
 const SET = loadSettings();
 const VOL = 0.8;
-const SPLIT_Z = 0.72;   // split-screen zoom: each half sees a bit more
+const SPLIT_Z = 0.72;
+// how the screen splits: one view, two side by side, or four quarters (3-4 players; with 3 the last quarter follows the CPU)
+const CAM_LAYOUT = {
+  1: { z: 1, vp: [{ x: 0, y: 0, w: ART_W, h: ART_H }] },
+  2: { z: SPLIT_Z, vp: [{ x: 0, y: 0, w: ART_W / 2 - 1, h: ART_H }, { x: ART_W / 2 + 1, y: 0, w: ART_W / 2 - 1, h: ART_H }] },
+  4: { z: 0.56, vp: [{ x: 0, y: 0, w: ART_W / 2 - 1, h: ART_H / 2 - 1 }, { x: ART_W / 2 + 1, y: 0, w: ART_W / 2 - 1, h: ART_H / 2 - 1 },
+    { x: 0, y: ART_H / 2 + 1, w: ART_W / 2 - 1, h: ART_H / 2 - 1 }, { x: ART_W / 2 + 1, y: ART_H / 2 + 1, w: ART_W / 2 - 1, h: ART_H / 2 - 1 }] },
+};   // split-screen zoom: each half sees a bit more
 const AWAY_ZOOM = { rocket: 0.5, pod: 0.8, heli: 0.7, chopper: 0.7, jet: 0.72, van: 0.85, train: 0.85 };   // camera pull-back for the getaway shot
 const FLAT_A = 1.56;   // lying flat on the ground (rad)
 const DEPART_T = 2.4;   // once someone climbs in, the ride waits this long for anyone else (they all score)
@@ -1312,10 +1322,13 @@ class Game {
   }
   newMatch(mode, demo = false) {
     this.mode = mode; this.demo = demo; this.paused = false; this.champ = null; this.round = 0; this.overT = 0;
-    const humans = mode === 'cpu' || mode === 'tt' ? 1 : mode === '2p' ? 2 : 0, used = new Set();
+    const humans = mode === 'cpu' || mode === 'tt' ? 1 : mode === '2p' ? clamp(this.nh || 2, 2, CREW.length) : 0, used = new Set(), looks = [];
+    // humans first: anyone who named a meme gets him, then RANDOM rolls a meme (a plain guy if memes are off), CLASSIC is a plain guy
+    for (let i = 0; i < humans; i++) { const m = MEME_LOOKS.find(q => q.name === SET.chars[i]); if (m && !used.has('meme:' + m.name)) looks[i] = memeLook(used, m); }
+    for (let i = 0; i < humans; i++) if (!looks[i]) looks[i] = SET.chars[i] !== 'classic' && SET.memes === 'on' ? memeLook(used) : makeLook(used);
     this.P = (mode === 'tt' ? CREW.slice(0, 1) : CREW).map((c, i) => {
       const human = i < humans;
-      const look = !human && SET.memes === 'on' && Math.random() < 0.45 ? memeLook(used) : makeLook(used);
+      const look = looks[i] || (SET.memes === 'on' && Math.random() < 0.45 ? memeLook(used) : makeLook(used));
       const p = new Dude(i, look, human);
       if (!human) p.bot = new Bot(p, demo ? 'normal' : SET.level);
       return p;
@@ -1357,7 +1370,9 @@ class Game {
       p.reset(x, s ? topAt(s, x) : 0); p.ground = s; p.cp = M.cps[0]; p.facing = 1; p.a = rand(-0.05, 0.05);
       if (p.bot) { p.bot.plan = null; p.bot.wait = rand(0.1, 0.6); }
     });
-    this.cams = this.mode === '2p' && !this.demo ? [{ p: this.P[0] }, { p: this.P[1] }] : [{ p: (this.mode === 'cpu' || this.mode === 'tt') && !this.demo ? this.P[0] : null }];
+    const nc = this.mode === '2p' && !this.demo ? (this.P.filter(p => p.human).length > 2 ? 4 : 2) : 1;
+    this.cams = nc > 1 ? this.P.slice(0, nc).map(p => ({ p })) : [{ p: (this.mode === 'cpu' || this.mode === 'tt') && !this.demo ? this.P[0] : null }];
+    this.cams.forEach((c, i) => { c.vp = CAM_LAYOUT[nc].vp[i]; c.zb = CAM_LAYOUT[nc].z; });
     for (const c of this.cams) this.aimCam(c, true);
     this.ttT = 0; this.ttRec = []; this.ttNew = false; this.ttPrev = null; this.ghost = null;
     if (this.mode === 'tt') {
@@ -1760,7 +1775,7 @@ class Game {
       if (Math.abs(gy - ty) > 2) ty += (clamp(gy, ty - 3.2, ty + 3.2) - ty) * k;
     }
     if (!f.alive && f.deadT < RESPAWN_T - 0.8) { tx = f.cp + 2.6; const s = this.cpFloor(f.cp); ty = (s ? topAt(s, f.cp) : 0) + 2; }
-    else if (!f.grounded && f.alive) { const s = this.floorBelow(f.x, f.y + 0.1); if (s) { const fl = topAt(s, f.x), hh = (split ? ART_H / SPLIT_Z : ART_H) / PPM / 2; ty = Math.min(ty, fl + hh - 0.6); } }
+    else if (!f.grounded && f.alive) { const s = this.floorBelow(f.x, f.y + 0.1); if (s) { const fl = topAt(s, f.x), hh = (c.vp ? c.vp.h : ART_H) / (c.zb || 1) / PPM / 2; ty = Math.min(ty, fl + hh - 0.6); } }
     if (this.state === 'away' || this.state === 'over') {
       const g = M.goal, w = this.winner || this.champ;
       if (w && w.chute) { tx = w.x - 1; ty = w.y + 1.5; } else { tx = (g.x0 + g.x1) / 2 - 1 + (M.ride === 'van' || M.ride === 'train' || M.ride === 'jet' ? this.rideFx().dx * 0.65 : 0); ty = g.y0 + 2.4 + (M.ride === 'heli' || M.ride === 'chopper' || M.ride === 'rocket' ? Math.min(4, this.rideFx().dy * 0.5) : M.ride === 'pod' ? Math.min(12, this.rideFx().dy * 0.7) : 0) + (M.ride === 'rocket' ? 0.5 : 0); }
@@ -1769,7 +1784,7 @@ class Game {
     const leaving = this.state === 'away' || this.state === 'over';
     const tz = leaving ? (AWAY_ZOOM[M.ride] || 1) : 1;   // (pull back while the ride leaves)
     if (snap || c.z == null) c.z = tz; else c.z += (tz - c.z) * (1 - Math.exp(-2.2 * dt));
-    const halfW = (split ? (ART_W / 2 - 1) / SPLIT_Z : ART_W) / c.z / PPM / 2;
+    const halfW = (c.vp ? c.vp.w : ART_W) / (c.zb || 1) / c.z / PPM / 2;
     tx = clamp(tx, M.x0 - 2 + halfW, M.x1 + 2 - halfW);
     if (snap || c.x == null) { c.x = tx; c.y = ty; return; }
     const k = 1 - Math.exp(-4 * dt);
@@ -1798,7 +1813,7 @@ function txt(str, x, y, size, col, opt = {}) {
   ctx.textAlign = opt.align || 'center'; ctx.textBaseline = 'middle';
   if (opt.outline !== false) {
     const o = Math.max(0.5, opt.ow == null ? 1 : opt.ow), ink = opt.ink || (typeof opt.outline === 'string' ? opt.outline : INK);
-    ctx.fillStyle = ink; ctx.fillText(str, x, y + o * 2);
+    ctx.fillStyle = ink; if (opt.drop !== 0) ctx.fillText(str, x, y + o * (opt.drop == null ? 2 : opt.drop));
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) ctx.fillText(str, x + dx * o, y + dy * o);
   }
   ctx.fillStyle = col; ctx.fillText(str, x, y);
@@ -2045,6 +2060,11 @@ const BACKDROP = {
   },
   alley(G) {   // downtown
     sky('#7fc6f6', '#d9f0ff'); clouds(0.03, -66, '#ffffff', G.t, 1.2, 2);
+    { const W = HW * 2 + 120, u = ((G.t * 3 - CAMX * PPM * 0.03) % W + W) % W, bx = Math.round(-HW - 60 + u), by = Math.round(horizon(0.03) - 58 + Math.sin(G.t * 0.4) * 2);
+      ctx.fillStyle = '#c9d3e0'; ctx.beginPath(); ctx.moveTo(bx - 19, by - 1); ctx.lineTo(bx - 25, by - 7); ctx.lineTo(bx - 22, by - 1); ctx.lineTo(bx - 25, by + 5); ctx.fill();   // a blimp drifting over the towers
+      ctx.fillStyle = '#e8eef6'; ctx.beginPath(); ctx.ellipse(bx, by, 21, 7, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#d3dbe7'; ctx.fillRect(bx - 17, by + 2, 34, 3); ctx.fillStyle = '#f2b27a'; ctx.fillRect(bx - 15, by - 3, 30, 5);
+      txt('FLOPPY', bx, by - 0.5, 5, '#ffffff', { outline: false, bold: true }); ctx.fillStyle = '#aab4c4'; ctx.fillRect(bx - 4, by + 7, 8, 2); }
     skyline(0.05, 30, '#cfe7f6', 30, 80, 12, 22, null, 7); band(0.05, 24, '#cfe7f6');
     skyline(0.12, 42, '#b6d6ec', 22, 62, 16, 25, '#cbe3f2', 11); band(0.12, 34, '#b6d6ec');
     skyline(0.22, 58, '#a0c5e0', 14, 42, 18, 25, null, 5); band(0.22, 52, '#a0c5e0');
@@ -2059,6 +2079,15 @@ const BACKDROP = {
       ctx.fillRect(X, y - h, 4, h); ctx.fillRect(X - 5, y - h + 5, 3, 5); ctx.fillRect(X - 5, y - h + 8, 6, 2); ctx.fillRect(X + 6, y - h + 3, 3, 5); ctx.fillRect(X + 3, y - h + 6, 5, 2);
     }, t * 44);
     band(0.3, 62, '#e9c98f');
+    { const f = 0.42, P = 132, base = Math.round(horizon(f) + 70), H = 104, sag = (x, xa, xb) => { const u = (x - xa) / (xb - xa); return 4 * u * (1 - u) * 6; };
+      par(f, P, (k, x) => {   // telegraph poles, the line along the track (tall enough to show over the cars)
+        const X = Math.round(x), top = base - H;
+        ctx.fillStyle = '#c4a173'; ctx.fillRect(X, top, 3, H); ctx.fillStyle = '#d8b88a'; ctx.fillRect(X, top, 1, H);
+        ctx.fillStyle = '#b08e62'; ctx.fillRect(X - 6, top + 3, 14, 2); ctx.fillRect(X - 4, top + 9, 10, 1);
+        ctx.fillStyle = '#a99a86'; for (const dx of [-6, -2, 4, 7]) ctx.fillRect(X + dx, top + 2, 1, 1);
+        ctx.fillStyle = 'rgba(120,98,72,0.55)';   // (the wires sag to the next pole)
+        for (const [dx, dy] of [[-6, 2], [7, 2], [-4, 8]]) for (let q = 0; q < P; q += 2) ctx.fillRect(X + dx + q, top + dy + Math.round(sag(q, 0, P)), 2, 1);
+      }, t * 120); }
   },
   spire(G) {   // over the rooftops
     sky('#8fd2fb', '#e6f6ff'); sun(-HW * 0.5, -HH * 0.5, 12, '#fff8d6'); clouds(0.03, -60, '#ffffff', G.t, 1.4, 4);
@@ -2101,6 +2130,10 @@ const BACKDROP = {
   },
   moon(G) {
     sky('#06050e', '#15122a');
+    // a satellite drifting across, well below the scoreboard: solar panels, a gold body, a blinking light
+    { const u = (G.t * 4) % (HW * 2 + 80), sx = Math.round(-HW - 40 + u), sy = Math.round(-HH * 0.36 + Math.sin(u * 0.01) * 5);
+      rr(sx - 8, sy - 1, 6, 3, INK); rr(sx - 7, sy, 4, 1, '#3a6ab0'); rr(sx + 3, sy - 1, 6, 3, INK); rr(sx + 4, sy, 4, 1, '#3a6ab0');
+      rr(sx - 2, sy, 5, 1, '#8f96a8'); rr(sx - 1, sy - 2, 3, 5, INK); rr(sx, sy - 1, 1, 3, '#e0b24a'); if (Math.floor(G.t * 2) % 2) rr(sx, sy - 3, 1, 1, '#ff5a4a'); }
     // a faint band of the galaxy behind the stars, and now and then a shooting star
     par(0.01, 7, (k, x) => { const y = Math.round(-HH * 0.85 + (x + HW) * 0.22 + (hsh(k * 1.7) - 0.5) * 22); rr(Math.round(x), y, 1, 1, hsh(k + 3) > 0.5 ? '#3c3866' : '#2c2a4e'); });
     { const T = G.t % 6.5; if (T < 0.55) { const k = Math.floor(G.t / 6.5), x0 = -HW * 0.8 + hsh(k * 4.1) * HW * 1.2, y0 = -HH * 0.9 + hsh(k * 2.3) * HH * 0.3, d = T / 0.55;
@@ -2357,6 +2390,16 @@ const LOOK = {
     for (let x = x0 + 1.15; x < x1 - 0.6; x += 1.15) if (Math.abs(x - m) > 1.7) rib(x, bot + 0.15, top - 0.3, d);
     mass(m - 1.5, bot + 0.25, m + 1.5, top - 0.5, shade(c, -0.08), { lip: shade(c, 0.2), side: 0 }); rib(m, bot + 0.3, top - 0.6, d);
     wb(m - 0.35, bot + 1.3, m - 0.2, bot + 1.75, '#e9ebf1'); seam(x0 + 0.15, x1 - 0.15, top - 0.42, d);
+    for (const [a, b] of [[x0 + 0.2, x0 + 0.62], [x1 - 0.62, x1 - 0.2]]) {   // end ladders
+      rib(a, bot + 0.3, top - 0.35, d); rib(b, bot + 0.3, top - 0.35, d); for (let y = bot + 0.55; y < top - 0.4; y += 0.42) seam(a, b + 0.08, y, shade(c, 0.28));
+    }
+    const lx = (x0 + 0.8 + m - 1.5) / 2, n = Math.round(Math.abs(x0 * 137)) % 9000 + 1000;
+    txt('FLOPPY LINES', px(lx), py(top - 1.2), 6, shade(c, 0.62), { outline: false, bold: true });
+    txt('FLPX ' + n, px(lx), py(top - 1.9), 5, shade(c, 0.42), { outline: false });
+    if (hsh(x0 * 0.77) > 0.45) {   // a tag on the right half
+      const gx = px((m + 1.5 + x1 - 0.8) / 2), gy = py(bot + 1.2), tags = ['ZAP', 'YEET', 'BONK', 'W'], gc = ['#ff5ad1', '#ffd23a', '#7fe3ff', '#7fe39a'][(hsh(x0) * 4) | 0];
+      ctx.save(); ctx.translate(gx, gy); ctx.rotate(-0.12); txt(tags[(hsh(x0 * 3.1) * 4) | 0], 0, 0, 10, gc, { bold: true, ink: shade(c, -0.45), drop: 1 }); ctx.restore();
+    }
   },
   flatcar(s) { const { x0, x1, top, bot } = s; railcar(x0, x1); mass(x0, bot, x1, top, '#8a6846', { lip: '#c39a68' }); mass(x0 + 0.85, top, x0 + 1.1, top + 1.6, '#3a3d48', { top: 0, foot: 0, side: 0 }); },
   logs(s) {
@@ -3000,7 +3043,6 @@ function drawFore(G) {
       ctx.strokeStyle = '#5d5876'; ctx.beginPath(); ctx.ellipse(X, B + 1, w - 2, h - 2, 0, Math.PI * 1.15, Math.PI * 1.6); ctx.stroke();
       ctx.fillStyle = '#242133'; ctx.beginPath(); ctx.ellipse(X + w * 0.3, B - h * 0.45, 3, 1.5, 0, 0, 7); ctx.fill();
     });
-    const u = (t * 4) % (HW * 2 + 80), sx = Math.round(-HW - 40 + u), sy = Math.round(-HH + 14 + Math.sin(u * 0.01) * 6); rr(sx - 4, sy, 3, 2, '#3a6ab0'); rr(sx + 2, sy, 3, 2, '#3a6ab0'); rr(sx - 1, sy, 3, 2, '#c8c8d0');
   }
   // vignette
   if (!VIG.c || VIG.w !== HW || VIG.h !== HH) {   // the vignette is baked once per viewport size
@@ -3107,7 +3149,7 @@ function drawBanner(G) {
     txt(tag + '!!!', tx + (two ? 10 : 0), Y + 29, fitSize(tag + '!!!', 10, 100), '#ff4d4d', { align: 'left' });
     ctx.restore();
     // 3, 2, 1: one big number up in the sky, clear of the racers' heads and of the strip (it pops in, then settles; split screen: on the seam)
-    if (!G.demo) { const n = 3 - Math.floor(t / CD_STEP); if (n >= 1) { const f = (t / CD_STEP) % 1, pop = Math.max(0, 1 - f * 6); const sp = G.cams.length > 1; txt(String(n), sp ? 160 : 152, sp ? 100 : 50, 30 + pop * 16, n === 1 ? '#ffd23a' : CREAM, { ow: 1.5 }); } }
+    if (!G.demo) { const n = 3 - Math.floor(t / CD_STEP); if (n >= 1) { const f = (t / CD_STEP) % 1, pop = Math.max(0, 1 - f * 6); const sp = G.cams.length > 1; txt(String(n), sp ? 160 : 152, G.cams.length > 2 ? 92 : sp ? 100 : 50, 30 + pop * 16, n === 1 ? '#ffd23a' : CREAM, { ow: 1.5 }); } }
   } else if (st === 'run' && t < 0.7 && !G.demo) { ctx.globalAlpha = clamp((0.7 - t) * 5, 0, 1); txt('GO!', 160, 50, 34 + Math.min(t, 0.15) * 60, '#7fe39a', { ow: 1.5 }); ctx.globalAlpha = 1; }
   else if (st === 'run' && G.boarded.length && !G.demo) {   // the ride is waiting: hurry!
     const w = G.boarded[0], n = Math.max(1, Math.ceil(G.departT)), s = `${crewName(G, w)} GOT IN!`;
@@ -3129,18 +3171,33 @@ function drawHUD(G) {
   if (G.mode === 'tt') {   // the clock
     panel(124, 3, 72, 22); txt(fmtT(G.ttT || 0), 160, 11, 9, G.state === 'run' ? CREAM : '#ffd23a');
     txt(G.ttBest != null ? 'BEST ' + fmtT(G.ttBest) : 'NO BEST YET', 160, 20.5, 4, '#8f86a0');
-  } else drawScores(G, 3, 3, G.P);
+  } else if (G.cams.length > 2) { ctx.save(); ctx.translate(160, 0); ctx.scale(0.74, 0.74); ctx.translate(-160, 0); drawScores(G, 3, 3, G.P); ctx.restore(); }   // (smaller: it sits over two quarters)
+  else drawScores(G, 3, 3, G.P);
   if (G.state === 'run') {   // (it fades in once GO! has cleared the spot)
     const a = G.demo ? 1 : clamp((G.stateT - 0.5) * 4, 0, 1);
-    if (a > 0) { ctx.globalAlpha = a; drawProgress(G, 70, G.mode === 'tt' ? 32 : 38, 180); ctx.globalAlpha = 1; }
+    if (a > 0) { ctx.globalAlpha = a; drawProgress(G, 70, G.mode === 'tt' ? 32 : G.cams.length > 2 ? 88 : 38, 180); ctx.globalAlpha = 1; }
   }
-  if (!split) {
+  if (G.cams.length > 2) {   // four quarters: each player's item sits in the outer corner of their own quarter
+    const at = [[3, 69], [283, 69], [3, 160], [283, 160]];
+    G.P.forEach((p, i) => { if (p.human && at[i]) drawMine(G, p, at[i][0] - (at[i][0] > 200 && !p.item ? 30 : 0), at[i][1]); });
+    G.P.forEach((p, i) => {   // whose quarter is whose: a tab in their colour on the outer top corner
+      const vp = CAM_LAYOUT[4].vp[i]; if (!vp) return;
+      const lab = p.human ? `P${i + 1}` : 'CPU', w = p.human ? 13 : 17, x = i % 2 ? vp.x + vp.w - w - 2 : vp.x + 2, y = vp.y + 2;
+      rr(x - 1, y - 1, w + 2, 9, INK); rr(x, y, w, 7, p.human ? CREW[i].col : '#6a6478'); txt(lab, x + w / 2, y + 4, 4, INK, { outline: false, bold: true });
+    });
+  } else if (!split) {
     if (humans[0]) drawMine(G, humans[0], 3, 148);
   } else { drawMine(G, G.P[0], 3, 148); drawMine(G, G.P[1], 283 - (G.P[1].item ? 0 : 30), 148); }
   // first-round reminder of the controls
   if (!G.demo && G.round === 0 && (G.state === 'ready' || (G.state === 'run' && G.stateT < 4))) {
     const a = G.state === 'ready' ? 1 : clamp(4 - G.stateT, 0, 1); ctx.globalAlpha = a;
-    if (G.mode === '2p') { txt('P1: HOLD W / E TO LEAN, LET GO TO HOP, R ITEM', 160, 132, 5, CREAM); txt('P2: HOLD I / O TO LEAN, LET GO TO HOP, P ITEM', 160, 140, 5, CREAM); }
+    if (G.mode === '2p' && G.cams.length > 2) G.P.forEach((p, i) => {   // four quarters: each player's keys in their own quarter
+      const vp = CAM_LAYOUT[4].vp[i], L = p.human && vp && ctrlLines(i); if (!L) return;
+      const cx = vp.x + vp.w / 2, y = vp.y + vp.h - 22;
+      L.forEach((s, j) => txt(s, cx, y + j * 7, fitSize(s, 5, vp.w - 10), j ? '#ffd23a' : CREAM, { drop: 1 }));
+    });
+    else if (G.mode === '2p') { const hs = G.P.filter(p => p.human); hs.forEach((p, j) => txt(`P${p.i + 1}: ${ctrlText(p.i)}`, 160, 132 - (hs.length - 2) * 8 + j * 8, 5, j < 2 ? CREAM : CREW[p.i].col)); }
+    else if (G.padUsed) { txt('HOLD LB / RB (OR THE D-PAD) TO LEAN, LET GO TO HOP', 160, 132, 6, CREAM); txt('A USES YOUR ITEM', 160, 141, 6, CREAM); }
     else { txt(G.touch ? 'HOLD LEFT / RIGHT SIDE TO LEAN, LET GO TO HOP' : 'HOLD W / E TO LEAN, LET GO TO HOP', 160, 132, 6, CREAM); txt(G.touch ? 'TAP THE MIDDLE TO USE AN ITEM' : 'R USES YOUR ITEM', 160, 141, 6, CREAM); }
     ctx.globalAlpha = 1;
   }
@@ -3148,7 +3205,7 @@ function drawHUD(G) {
 }
 
 const MENU_ITEMS = [
-  { id: 'cpu', label: '1 PLAYER' }, { id: '2p', label: '2 PLAYERS' }, { id: 'cvc', label: 'CPU VS CPU' }, { id: 'tt', label: 'TIME TRIAL' },
+  { id: 'cpu', label: '1 PLAYER' }, { id: '2p', label: '2-4 PLAYERS' }, { id: 'cvc', label: 'CPU VS CPU' }, { id: 'tt', label: 'TIME TRIAL' },
   { id: 'customize', label: 'CUSTOMIZE' }, { id: 'how', label: 'HOW TO PLAY' }, { id: 'switch', label: 'ALL GAMES' },
 ];
 const MENU_X = 14, MENU_W = 104, MENU_Y0 = 54, MENU_DY = 12, MENU_H = 10;
@@ -3184,8 +3241,9 @@ const HELP = [
   ['QUICK TAP = LITTLE HOP. LONG HOLD = BIG HOP.', '#ffd23a'],
   ['YOUR GUN AIMS ITSELF AT WHOEVER IS CLOSEST.', '#ff8a7a'],
   ['', ''],
-  ['P1: W / E LEAN   R ITEM', '#ff8a8f'],
-  ['P2: I / O LEAN   P ITEM', '#8ab8ff'],
+  ['P1: W / E LEAN, R ITEM      P2: I / O LEAN, P ITEM', '#ff8a8f'],
+  ['P3: V / B LEAN, N ITEM      P4: LEFT / RIGHT, UP ITEM', '#8ab8ff'],
+  ['GAMEPAD: LB / RB OR D-PAD LEAN, A ITEM, START PAUSE', '#c9bfd6'],
   ['TOUCH: HOLD LEFT / RIGHT, TAP THE MIDDLE', '#c9bfd6'],
   ['', ''],
   ['GRAB GLOWING ITEMS. SHOOT PEOPLE OFF STUFF.', '#7fe39a'],
@@ -3195,7 +3253,75 @@ const HELP = [
 ];
 function drawHelp() {
   panel(28, 8, 264, 164, 0.92); txt('HOW TO PLAY', 160, 18, 9, '#ffd23a');
-  HELP.forEach(([s, c], i) => { if (s) txt(s, 160, 31 + i * 8.6, 5, c); });
+  HELP.forEach(([s, c], i) => { if (s) txt(s, 160, 30 + i * 8, 5, c); });
+}
+// ---- the character pick: who you play as (a meme, a random one, or a plain floppy guy)
+const CLASSIC_LOOK = { skin: '#e2ad84', hair: '#231812', style: 'short' };
+const PICK_PREV = {};
+function pickPreview(slot, id, t) {   // a stand-in dude for the pick screen: the slot's team colours + the look it picked
+  if (id === 'random') id = SET.memes === 'on' ? MEME_LOOKS[(Math.floor(t * 5) + slot * 3) % MEME_LOOKS.length].name : 'classic';   // (RANDOM flicks through the crew)
+  const key = slot + ':' + id;
+  if (!PICK_PREV[key]) { const m = MEME_LOOKS.find(q => q.name === id); PICK_PREV[key] = { T: CREW[slot].T, look: m ? { ...m, num: m.teacher ? 13 : [7, 23, 11, 4][slot] } : { ...CLASSIC_LOOK, num: slot + 1 }, spr: null }; }
+  return PICK_PREV[key];
+}
+function drawPose(o, x, y, k, t) {   // a dude standing, swaying a little (the pick screen's preview)
+  const sp = dudeSprites(o), hip = HIP_H * PPM, sh = SHOULDER_H * PPM, al = BODY.armLen * PPM, sw = Math.sin(t * 2.4);
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(k, k);
+  limb(sp.armB, -1, -sh, -3 - sw, -sh + al);
+  drawSpr(sp.legB, -1, -hip, 0.06); drawSpr(sp.leg, 1, -hip, -0.05);
+  ctx.save(); ctx.translate(0, -hip); ctx.rotate(sw * 0.03);
+  drawSpr(sp.torso, 0, -BODY.torsoH * PPM / 2); drawSpr(sp.head, 0, -(HEAD_C - HIP_H) * PPM, sw * 0.08);
+  ctx.restore();
+  limb(sp.arm, 1, -sh, 3 + sw, -sh + al);
+  ctx.restore();
+}
+const pickCard = o => ({ x: 14 + (o % 6) * 49, y: 22 + Math.floor(o / 6) * 40, w: 45, h: 36 });
+const PICK_GO = { x: 254, y: 166, w: 58, h: 11 }, PICK_BACK = { x: 8, y: 166, w: 44, h: 11 };
+const SRC_NAME = { kA: 'W E / R', kB: 'I O / P', kC: 'V B / N', kD: 'ARROWS' };
+function frame(x, y, w, h, col) { rr(x, y, w, 1, col); rr(x, y + h - 1, w, 1, col); rr(x, y, 1, h, col); rr(x + w - 1, y, 1, h, col); }
+function drawPick(G) {
+  const k = G.pk, t = G.t, party = k.mode === '2p';
+  ctx.fillStyle = 'rgba(11,13,20,0.8)'; ctx.fillRect(0, 0, ART_W, ART_H);
+  txt('PICK YOUR CHARACTER', 160, 11, 9, ORANGE, { bold: true });
+  const D = { drop: 1 }, DB = { drop: 1, bold: true };
+  CHAR_OPTS.forEach((id, o) => {
+    const r = pickCard(o), on = k.sel.slice(0, k.n).includes(o);
+    rr(r.x - 1, r.y - 1, r.w + 2, r.h + 2, INK); rr(r.x, r.y, r.w, r.h, on ? '#2c3456' : '#1b2031'); rr(r.x, r.y + r.h - 9, r.w, 9, on ? '#222a48' : '#151929');
+    if (id === 'random') txt('?', r.x + r.w / 2, r.y + 13, 16, '#ffd23a', { bold: true });
+    else headIcon(pickPreview(0, id, 0), r.x + r.w / 2, r.y + 14, 2.2);
+    txt(id.toUpperCase(), r.x + r.w / 2, r.y + r.h - 5, 4, on ? CREAM : '#8f98b6', D);
+  });
+  for (let i = k.n - 1; i >= 0; i--) {   // everyone's cursor: a frame in their colour (nested when two share RANDOM or CLASSIC)
+    const r = pickCard(k.sel[i]), col = CREW[i].col, d = i;
+    frame(r.x - 2 + d, r.y - 2 + d, r.w + 4 - d * 2, r.h + 4 - d * 2, col);
+    if (k.ready[i]) frame(r.x - 3 + d, r.y - 3 + d, r.w + 6 - d * 2, r.h + 6 - d * 2, col);
+    if (party) { rr(r.x + 1 + i * 11, r.y - 6, 11, 6, col); txt(`P${i + 1}`, r.x + 6.5 + i * 11, r.y - 2.5, 4, INK, { outline: false }); }
+  }
+  const ns = party ? 4 : 1;
+  for (let i = 0; i < ns; i++) {
+    const w = party ? 74 : 150, x = party ? 6 + i * 78 : 85, y = 104, h = 58, on = i < k.n;
+    panel(x, y, w, h, 0.92); rr(x, y, w, 2, on ? CREW[i].col : '#3a3446');
+    if (!on) {
+      txt(`P${i + 1}`, x + w / 2, y + 15, 8, '#4d4860', { bold: true });
+      if (i === k.n) { const ways = [!('kC' in k.bind) && 'V / B / N', !('kD' in k.bind) && 'AN ARROW KEY', 'A GAMEPAD'].filter(Boolean);
+        txt('TO JOIN PRESS', x + w / 2, y + 27, 4, '#8f86a0', D); ways.forEach((wy, j) => txt((j ? 'OR ' : '') + wy, x + w / 2, y + 35 + j * 7, 4, j ? '#c9bfd6' : CREAM, D)); }
+      continue;
+    }
+    const id = CHAR_OPTS[k.sel[i]];
+    drawPose(pickPreview(i, id, t), x + (party ? 15 : 34), y + h - 4, party ? 1.2 : 1.35, t + i * 1.7);
+    const tx = party ? x + 46 : x + 96;
+    if (party) txt(`P${i + 1}`, tx, y + 9, 6, CREW[i].col, { bold: true });
+    txt(id === 'random' ? 'RANDOM' : id.toUpperCase(), tx, y + (party ? 20 : 15), party ? 6 : 8, CREAM, DB);
+    const srcs = party ? Object.keys(k.bind).filter(src => k.bind[src] === i).map(src => SRC_NAME[src] || 'GAMEPAD') : [];
+    if (party) txt(srcs.join(' + ') || '-', tx, y + 30, 4, '#8f86a0', D);
+    else { txt('W / E OR ARROWS: PICK', tx, y + 28, 4, '#8f86a0', D); txt('R, SPACE OR ENTER: GO', tx, y + 35, 4, '#8f86a0', D); }
+    if (k.ready[i]) { rr(tx - 15, y + 39, 30, 9, GREEN); txt('READY', tx, y + 44, 5, INK, { bold: true, outline: false }); }
+    else if (party) { const rk = Object.keys(k.bind).filter(src => k.bind[src] === i).map(src => SRC_KEYS[src] ? SRC_KEYS[src][1] : 'A')[0] || 'ITEM';
+      txt(`PRESS ${rk}`, tx, y + 41, 5, (t * 2 | 0) % 2 ? '#ffd23a' : '#c9a52a', DB); txt('WHEN READY', tx, y + 48, 4, '#8f86a0', D); }
+  }
+  rr(PICK_BACK.x - 1, PICK_BACK.y - 1, PICK_BACK.w + 2, PICK_BACK.h + 2, INK); rr(PICK_BACK.x, PICK_BACK.y, PICK_BACK.w, PICK_BACK.h, '#2a2534'); txt('ESC BACK', PICK_BACK.x + PICK_BACK.w / 2, PICK_BACK.y + 6, 4, '#c9bfd6', D);
+  rr(PICK_GO.x - 1, PICK_GO.y - 1, PICK_GO.w + 2, PICK_GO.h + 2, INK); rr(PICK_GO.x, PICK_GO.y, PICK_GO.w, PICK_GO.h, '#2f9a4a'); txt('ENTER: GO!', PICK_GO.x + PICK_GO.w / 2, PICK_GO.y + 6, 5, CREAM, DB);
+  if (party) txt(k.n < 4 ? 'BACKSPACE: DROP THE LAST ONE' : 'LEAN KEYS PICK, ITEM KEY READY', 160, 172, 4, '#8a83a0', D);
 }
 const OVER_BTN_VS = [{ id: 'again', label: 'REMATCH', x: 92 }, { id: 'menu', label: 'MENU', x: 172 }];
 const OVER_BTN_TT = [{ id: 'again', label: 'RETRY', x: 74, w: 52 }, { id: 'next', label: 'NEXT MAP', x: 134, w: 52 }, { id: 'menu', label: 'MENU', x: 194, w: 52 }];   // (three across, inside the 188-wide panel)
@@ -3240,14 +3366,13 @@ function render(G) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, cv.width, cv.height);
   ctx.setTransform(S, 0, 0, S, OX, OY); ctx.imageSmoothingEnabled = false;
-  if (G.cams.length > 1) {
-    const vps = [{ x: 0, y: 0, w: ART_W / 2 - 1, h: ART_H }, { x: ART_W / 2 + 1, y: 0, w: ART_W / 2 - 1, h: ART_H }];
-    G.cams.forEach((c, i) => { drawView(G, c, vps[i], SPLIT_Z * (c.z || 1)); drawHurt(c.p, vps[i]); drawGoalArrow(G, c, vps[i], SPLIT_Z * (c.z || 1)); });
-    rr(ART_W / 2 - 1, 0, 2, ART_H, INK);
-  } else { const vp = { x: 0, y: 0, w: ART_W, h: ART_H }; const z = G.cams[0].z || 1; drawView(G, G.cams[0], vp, z); drawHurt(G.cams[0].p, vp); drawGoalArrow(G, G.cams[0], vp, z); }
+  for (const c of G.cams) { const vp = c.vp || CAM_LAYOUT[1].vp[0], z = (c.zb || 1) * (c.z || 1); drawView(G, c, vp, z); drawHurt(c.p, vp); drawGoalArrow(G, c, vp, z); }
+  if (G.cams.length > 1) rr(ART_W / 2 - 1, 0, 2, ART_H, INK);
+  if (G.cams.length > 2) rr(0, ART_H / 2 - 1, ART_W, 2, INK);
   ctx.setTransform(S, 0, 0, S, OX, OY);
   if (G.screen === 'title') drawTitle(G);
   else if (G.screen === 'how') drawHelp();
+  else if (G.screen === 'pick') drawPick(G);
   else if (!G.nohud) { drawHUD(G); drawOver(G); if (G.paused) drawPause(); }   // (nohud: the test harness wants the bare picture)
   if (SET.muted) txt('MUTED', 312, 174, 5, '#8a8496', { align: 'right' });
   // letterbox bars stay clean
@@ -3260,20 +3385,87 @@ function render(G) {
 const G = new Game();
 G.sfx.setMuted(!!SET.muted); G.menuOpen = false; G.overSel = 0; G.sel = 0; G.touch = false;
 function goTitle() { G.screen = 'title'; G.paused = false; letGo(); G.newMatch('cvc', true); }
-function startMode(mode) { G.screen = 'play'; G.overSel = 0; letGo(); G.newMatch(mode, false); cv.focus(); }
+function startMode(mode) {
+  if (mode === '2p' && !G.bind) G.bind = { kA: 0, kB: 1 };   // (a harness or a rematch can start 2 player straight away)
+  G.screen = 'play'; G.overSel = 0; letGo(); G.newMatch(mode, false); cv.focus();
+}
 function menuPick(i) {
   const m = MENU_ITEMS[i]; if (!m) return; G.sfx.click();
   if (m.id === 'customize') openMenu();
   else if (m.id === 'how') G.screen = 'how';
   else if (m.id === 'switch') location.href = 'index.html';
-  else startMode(m.id);
+  else if (m.id === 'cvc') startMode('cvc');
+  else openPick(m.id);
+}
+// ---- the character pick screen. Keys come in four sets (W E / R, I O / P, V B / N, the arrows) and every gamepad is its own set;
+// in 2-4 PLAYERS a set that isn't playing yet joins as the next player when it's pressed (P1 and P2 start joined)
+const SRC_OF = { KeyW: ['kA', 'L'], KeyE: ['kA', 'R'], KeyR: ['kA', 'F'], KeyI: ['kB', 'L'], KeyO: ['kB', 'R'], KeyP: ['kB', 'F'],
+  KeyV: ['kC', 'L'], KeyB: ['kC', 'R'], KeyN: ['kC', 'F'], ArrowLeft: ['kD', 'L'], ArrowRight: ['kD', 'R'], ArrowUp: ['kD', 'F'] };
+const SRC_KEYS = { kA: ['W / E', 'R'], kB: ['I / O', 'P'], kC: ['V / B', 'N'], kD: ['LEFT / RIGHT', 'UP'] };
+function ctrlText(i) {   // how player i plays, for the first-round reminder
+  const srcs = Object.keys(G.bind || { kA: 0, kB: 1 }).filter(q => (G.bind || { kA: 0, kB: 1 })[q] === i);
+  if (srcs.some(q => q[0] === 'p')) return 'GAMEPAD: LB / RB TO LEAN, LET GO TO HOP, A ITEM';
+  const k = SRC_KEYS[srcs[0]]; return k ? `HOLD ${k[0]} TO LEAN, LET GO TO HOP, ${k[1]} ITEM` : '';
+}
+function ctrlLines(i) {   // the same, on two short lines (for a quarter of the screen)
+  const srcs = Object.keys(G.bind || { kA: 0, kB: 1 }).filter(q => (G.bind || { kA: 0, kB: 1 })[q] === i);
+  if (srcs.some(q => q[0] === 'p')) return ['HOLD LB / RB TO LEAN', 'LET GO TO HOP, A ITEM'];
+  const k = SRC_KEYS[srcs[0]]; return k ? [`HOLD ${k[0]} TO LEAN`, `LET GO TO HOP, ${k[1]} ITEM`] : null;
+}
+function openPick(mode) {
+  const party = mode === '2p', lp = party && G.lastParty;
+  G.pk = { mode, n: party ? (lp ? lp.n : 2) : 1, sel: SET.chars.map(c => Math.max(0, CHAR_OPTS.indexOf(c))), ready: [0, 0, 0, 0],
+    bind: party ? (lp ? { ...lp.bind } : { kA: 0, kB: 1 }) : {}, touched: new Set() };
+  for (let i = 1; i < G.pk.n; i++) pickFix(i);
+  G.screen = 'pick'; letGo();
+}
+const isMeme = o => o > 0 && o < CHAR_OPTS.length - 1;
+const pickTaken = (i, o) => isMeme(o) && G.pk.sel.some((q, j) => j !== i && j < G.pk.n && q === o);   // (two players can't be the same meme guy)
+function pickStep(i, dir) { const L = CHAR_OPTS.length; let o = G.pk.sel[i]; do { o = (o + dir + L) % L; } while (pickTaken(i, o)); G.pk.sel[i] = o; G.sfx.tick(0.6); }
+function pickFix(i) { if (pickTaken(i, G.pk.sel[i])) pickStep(i, 1); }
+function pickGo() {
+  const k = G.pk; G.sfx.click();
+  SET.chars = SET.chars.map((c, i) => i < k.n ? CHAR_OPTS[k.sel[i]] : c); saveSettings(SET);
+  if (k.mode === '2p') { G.nh = k.n; G.bind = { ...k.bind }; G.lastParty = { n: k.n, bind: { ...k.bind } }; }
+  startMode(k.mode);
+}
+function pickInput(src, act) {
+  const k = G.pk;
+  if (k.mode !== '2p') { if (act === 'F') pickGo(); else pickStep(0, act === 'L' ? -1 : 1); return; }
+  if (!(src in k.bind)) {
+    if (src[0] === 'p') {   // a gamepad takes over a player nobody has touched a key for yet, or else joins as the next one
+      const free = [0, 1, 2, 3].slice(0, k.n).find(i => !Object.keys(k.bind).some(q => k.bind[q] === i && (q[0] === 'p' || k.touched.has(q))));
+      if (free != null) { k.bind[src] = free; k.touched.add(src); G.sfx.tick(0.9); return; }
+    }
+    if (k.n >= 4) return;
+    k.bind[src] = k.n; k.touched.add(src); k.ready[k.n] = 0; k.n++; pickFix(k.n - 1); G.sfx.tick(1.1); return;
+  }
+  k.touched.add(src);
+  const i = k.bind[src];
+  if (act === 'F') { k.ready[i] = k.ready[i] ? 0 : 1; G.sfx.tick(k.ready[i] ? 1.2 : 0.7); if (k.ready.slice(0, k.n).every(Boolean)) pickGo(); }
+  else if (!k.ready[i]) pickStep(i, act === 'L' ? -1 : 1);
+}
+function pickKey(code) {
+  const k = G.pk;
+  if (code === 'Escape') { G.screen = 'title'; G.sfx.click(); return; }
+  if (code === 'Enter') { pickGo(); return; }
+  if (code === 'Backspace' && k.mode === '2p') { if (k.n > 2) { k.n--; for (const q of Object.keys(k.bind)) if (k.bind[q] === k.n) delete k.bind[q]; k.ready[k.n] = 0; G.sfx.click(); } return; }
+  const sv = SRC_OF[code] || (code === 'Space' ? ['kD', 'F'] : null);
+  if (sv) pickInput(sv[0], sv[1]);
+}
+function pickClick(q) {
+  const k = G.pk;
+  if (hitRect(q, PICK_GO)) { pickGo(); return; }
+  if (hitRect(q, PICK_BACK)) { G.screen = 'title'; G.sfx.click(); return; }
+  CHAR_OPTS.forEach((id, o) => { if (!hitRect(q, pickCard(o))) return; if (k.sel[0] === o && k.mode !== '2p') pickGo(); else if (!pickTaken(0, o)) { k.sel[0] = o; G.sfx.tick(0.8); } });
 }
 function overPick(i) { if (G.overT <= OVER_HOLD) return; G.sfx.click(); const id = overBtns()[i].id; if (id === 'again') startMode(G.mode); else if (id === 'next') { G.ttIdx = (G.ttIdx || 0) + 1; startMode('tt'); } else goTitle(); }
 function keyFor(code) {
-  const k = { KeyW: [0, 'L'], KeyE: [0, 'R'], KeyR: [0, 'F'], KeyI: [1, 'L'], KeyO: [1, 'R'], KeyP: [1, 'F'] }[code];
-  if (k) return k;
-  if (G.mode === 'cpu' || G.mode === 'tt') return { ArrowLeft: [0, 'L'], ArrowRight: [0, 'R'], ArrowUp: [0, 'F'], Space: [0, 'F'] }[code] || null;
-  return null;
+  const sv = SRC_OF[code] || (code === 'Space' ? ['kD', 'F'] : null);
+  if (!sv) return null;
+  if (G.mode === 'cpu' || G.mode === 'tt') return sv[0] === 'kA' || sv[0] === 'kD' ? [0, sv[1]] : null;   // (one player: W E R or the arrows + space)
+  const slot = (G.bind || { kA: 0, kB: 1 })[sv[0]];
+  return slot == null ? null : [slot, sv[1]];
 }
 const held = new Map();
 function hold(side, act, tk, down) {
@@ -3297,9 +3489,10 @@ addEventListener('keydown', e => {
     if (e.code === 'ArrowUp' || e.code === 'KeyW') { G.sel = (G.sel + MENU_ITEMS.length - 1) % MENU_ITEMS.length; G.sfx.tick(0.6); }
     else if (e.code === 'ArrowDown' || e.code === 'KeyS') { G.sel = (G.sel + 1) % MENU_ITEMS.length; G.sfx.tick(0.6); }
     else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') menuPick(G.sel);
-    else if (e.code === 'Digit1') startMode('cpu'); else if (e.code === 'Digit2') startMode('2p');
+    else if (e.code === 'Digit1') openPick('cpu'); else if (e.code === 'Digit2') openPick('2p');
     return;
   }
+  if (G.screen === 'pick') { pickKey(e.code); return; }
   if (G.paused) { if (e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space') togglePause(); else if (e.code === 'KeyQ') goTitle(); return; }
   if (G.state === 'over') {
     if (G.overT <= OVER_HOLD) return;
@@ -3309,7 +3502,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'Escape') { togglePause(); return; }
-  const k = keyFor(e.code); if (k) hold(k[0], k[1], e.code, true);
+  const k = keyFor(e.code); if (k) { G.padUsed = false; hold(k[0], k[1], e.code, true); }
 });
 addEventListener('keyup', e => { const k = keyFor(e.code); if (k) hold(k[0], k[1], e.code, false); else if (held.has(e.code)) { const [s, a] = held.get(e.code); hold(s, a, e.code, false); } });
 addEventListener('blur', () => { letGo(); if (inRace() && !G.paused) togglePause(); });
@@ -3326,6 +3519,7 @@ cv.addEventListener('pointerdown', e => {
   const q = artXY(e);
   if (G.screen === 'how') { G.screen = 'title'; return; }
   if (G.screen === 'title') { MENU_ITEMS.forEach((m, i) => { if (hitRect(q, menuRect(i))) { G.sel = i; menuPick(i); } }); return; }
+  if (G.screen === 'pick') { pickClick(q); return; }
   if (G.paused) { togglePause(); return; }
   if (G.state === 'over') { overBtns().forEach((b, i) => { if (hitRect(q, { x: b.x, y: 132, w: b.w || 56, h: 20 })) { G.overSel = i; overPick(i); } }); return; }
   if (G.touch && q.x > 296 && q.y < 20) { togglePause(); return; }
@@ -3364,8 +3558,53 @@ menuEl.addEventListener('pointerdown', e => { if (e.target === menuEl) closeMenu
 
 // ================================================================= loop
 let last = performance.now(), acc = 0, broke = false;
+// ---- gamepads (standard mapping): LB / RB, the triggers, the d-pad or the stick lean; A or Y uses your item; START pauses.
+// In the menus the d-pad / stick moves, A picks, B goes back.
+const PADS = {};
+function pollPads() {
+  const list = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const gp of list) {
+    if (!gp || !gp.connected) continue;
+    const b = i => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5)), ax = i => gp.axes[i] || 0;
+    const now = { L: b(4) || b(6) || b(14) || ax(0) < -0.5, R: b(5) || b(7) || b(15) || ax(0) > 0.5, F: b(0) || b(3), U: b(12) || ax(1) < -0.5, D: b(13) || ax(1) > 0.5,
+      A: b(0), B: b(1), S: b(9), K: b(8) };
+    const was = PADS[gp.index] || {}; PADS[gp.index] = now;
+    for (const key of Object.keys(now)) if (now[key] !== !!was[key]) padEdge(gp.index, key, now[key]);
+  }
+}
+function padEdge(idx, key, down) {
+  const src = 'p' + idx;
+  if (down) { G.padUsed = true; G.sfx.init(); }
+  if (G.menuOpen) { if (down && (key === 'B' || key === 'S')) closeMenu(); return; }
+  if (G.screen === 'how') { if (down) G.screen = 'title'; return; }
+  if (G.screen === 'title') {
+    if (!down) return;
+    if (key === 'U' || key === 'D') { G.sel = (G.sel + (key === 'U' ? MENU_ITEMS.length - 1 : 1)) % MENU_ITEMS.length; G.sfx.tick(0.6); }
+    else if (key === 'A' || key === 'S') menuPick(G.sel);
+    return;
+  }
+  if (G.screen === 'pick') {
+    if (!down) return;
+    if (key === 'S') pickGo();
+    else if (key === 'B') { const i = G.pk.bind[src]; if (i != null && G.pk.ready[i]) G.pk.ready[i] = 0; else { G.screen = 'title'; G.sfx.click(); } }
+    else if (key === 'L' || key === 'R' || key === 'F') pickInput(src, key);
+    return;
+  }
+  if (G.paused) { if (!down) return; if (key === 'S' || key === 'A') togglePause(); else if (key === 'B' || key === 'K') goTitle(); return; }
+  if (G.state === 'over') {
+    if (!down || G.overT <= OVER_HOLD) return;
+    if (key === 'L' || key === 'R') { const n = overBtns().length; G.overSel = (G.overSel + (key === 'L' ? n - 1 : 1)) % n; G.sfx.tick(0.6); }
+    else if (key === 'A' || key === 'S') overPick(G.overSel); else if (key === 'B') goTitle();
+    return;
+  }
+  if (key === 'S') { if (down) togglePause(); return; }
+  if (key !== 'L' && key !== 'R' && key !== 'F') return;
+  const slot = G.mode === 'cpu' || G.mode === 'tt' ? 0 : G.bind ? G.bind[src] : null;
+  if (slot != null) hold(slot, key, 'pad' + idx + key, down);
+}
 function loop(now) {
   try {
+    pollPads();
     const rdt = Math.min(0.05, (now - last) / 1000); last = now; acc += rdt;
     let n = 0;
     while (acc >= STEP && n < 5) { G.sel = G.sel || 0; if (G.state === 'over') G.overT += STEP; if (!G.paused && !G.menuOpen && !G.freeze) G.step(STEP); acc -= STEP; n++; }   // (G.freeze: the ?debug harnesses step the sim themselves)
@@ -3379,7 +3618,7 @@ function loop(now) {
 goTitle();
 if (/[?&]debug\b/.test(location.search)) {
   window.floppy = G; window.floppySET = SET;
-  window.floppyFn = { startMode, goTitle, hold, keyFor, openMenu, closeMenu, overPick, overBtns, render: () => render(G) };
+  window.floppyFn = { startMode, goTitle, hold, keyFor, openPick, pickKey, pickGo, padEdge, openMenu, closeMenu, overPick, overBtns, render: () => render(G) };
   window.floppyStep = n => { for (let i = 0; i < n; i++) { if (G.state === 'over') G.overT += STEP; G.step(STEP); } render(G); };
 }
 requestAnimationFrame(loop);
