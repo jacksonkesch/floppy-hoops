@@ -20,8 +20,8 @@
 </style>
 </head>
 <body>
-<canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley or Boxing. Floppy Snipers and Floppy Getaway are under construction. Arrows to choose, Enter to play."></canvas>
-<nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a> Floppy Snipers and Floppy Getaway: under construction, coming soon.</nav>
+<canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley, Boxing or Getaway. Floppy Snipers is under construction. Arrows to choose, Enter to play."></canvas>
+<nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a> <a href="getaway.html">Play Floppy Getaway</a> Floppy Snipers: under construction, coming soon.</nav>
 <script src="net.js"></script>
 <script>
 (() => {
@@ -63,6 +63,36 @@ if (window.claude && window.claude.use) {
 const canOpen = gm => !gm.wip || (dev && !gm.soon);
 let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null, online = 0, frame = null;
 try { sel = Math.max(0, GAMES.findIndex(g => g.id === localStorage.getItem('floppy-last-game'))); } catch (e) { /* storage unavailable */ }
+// The update alert: shown once per browser the first time someone opens the picker after a new game comes out.
+// (If storage is off it shows once per visit.) Enter plays the new game, Esc or LATER closes it.
+const NEWS_KEY = 'floppy-news-getaway-v1', NEWS_GAME = GAMES.findIndex(g => g.id === 'getaway');
+const NEWS_PLAY = { x: 168, y: 198, w: 114, h: 24 }, NEWS_LATER = { x: 298, y: 198, w: 114, h: 24 };
+let news = null;
+try { if (localStorage.getItem(NEWS_KEY) !== '1') { news = { t: 0 }; localStorage.setItem(NEWS_KEY, '1'); } } catch (e) { news = { t: 0 }; }
+if (news) sel = NEWS_GAME;
+const inBox = (b, x, y) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+function closeNews(play) { news = null; if (play) go(NEWS_GAME); }
+function drawNews() {
+  const k = Math.min(1, news.t * 5), pop = Math.round((1 - k) * 18);
+  ctx.globalAlpha = 0.82 * k; R(0, 0, ART_W, ART_H, '#07080d'); ctx.globalAlpha = k;
+  const x = 120, y = 46 + pop, w = 340, h = 202;
+  R(x - 3, y - 3, w + 6, h + 6, INK); R(x - 2, y - 2, w + 4, h + 4, ORANGE); R(x, y, w, h, '#1b2031'); R(x, y + h - 4, w, 4, '#12151f');
+  R(x + 8, y + 8, 72, 16, '#ffd23a'); R(x + 9, y + 9, 70, 14, '#2a2410');
+  txt('NEW UPDATE', x + 44, y + 16, 7, '#ffd23a', true);
+  txt('FLOPPY GETAWAY IS OUT!', ART_W / 2, y + 36, 14, '#43f07a', true);
+  R(226, y + 46, 128, 68, INK); getawayScene(230, y + 50, 1.4);
+  txt('HOP, FLOP AND SHOOT YOUR WAY TO THE GETAWAY RIDE', ART_W / 2, y + 126, 7, CREAM);
+  txt('PICK YOUR MEME  -  UP TO 4 PLAYERS  -  GAMEPADS WORK', ART_W / 2, y + 140, 7, '#9fb0d8');
+  const btn = (b, label, col, edge, on) => {
+    const by = b.y + pop + (on ? Math.round(Math.sin(t * 6)) : 0);
+    R(b.x - 2, by - 2, b.w + 4, b.h + 4, INK); R(b.x, by, b.w, b.h, col); R(b.x, by + b.h - 3, b.w, 3, edge);
+    txt(label, b.x + b.w / 2, by + b.h / 2 - 1, 9, on ? CREAM : '#c9d2ea', true);
+  };
+  btn(NEWS_PLAY, 'PLAY NOW', ORANGE, '#c4621a', true);
+  btn(NEWS_LATER, 'LATER', '#2a3048', '#1a1f30', false);
+  txt('ENTER TO PLAY  -  ESC TO CLOSE', ART_W / 2, y + h - 10, 6, '#59627d');
+  ctx.globalAlpha = 1;
+}
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(cv.clientWidth * DPR); cv.height = Math.round(cv.clientHeight * DPR);
@@ -263,6 +293,7 @@ function draw() {
     const tag = !gm.wip ? gm.tag : canOpen(gm) ? 'DEV PREVIEW' : 'COMING SOON';
     txt(tag, x + CARD.w / 2, y + 92, 8, gm.wip ? (on ? '#ffd23a' : '#8a7a3a') : on ? ORANGE : '#59627d');
   });
+  if (news) drawNews();
   if (toast) {
     const a = Math.min(1, toast.t * 6, (1.6 - toast.t) * 4);
     ctx.globalAlpha = Math.max(0, a);
@@ -321,6 +352,7 @@ function loop(now) {
   if (frame) return;   // a game has the screen; it restarts us when it closes
   const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
   if (going) going.t += dt;
+  if (news) news.t += dt;
   if (toast && (toast.t += dt) > 1.6) toast = null;
   draw(); requestAnimationFrame(loop);
 }
@@ -328,6 +360,10 @@ window.addEventListener('resize', resize);
 window.addEventListener('keydown', e => {
   if (frame) return;
   const c = e.code;
+  if (news) {
+    if (c === 'Enter' || c === 'Space') closeNews(true); else if (c === 'Escape' || c === 'Backspace') closeNews(false);
+    e.preventDefault(); return;
+  }
   // left/right step through the cards; up/down hop to the nearest card in the other row
   const hopRow = up => {
     const row = GAMES.map((g, i) => i).filter(i => up ? CARD.y[i] < CARD.y[sel] : CARD.y[i] > CARD.y[sel]);
@@ -343,8 +379,9 @@ function cardAt(e) {
   const r = cv.getBoundingClientRect(), x = ((e.clientX - r.left) * DPR - OX) / S, y = ((e.clientY - r.top) * DPR - OY) / S;
   return CARD.x.findIndex((cx, i) => x >= cx - 2 && x <= cx + CARD.w + 2 && y >= CARD.y[i] - 4 && y <= CARD.y[i] + CARD.h + 2);
 }
-cv.addEventListener('pointermove', e => { const i = cardAt(e); if (i >= 0) sel = i; cv.style.cursor = i >= 0 ? 'pointer' : ''; });
-cv.addEventListener('pointerdown', e => { const i = cardAt(e); if (i >= 0) go(i); });
+function artXY(e) { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) * DPR - OX) / S, ((e.clientY - r.top) * DPR - OY) / S]; }
+cv.addEventListener('pointermove', e => { if (news) { const [x, y] = artXY(e); cv.style.cursor = inBox(NEWS_PLAY, x, y) || inBox(NEWS_LATER, x, y) ? 'pointer' : ''; return; } const i = cardAt(e); if (i >= 0) sel = i; cv.style.cursor = i >= 0 ? 'pointer' : ''; });
+cv.addEventListener('pointerdown', e => { if (news) { const [x, y] = artXY(e); if (news.t > 0.25) closeNews(inBox(NEWS_PLAY, x, y)); return; } const i = cardAt(e); if (i >= 0) go(i); });
 resize(); cv.focus();
 requestAnimationFrame(loop);
 })();
