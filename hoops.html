@@ -136,27 +136,7 @@
   #touchhint { position: fixed; left: 0; right: 0; bottom: 64px; display: none; justify-content: space-around; pointer-events: none; z-index: 4; font: 13px Silkscreen, "Courier New", monospace; color: #fff6e0; text-shadow: 0 2px 0 #141019; }
   body.touch #touchhint:not(:empty) { display: flex; }
   #touchhint span { background: rgba(20, 16, 25, 0.55); padding: 6px 10px; border-radius: 6px; }
-  #online[hidden] { display: none; }
-  #online { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; background: rgba(8, 10, 18, 0.72); overflow: auto; font-family: Silkscreen, "Courier New", monospace; }
-  #online .panel { width: min(560px, 100%); }
-  #online .row .lbl { min-width: 110px; }
-  #online button { font: inherit; font-size: 13px; line-height: 1.2; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; box-shadow: 0 3px 0 #141019; padding: 7px 10px; cursor: pointer; }
-  #online button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
-  #online button:disabled { opacity: 0.4; cursor: default; }
   #menu .seg button:disabled { opacity: 0.45; cursor: default; }
-  #online button:focus-visible, #online input:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
-  #online button:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
-  #online .go { background: #43f07a; color: #141019; font-size: 17px; padding: 9px 20px; }
-  #online input { box-sizing: border-box; width: 6.2em; font: inherit; font-size: 20px; letter-spacing: 0.2em; text-transform: uppercase; color: #fff6e0; background: #0f1220; border: 2px solid #141019; box-shadow: inset 0 0 0 2px #2b3350; padding: 6px 10px; }
-  #online .code { margin: -6px 0 6px; font-size: 44px; font-weight: 700; letter-spacing: 0.15em; color: #fff6e0; text-shadow: 0 4px 0 #141019; }
-  #online .count { color: #43f07a; }
-  #online .err { margin: 0 0 12px; font-size: 13px; color: #ff6a4d; }
-  #online .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 4px; }
-  #online .team h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: #ff6a6e; }
-  #online .team.t1 h3 { color: #6aa0ff; }
-  #online .seat { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 4px; padding: 7px 8px; font-size: 12px; color: #c8cfe3; background: #262b3d; border: 2px solid #141019; }
-  #online .seat.me { background: #ff8a2a; color: #141019; }
-  #online .seat.open { color: #59627d; background: transparent; border: 2px dashed #2b3350; }
 </style>
 </head>
 <body>
@@ -211,10 +191,8 @@
     <button type="button" id="reel-exit">BACK TO MENU</button>
   </div>
 </div>
-<div id="online" hidden role="dialog" aria-labelledby="online-title"><div class="panel" id="online-body"></div></div>
 <script src="planck.min.js"></script>
 <script src="clips.js"></script>
-<script src="net.js"></script>
 <script>
 (() => {
 'use strict';
@@ -396,6 +374,7 @@ const EVENT_LIST = [
   { id: 'sprinkler', name: 'SPRINKLER', court: 'park', isNew: true, when: 'PARK: THE JET SHOVES YOU' },
   { id: 'lion', name: 'LION RUN', court: 'rome', isNew: true, when: 'ROME: JUMP IT OR GET BOWLED' },
   { id: 'dragon', name: 'DRAGON FIRE', court: 'castle', isNew: true, when: 'CASTLE: JUMP THE FIRE' },
+  { id: 'crew', name: 'REPAIR CREW', court: 'gym', isNew: true, when: 'ANY COURT: THEY REBUILD A WRECKED HOOP' },
 ];
 const SPRING_AIM = 0.4, SPRING_W = 3.6, SPRING_BUF = 0.2;
 const CLASSIC_ROUND = { court: 'gym', ball: null, body: null, hoop: null, phys: null, obst: null };
@@ -408,7 +387,6 @@ const TOURNEY = [
 const MENU_ITEMS = [
   { id: 'vscpu', label: 'VS CPU', sub: [{ id: 'cpu', label: '1 PLAYER VS CPU' }, { id: 'tour', label: 'CPU TOURNAMENT' }] },
   { id: 'local', label: 'SAME KEYBOARD', sub: [{ id: '2p', label: '1 V 1' }, { id: '4p', label: '2 V 2' }, { id: '6p', label: '3 V 3' }] },
-  { id: 'online', label: 'PLAY ONLINE' },
   { id: 'cvc', label: 'CPU VS CPU' },
   { id: 'modes', label: 'SETTINGS' },
   { id: 'reels', label: 'PREVIEWS' },
@@ -5622,11 +5600,10 @@ class Game {
       this.sfx.grab(); return;
     }
     if (id === 'cpu' || id === '2p' || id === '4p' || id === '6p' || id === 'cvc') { this.settings.mode = id; saveSettings(this.settings); this.startGame(); }
-    else if (id === 'online') openOnline();
     else if (id === 'tour') this.startTournament();
     else if (id === 'modes') openMenu('match');
     else if (id === 'reels') this.startShowcase('dunk');
-    else if (id === 'switch') { if (window.FloppyNet) FloppyNet.home(); else location.href = 'index.html'; }
+    else if (id === 'switch') location.href = 'index.html';
   }
   // ------------------------------------------------ CPU tournament: three matches in a row, harder each time
   startTournament() {
@@ -5736,6 +5713,9 @@ class Game {
     } else if (e.id === 'sprinkler') {
       E.x = -0.6; E.dir = 1; at(red[0], -4.5); at(red[1], -0.1); at(blue[0], 3.6); at(blue[1], 5.6); this.grab(red[1], 0, b);
       Sh.hops = [[3.2, 0, 1]]; Sh.dur = 6.4;
+    } else if (e.id === 'crew') {   // no court event: the right hoop comes down and the left glass breaks, then the crew shows up
+      this.ev = null; at(red[0], -4.5); at(red[1], -1.5); at(blue[0], 1.5); at(blue[1], 4.5);
+      Sh.wreck = 0.8; Sh.dur = 6.6;
     } else if (e.id === 'lion') {
       E.dir = 1; at(red[0], -4.2); at(red[1], -1.2); at(blue[0], 2.6); at(blue[1], 5.4); this.grab(red[1], 0, b);
       Sh.hops = [[1 + 1 + (2.6 + 9.5) / 10 - 0.28, 1, 0], [1 + 1 + (5.4 + 9.5) / 10 - 0.28, 1, 1]]; Sh.dur = 5.6;
@@ -5752,6 +5732,10 @@ class Game {
       if (p && !p.fallen) { for (const q of p.parts) q.setLinearVelocity({ x: h[3] || 0, y: this.cfg.jumpV * 1.05 }); p.body.setAngularVelocity(-p.angle() * 4); const hp = p.head.getPosition(); this.popup('DODGED!', hp.x, hp.y + 1.2, GREEN, 8, 1); }
     }
     if (E && E.hit.length > Sh.hits) { Sh.hits = E.hit.length; this.slowmo(0.4, 0.7); }
+    if (Sh.wreck && Sh.t > Sh.wreck) {
+      Sh.wreck = 0; this.hoops[1].collapseAt = this.time + 0.05; this.addShake(8);
+      this.hoops[0].shatter(this.time); this.sfx.glass();
+    }
     // the meteor scene ends with somebody hopping out of the crater, higher than a normal jump
     if (Sh.crater && this.crater !== null && Sh.t > 4.6 && !Sh.hopped) {
       Sh.hopped = true; const p = this.players.find(q => q.team === 1 && q.slot === 1); this.placeAt(p, this.crater);
@@ -6409,7 +6393,8 @@ class Game {
   crewStep(h, dt) {
     const C = h.crew;
     if (!C) {
-      if (this.state !== 'play') return;   // (a crew already at work keeps going through a score; a new one only comes out in play)
+      // (a crew already at work keeps going through a score; a new one only comes out in play, or in its preview)
+      if (this.state === 'showcase' ? this.show.kind !== 'event' : this.state !== 'play' || !this.eventOn('crew')) return;
       if (h.landed ? this.time - h.landAt > 0.6 : h.shattered && !h.falling && !h.collapseAt && this.time - h.shatterAt > 0.9) {
         const who = MEME_LOOKS.map((m, i) => i).sort(() => vrand(-1, 1)).slice(0, 3);   // the crew is three of the meme guys in hard hats
         h.crew = { t: 0, fall0: h.fall || 0, who };
@@ -6606,7 +6591,7 @@ class Game {
         else { b.body.setTransform({ x: b.spawnX, y: 5.8 + Math.sin(this.time * 4) * 0.05 }, 0); b.body.setLinearVelocity({ x: 0, y: 0 }); }
       } else if (this.cfg.wind && !b.holder && !b.green) b.body.applyForceToCenter({ x: b.body.getMass() * this.cfg.wind * this.windCur, y: 0 }, true);
     }
-    if (this.state === 'play' || this.state === 'scored') for (const h of this.hoops) this.crewStep(h, dt);
+    if (this.state === 'play' || this.state === 'scored' || (this.state === 'showcase' && this.show.kind === 'event')) for (const h of this.hoops) this.crewStep(h, dt);
     if (this.state === 'play' && this.pstats && !this.isShadow) for (const p of this.players) { const ps = this.pstats[p.id]; ps.d += Math.abs(p.x - this.hoops[p.team === 0 ? 0 : 1].cx); ps.n++; }
     for (const h of this.hoops) h.preStep(this.time, dt);
     this.world.step(dt, 8, 3);
@@ -7475,7 +7460,6 @@ function drawTitle(G) {
   artRect(6, 6, 118, 1, '#2b3350'); artRect(6, 173, 118, 1, '#2b3350'); artRect(6, 6, 1, 168, '#2b3350'); artRect(123, 6, 1, 168, '#2b3350');
   wobblyWord('FLOPPY', 65, 22, 16, ORANGE, '#7a2d0c', t);
   wobblyWord('HOOPS', 65, 41, 16, CREAM, '#6b5f49', t);
-  if (G.onlineCount > 0) txt(`${G.onlineCount} ONLINE`, AX(222), AY(12), 8, GREEN, { ow: 0.8 });
   menuRows(G).forEach((it, i) => {
     const y = MENU_Y0 + i * MENU_DY, sel = i === G.menuSel, x0 = it.child ? MENU_X + 8 : MENU_X, w = it.child ? MENU_W - 8 : MENU_W;
     artRect(x0 - 1, y - 1, w + 2, MENU_H + 2, INK);
@@ -7922,152 +7906,11 @@ try {
 } catch (e) { /* live reload is optional */ }
 resize();
 window.addEventListener('resize', resize);
-// ---------------------------------------------------------------- PLAY ONLINE: the room screen (net.js does the talking)
-const onlineEl = document.getElementById('online'), onlineBody = document.getElementById('online-body');
-const ON = { size: 1, max: 2, code: '', err: '', shape: '', live: false };
-const netSvc = window.FloppyNet ? FloppyNet.connect() : null;
-const countText = n => n > 0 ? `${n} ${n === 1 ? 'PERSON' : 'PEOPLE'} ONLINE NOW` : '';
-if (netSvc) {
-  G.onlineCount = netSvc.count;
-  netSvc.onCount = n => { G.onlineCount = n; renderOnline(); };
-}
-const vol = x => `<span data-v>${x}</span>`;   // text that changes while the screen is up (patched in place)
-// how many people the room takes: 2 up to every spot on the court (empty spots are played by teammates)
-const maxSeg = (cur, size, off) => `<div class="seg">${[2, 3, 4, 5, 6].filter(m => m <= size * 2).map(m => `<button type="button" id="on-max-${m}" aria-pressed="${cur === m}"${off && off(m) ? ' disabled' : ''}>${m}</button>`).join('')}</div>`;
-const sizeSeg = (cur, off) => `<div class="seg">${[1, 2, 3].map(k => `<button type="button" id="on-size-${k}" aria-pressed="${cur === k}"${off && off(k) ? ' disabled' : ''}>${k} V ${k}</button>`).join('')}</div>`;
-function seatsHtml(v) {
-  let h = '<div class="teams">';
-  for (let t = 0; t < 2; t++) {
-    h += `<div class="team t${t}"><h3>${t ? 'BLUE' : 'RED'}</h3>`;
-    for (let i = t; i < v.max; i += 2) {
-      const s = v.seats[i];
-      if (!s) { h += '<div class="seat open"><span>OPEN</span></div>'; continue; }
-      const link = s.host ? 'HOST' : !s.up ? 'CONNECTING' : `${s.ms} MS${s.up === 1 ? ' (RELAY)' : ''}`;
-      h += `<div class="seat${s.me ? ' me' : ''}"><span>${s.me ? 'YOU' : 'PLAYER ' + (i + 1)}</span>${vol(link)}</div>`;
-    }
-    h += '</div>';
-  }
-  return h + '</div>';
-}
-function onlineHtml() {
-  const T = G.net, v = T && T.view();
-  if (!v || v.phase === 'closed') return `<h2 id="online-title">PLAY ONLINE</h2>
-<p class="note count">${vol(countText(G.onlineCount))}</p>
-${ON.err ? `<p class="err" role="alert">${ON.err}</p>` : ''}
-<div class="row"><span class="lbl">TEAMS</span>${sizeSeg(ON.size)}</div>
-<div class="row"><span class="lbl">PEOPLE</span>${maxSeg(ON.max, ON.size)}</div>
-<div class="row"><span class="lbl">NEW ROOM</span><button type="button" class="go" id="on-create">CREATE ROOM</button></div>
-<p class="note">You get a 4-letter code. Your friends open this same link, pick PLAY ONLINE and type it in. The room plays your SETTINGS and MODES.</p>
-<div class="row"><span class="lbl">HAVE A CODE?</span><input id="on-code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Room code" placeholder="ABCD" value="${ON.code}"><button type="button" id="on-join">JOIN</button></div>
-<div class="foot"><button type="button" id="on-back">BACK</button><span class="hint">ONE KEY EACH: HOLD TO JUMP, LET GO TO SHOOT</span></div>`;
-  if (v.phase === 'joining') return `<h2 id="online-title">${v.isHost ? 'OPENING A ROOM' : 'JOINING ' + v.code}</h2>
-<p class="note">One moment...</p>
-<div class="foot"><button type="button" id="on-leave">CANCEL</button></div>`;
-  const n = v.seats.length;
-  if (v.phase === 'lobby') return `<h2 id="online-title">ROOM CODE</h2>
-<p class="code">${v.code}</p>
-<p class="note">${v.isHost ? 'Send this code to your friends. They open Floppy Hoops, pick PLAY ONLINE and type it in.' : 'You\'re in. The host starts the match.'}</p>
-<div class="row"><span class="lbl">TEAMS</span>${v.isHost ? sizeSeg(v.size, k => k * 2 < n) : `<span>${v.size} V ${v.size}</span>`}</div>
-<div class="row"><span class="lbl">PEOPLE</span>${v.isHost ? maxSeg(v.max, v.size, m => m < n) : `<span>${v.max}</span>`}</div>
-${seatsHtml(v)}
-${v.max < v.size * 2 ? '<p class="note">Not enough people for every spot? You also play the empty spots on your team.</p>' : ''}
-<div class="foot">${v.isHost ? `<button type="button" class="go" id="on-start"${v.canStart ? '' : ' disabled'}>START</button>` : ''}<button type="button" id="on-leave">LEAVE</button><span class="hint">${!v.isHost ? 'WAITING FOR THE HOST' : n < 2 ? 'WAITING FOR PLAYERS' : v.canStart ? n + ' PLAYERS READY' : 'CONNECTING EVERYONE...'}</span></div>`;
-  return `<h2 id="online-title">ONLINE MATCH</h2>
-<p class="note">ROOM ${v.code} / PING ${vol(T.ping() + ' MS')}</p>
-${seatsHtml(v)}
-<p class="note">The match keeps going while this is open.</p>
-<div class="foot"><button type="button" class="go" id="on-resume">BACK TO THE GAME</button><button type="button" id="on-sound" aria-pressed="${!G.sfx.muted}">SOUND ${G.sfx.muted ? 'OFF' : 'ON'}</button><button type="button" id="on-leave">LEAVE MATCH</button></div>`;
-}
-const LIVE_VAL = /<span data-v>(.*?)<\/span>/g;
-function renderOnline() {
-  if (onlineEl.hidden) return;
-  const h = onlineHtml(), shape = h.replace(LIVE_VAL, '<span data-v></span>');
-  if (shape === ON.shape) {   // same screen, new numbers: patch them so a click in progress isn't lost
-    const vals = [...h.matchAll(LIVE_VAL)].map(m => m[1]);
-    onlineBody.querySelectorAll('[data-v]').forEach((el, i) => { if (el.textContent !== vals[i]) el.textContent = vals[i]; });
-    return;
-  }
-  const a = document.activeElement, keep = a && onlineBody.contains(a) ? a.id : '';
-  ON.shape = shape; onlineBody.innerHTML = h;
-  let f = keep && document.getElementById(keep);
-  if (!f || f.disabled) f = onlineBody.querySelector('.go:not(:disabled)') || onlineBody.querySelector('button:not(:disabled)');
-  if (f) f.focus({ preventScroll: true });
-}
-function openOnline() {
-  G.sfx.init();
-  if (G.online) G.releaseAll();
-  onlineEl.hidden = false; G.menuOpen = true; ON.shape = ''; renderOnline();
-}
-function closeOnline() { onlineEl.hidden = true; G.menuOpen = false; cv.focus(); }
-function onlineEsc() {
-  const T = G.net;
-  if (!T) closeOnline();
-  else if (T.live) closeOnline();
-  else if (T.phase === 'joining') G.netQuit();
-}
-function onlineGo(host) {
-  if (G.net) return;
-  if (!netSvc) { ON.err = 'ONLINE PLAY NEEDS THE INTERNET'; return; }
-  if (!host && ON.code.length !== 4) { ON.err = 'TYPE THE 4-LETTER ROOM CODE'; return; }
-  ON.err = ''; ON.live = false;
-  const T = G.net = new FloppyNet.Session(netSvc, {
-    game: 'hoops', host, size: ON.size, max: ON.max, code: host ? '' : ON.code,
-    onChange() {
-      if (G.net !== T) return;
-      if (T.live && !ON.live) { ON.live = true; closeOnline(); } else renderOnline();
-    },
-    onEnd(err) {
-      if (G.net !== T) return;
-      ON.err = err; ON.live = false; G.netEnded();
-      if (err) openOnline(); else renderOnline();
-    },
-    onDesync: x => G.netDesync(x),
-  });
-  T.start();
-}
-function onlineBegin() {   // host: everyone starts the same match on the same tick, with the host's settings
-  const T = G.net; if (!T || !T.isHost || !T.canStart()) return;
-  const n = T.seats.length, s = G.settings;
-  T.begin({ c: 'start', seed: newSeed(), seats: n, set: { modes: s.modes, always: s.always, dunks: s.dunks, target: s.target, winBy2: s.winBy2, teamSize: Math.max(T.size, Math.ceil(n / 2)) } });
-}
-onlineBody.addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b || b.disabled) return;
-  G.sfx.init();
-  const id = b.id, T = G.net;
-  if (id.startsWith('on-size-')) {
-    const k = +id.slice(8);
-    if (T && T.isHost && T.phase === 'lobby') { T.size = k; T.max = Math.max(T.seats.length, Math.min(T.max, k * 2)); T.pubInfo(); }
-    else { ON.size = k; ON.max = Math.min(ON.max, k * 2); }
-  } else if (id.startsWith('on-max-')) {
-    const m = +id.slice(7);
-    if (T && T.isHost && T.phase === 'lobby') { T.max = m; T.pubInfo(); } else ON.max = m;
-  } else if (id === 'on-create') onlineGo(true);
-  else if (id === 'on-join') onlineGo(false);
-  else if (id === 'on-back' || id === 'on-resume') { closeOnline(); return; }
-  else if (id === 'on-leave') { ON.err = ''; G.netQuit(); }
-  else if (id === 'on-start') onlineBegin();
-  else if (id === 'on-sound') G.sfx.setMuted(!G.sfx.muted);
-  renderOnline();
-});
-onlineBody.addEventListener('input', e => {
-  if (e.target.id !== 'on-code') return;
-  const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
-  if (e.target.value !== v) e.target.value = v;
-  ON.code = v;
-});
-onlineBody.addEventListener('keydown', e => { if (e.target.id === 'on-code' && e.key === 'Enter') { e.preventDefault(); onlineGo(false); renderOnline(); } });
 const KEYS = new Set(['KeyW', 'ArrowUp', ...Object.keys(FOUR_KEYS), ...Object.keys(SIX_KEYS)]);
 // Q, C, M (and B, P with six) are player keys only in a 4 / 6 PLAYERS match (everywhere else Q is the menu and M mutes)
 const playKey = code => code === 'KeyW' || code === 'ArrowUp' || (G.four && code in (G.keyMap || FOUR_KEYS));
 window.addEventListener('keydown', e => {
-  if (!onlineEl.hidden) { if (e.code === 'Escape') onlineEsc(); return; }
   if (G.menuOpen) { if (e.code === 'Escape') closeMenu(); return; }
-  if (G.online) {   // online every key but Esc is your player's one key
-    if (e.code === 'Escape') { openOnline(); return; }
-    if (e.ctrlKey || e.metaKey || e.altKey || e.code === 'Tab' || /^F\d/.test(e.code)) return;
-    e.preventDefault(); if (!e.repeat) G.humanKey(e.code, true);
-    return;
-  }
   const code = e.code;
   if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'Space') e.preventDefault();
   // (in a 4 / 6 PLAYERS match M is a player's key the whole match, between rounds and in the replay too)
@@ -8166,7 +8009,7 @@ touchBar.addEventListener('click', e => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   } else if (a === 'pause') { if (G.state === 'play' || G.state === 'scored' || G.paused) { G.paused = !G.paused; if (G.paused) G.releaseAll(); } }
-  else if (a === 'menu') { if (G.online) openOnline(); else { G.paused = false; G.toTitle(); } }
+  else if (a === 'menu') { G.paused = false; G.toTitle(); }
   cv.focus();
 });
 setInterval(() => {

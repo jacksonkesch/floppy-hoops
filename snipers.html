@@ -1200,7 +1200,7 @@ class Game {
   decide() {
     const alive = this.P.filter(p => !p.out);
     if (alive.length !== 1) { this.decideTie(); return; }
-    const w = alive[0]; w.score++; this.pointWin = w.side;
+    const w = alive[0]; w.score++; w.scorePop = 1; this.pointWin = w.side;
     this.popup(w.name + ' +1', 0, 4.6, w.T.light, POINT_T, 1.2);
     this.sfx.jingle(w.side);
     if (w.score >= SET.target) { this.winner = w.side; this.overT = 0; }
@@ -1230,20 +1230,26 @@ const AX = x => ART_W / 2 + (x - CAMX) * PPM + SHX, AY = y => GROUND_PY - (y - C
 const pxOf = v => Math.max(2, Math.round(v * PPM));
 function artXY(e) { const r = cv.getBoundingClientRect(); return { x: ((e.clientX - r.left) * DPR - OX) / S, y: ((e.clientY - r.top) * DPR - OY) / S }; }
 function txt(str, x, y, size, col, opt = {}) {
-  ctx.font = `${opt.bold === false ? 400 : 700} ${size}px Silkscreen, "Courier New", monospace`;
+  ctx.font = `${opt.bold ? 700 : 400} ${Math.max(5, Math.round(size))}px Silkscreen, "Courier New", monospace`;
   ctx.textAlign = opt.align || 'center'; ctx.textBaseline = 'middle';
-  if (opt.outline !== false) { ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, size * 0.32); ctx.strokeStyle = opt.ink || INK; ctx.strokeText(str, x, y); }
+  if (opt.outline !== false) {
+    const o = Math.max(0.5, opt.ow == null ? 1 : opt.ow), ink = opt.ink || (typeof opt.outline === 'string' ? opt.outline : INK);
+    ctx.fillStyle = ink; if (opt.drop !== 0) ctx.fillText(str, x, y + o * (opt.drop == null ? 2 : opt.drop));
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) ctx.fillText(str, x + dx * o, y + dy * o);
+  }
   ctx.fillStyle = col; ctx.fillText(str, x, y);
 }
-function fitSize(str, size, maxW) { ctx.font = `700 ${size}px Silkscreen, monospace`; const w = ctx.measureText(str).width; return w > maxW ? size * maxW / w : size; }
+function fitSize(str, size, maxW) { ctx.font = `400 ${size}px Silkscreen, monospace`; const w = ctx.measureText(str).width; return w > maxW ? size * maxW / w : size; }
 function wobblyWord(w, cx, y, size, col, deep, t) {
-  ctx.font = `700 ${size}px Silkscreen, monospace`;
-  const ws = [...w].map(ch => ctx.measureText(ch).width), tot = ws.reduce((a, b) => a + b, 0);
+  ctx.font = `400 ${size}px Silkscreen, monospace`;
+  const ws = [...w].map(ch => ctx.measureText(ch).width + 1), tot = ws.reduce((a, b) => a + b, 0);
   let x = cx - tot / 2;
   [...w].forEach((ch, i) => {
     const yy = y + Math.sin(t * 3 + i * 0.7) * 2, r = Math.sin(t * 2.3 + i) * 0.08;
     ctx.save(); ctx.translate(x + ws[i] / 2, yy); ctx.rotate(r);
-    txt(ch, 0, 2, size, deep, { outline: false }); txt(ch, 0, 0, size, col);
+    // (the bold face melts W and A into blocks at this size, so: regular face, struck twice, over a deep drop)
+    txt(ch, 0, 3, size, deep, { outline: false }); txt(ch, 1, 3, size, deep, { outline: false });
+    txt(ch, 0, 0, size, col, { ow: 1 }); txt(ch, 1, 0, size, col, { outline: false });
     ctx.restore(); x += ws[i];
   });
 }
@@ -1508,17 +1514,15 @@ function drawWeather(G) {
 }
 function drawHUD(G) {
   const [a, b] = G.P, n = SET.target;
-  for (const p of [a, b]) {
-    const left = p.side === 0, x = left ? 6 : ART_W - 6;
-    txt(p.name, x, 8, 8, p.T.light, { align: left ? 'left' : 'right' });
-    const pw = Math.min(8, 110 / n);
-    for (let i = 0; i < n; i++) {
-      const px = left ? x + i * pw : x - (i + 1) * pw + 2;
-      rr(px - 1, 15, pw - 1, 6, INK); rr(px, 16, pw - 3, 4, i < p.score ? p.T.jersey : '#3a3446'); if (i < p.score) rr(px, 16, pw - 3, 1, p.T.light);
-    }
-  }
-  txt('ROUND ' + G.round, ART_W / 2, 8, 6, CREAM);
-  if (G.knockK > 1) txt('SUDDEN DEATH', ART_W / 2, 17, 6, Math.sin(G.t * 8) > 0 ? '#ff5050' : CREAM);
+  [a, b].forEach((p, k) => {
+    const w = 22, x = k ? 163 : 135, pop = p.scorePop > 0 ? p.scorePop : 0;
+    rr(x - 1, 3, w + 2, 17, INK); rr(x, 4, w, 15, p.T.jersey); rr(x, 17, w, 2, p.T.dark);
+    txt(String(p.score), x + w / 2, 11.5 - pop * 2, 12 + pop * 4, '#ffffff', { bold: true });
+    txt(p.name, k ? x + w + 1 : x - 1, 25, Math.min(6, fitSize(p.name, 6, 40)), p.T.light, { ow: 0.8, align: k ? 'right' : 'left' });
+  });
+  rr(158, 11, 4, 2, CREAM);
+  if (G.state !== 'over') txt('ROUND ' + G.round + '  /  FIRST TO ' + n, ART_W / 2, 36, 7, CREAM, { ow: 0.7 });
+  if (G.knockK > 1) txt('SUDDEN DEATH', ART_W / 2, 45, 7, Math.sin(G.t * 8) > 0 ? '#ff5050' : CREAM);
   if (G.banner) {
     const t = G.banner.t, k = t < 0.25 ? smooth(t / 0.25) : t > 2.2 ? 1 - smooth((t - 2.2) / 0.4) : 1;
     ctx.globalAlpha = k;
@@ -1529,6 +1533,7 @@ function drawHUD(G) {
     ctx.globalAlpha = 1;
   }
   if (G.state === 'ready' && G.stateT > 0.3) txt('READY...', ART_W / 2, 84, 9, CREAM);
+  for (const p of G.P) if (p.scorePop > 0) p.scorePop = Math.max(0, p.scorePop - 1 / 30);
   for (const q of G.pops) {
     const k = q.t / q.life, a = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1, pop = 1 + Math.max(0, 0.4 - q.t * 2);
     ctx.globalAlpha = a; txt(q.text, AX(q.x), AY(q.y), Math.round(8 * q.size * pop), q.col); ctx.globalAlpha = 1;
@@ -1559,23 +1564,32 @@ function drawWorld(G) {
 // ---- screens
 const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER' }, { id: '2p', label: '2 PLAYERS' }, { id: 'cvc', label: 'CPU VS CPU' },
-  { id: 'customize', label: 'CUSTOMIZE' }, { id: 'how', label: 'HOW TO PLAY' }, { id: 'switch', label: 'ALL GAMES' },
+  { id: 'customize', label: 'CUSTOMIZE' }, { id: 'how', label: 'HOW TO PLAY' }, { id: 'switch', label: 'SWITCH GAME' },
 ];
-const MENU_Y0 = 62, MENU_DY = 13;
-function menuRect(i) { return { x: 14, y: MENU_Y0 + i * MENU_DY - 6, w: 102, h: 12 }; }
-function panel(x, y, w, h, a = 0.82) { rr(x - 1, y - 1, w + 2, h + 2, INK); ctx.fillStyle = `rgba(20,16,25,${a})`; ctx.fillRect(x, y, w, h); rr(x, y, w, 1, '#3a3446'); }
+const MENU_Y0 = 54, MENU_DY = 12;
+function menuRect(i) { return { x: 14, y: MENU_Y0 + i * MENU_DY, w: 104, h: 10 }; }
+function panel(x, y, w, h, a = 0.86) { ctx.fillStyle = `rgba(12,14,24,${a})`; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); rr(x, y, w, 1, '#2b3350'); rr(x, y + h - 1, w, 1, '#2b3350'); rr(x, y, 1, h, '#2b3350'); rr(x + w - 1, y, 1, h, '#2b3350'); }
 function drawTitle(G) {
+  if (G.menuOpen) { ctx.fillStyle = 'rgba(8,10,18,0.5)'; ctx.fillRect(-10, -10, ART_W + 20, ART_H + 20); return; }
+  const t = G.t;
   panel(6, 6, 118, 168);
-  wobblyWord('FLOPPY', 65, 24, 16, CREAM, '#d93a3f', G.t);
-  wobblyWord('SNIPERS', 65, 42, 15, ORANGE, '#2f6bd8', G.t + 1);
+  wobblyWord('FLOPPY', 65, 22, 16, ORANGE, '#7a2d0c', t);
+  wobblyWord('SNIPERS', 65, 41, 14, CREAM, '#6b5f49', t);
   MENU_ITEMS.forEach((m, i) => {
-    const r = menuRect(i), on = G.menuSel === i;
-    if (on) { rr(r.x, r.y, r.w, r.h, '#2f6bd8'); rr(r.x, r.y, 2, r.h, ORANGE); }
-    txt(m.label, r.x + r.w / 2, r.y + r.h / 2 + 0.5, 7, on ? CREAM : '#c9bfd6', { outline: false });
+    const r = menuRect(i), sel = G.menuSel === i;
+    rr(r.x - 1, r.y - 1, r.w + 2, r.h + 2, INK); rr(r.x, r.y, r.w, r.h, sel ? ORANGE : '#262b3d');
+    if (sel) {
+      rr(r.x, r.y + r.h - 2, r.w, 2, '#c4621a');
+      const nudge = Math.round(Math.sin(t * 8));
+      for (let k = 0; k < 3; k++) { rr(r.x + 3 + nudge, r.y + 2 + k, 1 + k, 1, INK); rr(r.x + 3 + nudge, r.y + 6 - k, 1 + k, 1, INK); }
+    }
+    txt(m.label, r.x + r.w / 2 + 2, r.y + r.h / 2 + 0.5, 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
-  txt('RED  W JUMP  E SHOOT', 65, 148, 5, '#ff8173', { outline: false });
-  txt('BLUE  I JUMP  O SHOOT', 65, 156, 5, '#86b2ff', { outline: false });
-  txt('HOLD SHOOT TO AIM, LET GO TO FIRE', 65, 166, 4, '#9a90aa', { outline: false });
+  txt('RED: W HOP  E SHOOT', 65, 136, 6, '#ff8173', { ow: 0.7 });
+  txt('BLUE: I HOP  O SHOOT', 65, 145, 6, '#86b2ff', { ow: 0.7 });
+  txt('HOLD SHOOT TO AIM', 65, 154, 6, '#b9c3dd', { ow: 0.7 });
+  txt('ARROWS OR W/S + ENTER', 65, 166, fitSize('ARROWS OR W/S + ENTER', 8, 108), '#7d88a8', { ow: 0.6 });
+  txt('NOW PLAYING', 222, 163, 8, CREAM, { ow: 0.8 }); txt(G.M.name, 222, 172, 8, ORANGE, { ow: 0.8 });
 }
 const HELP = [
   ['KNOCK THE OTHER SNIPER', CREAM], ['OFF THE ROOF.', CREAM], ['', 0],
@@ -1592,22 +1606,23 @@ function drawHelp(G) {
 }
 const OVER_BTN = [{ id: 'again', label: 'REMATCH', x: 92 }, { id: 'menu', label: 'MENU', x: 172 }];
 function drawOver(G) {
-  const w = G.P[G.winner];
-  panel(70, 52, 180, 108, 0.86);
-  wobblyWord(w.name, 160, 74, fitSize(w.name, 16, 160), w.T.light, w.T.dark, G.t);
-  txt('WINS!', 160, 94, 12, CREAM);
-  txt(G.P[0].score + ' - ' + G.P[1].score, 160, 112, 9, '#ffd27a');
+  const w = G.P[G.winner], k = clamp(G.overT / 0.6, 0, 1), pop = 1 + Math.max(0, 0.4 - G.overT) * 1.5;
+  ctx.fillStyle = `rgba(8,10,18,${0.62 * k})`; ctx.fillRect(-10, -10, ART_W + 20, ART_H + 20);
+  const title = w.name === 'YOU' ? 'YOU WIN!' : `${w.name} WINS!`;
+  txt(title, 160, 52, fitSize(title, 24, 290) * pop, w.T.light, { ow: 1.4 });
+  txt(`${G.P[0].score}  -  ${G.P[1].score}`, 160, 80, 16, CREAM);
+  txt(G.P[0].name, 112, 80, fitSize(G.P[0].name, 8, 60), G.P[0].T.light, { ow: 0.8 }); txt(G.P[1].name, 208, 80, fitSize(G.P[1].name, 8, 60), G.P[1].T.light, { ow: 0.8 });
   if (G.overT > OVER_HOLD) OVER_BTN.forEach((b, i) => {
     const on = G.overSel === i;
-    rr(b.x - 1, 139, 58, 22, INK); rr(b.x, 140, 56, 20, on ? '#2f6bd8' : '#3a3446'); if (on) rr(b.x, 140, 56, 1, ORANGE);
-    txt(b.label, b.x + 28, 150.5, 7, CREAM, { outline: false });
+    rr(b.x - 1, 139, 58, 22, INK); rr(b.x, 140, 56, 20, on ? ORANGE : '#262b3d'); if (on) rr(b.x, 158, 56, 2, '#c4621a');
+    txt(b.label, b.x + 28, 150.5, 8, on ? INK : CREAM, on ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
 }
 function drawPause() {
   ctx.fillStyle = 'rgba(8,10,18,0.6)'; ctx.fillRect(-10, -10, ART_W + 20, ART_H + 20);
-  txt('PAUSED', 160, 74, 16, CREAM);
-  txt('P OR ESC TO KEEP GOING', 160, 96, 6, '#c9bfd6');
-  txt('Q TO QUIT TO MENU', 160, 106, 6, '#c9bfd6');
+  txt('PAUSED', 160, 80, 24, CREAM);
+  txt('PRESS P TO KEEP PLAYING', 160, 104, 8, ORANGE);
+  txt('Q FOR MAIN MENU', 160, 116, 8, '#b9c3dd');
 }
 function render(G) {
   resize();
@@ -1621,7 +1636,9 @@ function render(G) {
     if (G.state === 'over' && G.winner >= 0) drawOver(G);
     if (G.paused) drawPause();
   }
-  if (G.sfx.muted) txt('MUTED', ART_W - 6, ART_H - 6, 5, '#9a90aa', { align: 'right', outline: false });
+  const sy = G.screen === 'title' ? 8 : 172;
+  if (G.sfx.muted) txt('SOUND OFF  (M)', 316, sy, 8, '#7d88a8', { align: 'right', ow: 0.6 });
+  else if (!G.sfx.running && Math.sin(performance.now() / 250) > -0.4) txt('CLICK FOR SOUND', 316, sy, 8, ORANGE, { align: 'right', ow: 0.6 });
 }
 
 // ---------------------------------------------------------------- input + screens

@@ -3,9 +3,9 @@
 // cache, so an upload shows up on the next load), with the saved copy as backup; the big unchanging files
 // (sounds, physics) come straight from the cache. build.sh stamps VERSION with a
 // hash of the site files, so every upload replaces the old cache.
-const VERSION = 'adf393164d';
+const VERSION = 'aaa9326979';
 const CACHE = 'floppy-' + VERSION, FONTS = 'floppy-fonts';
-const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'snipers.html', 'getaway.html', 'clips.js', 'net.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CORE = ['./', 'index.html', 'hoops.html', 'pong.html', 'soccer.html', 'volley.html', 'boxing.html', 'snipers.html', 'getaway.html', 'clips.js', 'planck.min.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -29,7 +29,7 @@ self.addEventListener('fetch', e => {
   }
   if (url.origin !== location.origin) return;
   if (req.mode === 'navigate' || /(\.html|\/|net\.js)$/.test(url.pathname)) {
-    // pages (and the online code they share): fresh from the network when it answers within 3 s, otherwise the saved copy
+    // pages: fresh from the network when it answers within 3 s, otherwise the saved copy
     e.respondWith(new Promise(resolve => {
       let done = false;
       const fallback = () => fromCache(req).then(hit => { if (!done && hit) { done = true; resolve(hit); } });

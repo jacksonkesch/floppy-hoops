@@ -22,7 +22,6 @@
 <body>
 <canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley, Boxing or Getaway. Floppy Snipers is under construction. Arrows to choose, Enter to play."></canvas>
 <nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a> <a href="getaway.html">Play Floppy Getaway</a> Floppy Snipers: under construction, coming soon.</nav>
-<script src="net.js"></script>
 <script>
 (() => {
 'use strict';
@@ -61,7 +60,7 @@ if (window.claude && window.claude.use) {
   }).catch(() => {});
 }
 const canOpen = gm => !gm.wip || (dev && !gm.soon);
-let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null, online = 0, frame = null;
+let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null, frame = null;
 try { sel = Math.max(0, GAMES.findIndex(g => g.id === localStorage.getItem('floppy-last-game'))); } catch (e) { /* storage unavailable */ }
 // The update alert: shown once per browser the first time someone opens the picker after a new game comes out.
 // (If storage is off it shows once per visit.) Enter plays the new game, Esc or LATER closes it.
@@ -280,7 +279,6 @@ function draw() {
   R(0, 0, ART_W, ART_H, '#161a29');
   for (let i = 0; i < 40; i++) { const x = (i * 83) % ART_W, y = (i * 47) % 60; if (Math.sin(t * 2 + i) > 0.3) R(x, y, 1, 1, '#3a4266'); }
   R(0, ART_H - 16, ART_W, 16, '#1f2436');
-  if (online > 0) txt(`${online} ONLINE NOW`, ART_W / 2, ART_H - 8, 8, '#43f07a');
   txt('PICK A GAME', ART_W / 2, 22, 16, ORANGE, true);
   txt('ARROWS TO CHOOSE, ENTER TO PLAY', ART_W / 2, 38, 8, '#7d88a8');
   GAMES.forEach((gm, i) => {
@@ -314,22 +312,8 @@ function go(i) {
   try { localStorage.setItem('floppy-last-game', GAMES[i].id); } catch (e) { /* storage unavailable */ }
   setTimeout(() => { if (inArtifact) openFrame(href); else location.href = href; }, 350);
 }
-// Inside the Claude artifact the games run in a frame over this page, which keeps the room open for them and
-// counts who's here. Anywhere else they're plain pages, and this page just counts.
-const inArtifact = !!(window.claude && window.FloppyNet);
-if (window.FloppyNet) {
-  const roomP = FloppyNet.room();
-  if (inArtifact) FloppyNet.serveFrames(roomP);
-  roomP.then(room => {
-    if (!room) return;
-    const count = ps => { online = ps.filter(p => p.kind !== 'agent').length; };
-    try { count(room.peers()); } catch (e) { /* not connected yet */ }
-    room.onPeers(ch => count(ch.peers), () => {});
-  });
-}
-if (inArtifact) {
-  addEventListener('message', e => { if (frame && e.source === frame.contentWindow && e.data && e.data.fnet === 'home') closeFrame(); });
-}
+// Inside the Claude artifact the games run in a frame over this page; anywhere else they're plain pages.
+const inArtifact = !!window.claude;
 function openFrame(href) {
   frame = document.createElement('iframe');
   frame.id = 'game'; frame.title = GAMES[sel].name; frame.allow = 'fullscreen; autoplay';

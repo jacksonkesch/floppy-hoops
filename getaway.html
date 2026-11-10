@@ -3617,7 +3617,7 @@ function drawHUD(G) {
 
 const MENU_ITEMS = [
   { id: 'cpu', label: '1 PLAYER' }, { id: '2p', label: '2-4 PLAYERS' }, { id: 'cvc', label: 'CPU VS CPU' }, { id: 'tt', label: 'TIME TRIAL' },
-  { id: 'customize', label: 'CUSTOMIZE' }, { id: 'how', label: 'HOW TO PLAY' }, { id: 'switch', label: 'ALL GAMES' },
+  { id: 'customize', label: 'CUSTOMIZE' }, { id: 'how', label: 'HOW TO PLAY' }, { id: 'switch', label: 'SWITCH GAME' },
 ];
 const MENU_X = 14, MENU_W = 104, MENU_Y0 = 54, MENU_DY = 12, MENU_H = 10;
 const menuRect = i => ({ x: MENU_X, y: MENU_Y0 + i * MENU_DY, w: MENU_W, h: MENU_H });
@@ -3764,13 +3764,15 @@ function drawOver(G) {
   }
   OVER_BTN.forEach((b, i) => {
     const sel = G.overSel === i, ok = G.overT > OVER_HOLD;
-    const w = b.w || 56; rr(b.x - 1, 131, w + 2, 22, INK); rr(b.x, 132, w, 20, sel && ok ? '#2f6bd8' : '#2a2534');
-    txt(b.label, b.x + w / 2, 142.5, 7, ok ? CREAM : '#6a6474');
+    const w = b.w || 56, on = sel && ok; rr(b.x - 1, 131, w + 2, 22, INK); rr(b.x, 132, w, 20, on ? ORANGE : '#262b3d'); if (on) rr(b.x, 150, w, 2, '#c4621a');
+    txt(b.label, b.x + w / 2, 142.5, 8, on ? INK : ok ? CREAM : '#6a6474', on ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
 }
 function drawPause() {
-  ctx.fillStyle = 'rgba(10,8,16,0.6)'; ctx.fillRect(0, 0, ART_W, ART_H);
-  txt('PAUSED', 160, 74, 18, CREAM); txt('ESC OR TAP TO KEEP GOING', 160, 98, 6, '#c9bfd6'); txt('Q TO QUIT TO MENU', 160, 110, 6, '#c9bfd6');
+  ctx.fillStyle = 'rgba(8,10,18,0.6)'; ctx.fillRect(-10, -10, ART_W + 20, ART_H + 20);
+  txt('PAUSED', 160, 80, 24, CREAM);
+  txt('PRESS ESC TO KEEP PLAYING', 160, 104, 8, ORANGE);
+  txt('Q FOR MAIN MENU', 160, 116, 8, '#b9c3dd');
 }
 function render(G) {
   resize();
@@ -3785,7 +3787,9 @@ function render(G) {
   else if (G.screen === 'how') drawHelp();
   else if (G.screen === 'pick') drawPick(G);
   else if (!G.nohud) { drawHUD(G); drawOver(G); if (G.paused) drawPause(); }   // (nohud: the test harness wants the bare picture)
-  if (SET.muted) txt('MUTED', 312, 174, 5, '#8a8496', { align: 'right' });
+  { const sy = G.screen === 'title' ? 8 : 172;
+    if (SET.muted) txt('SOUND OFF  (M)', 316, sy, 8, '#7d88a8', { align: 'right', ow: 0.6 });
+    else if (G.sfx && !G.sfx.running && Math.sin(performance.now() / 250) > -0.4) txt('CLICK FOR SOUND', 316, sy, 8, ORANGE, { align: 'right', ow: 0.6 }); }
   // letterbox bars stay clean
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#0b0d14';
   if (OX > 0) { ctx.fillRect(0, 0, Math.ceil(OX), cv.height); ctx.fillRect(Math.floor(OX + ART_W * S), 0, cv.width, cv.height); }

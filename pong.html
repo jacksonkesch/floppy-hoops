@@ -3113,7 +3113,7 @@ function drawTitle(G) {
     }
     txt(it.label, AX(MENU_X + MENU_W / 2 + 2), AY(y + 6.5), 8, sel ? INK : CREAM, sel ? { outline: ORANGE, ow: 0.01 } : { ow: 0.8 });
   });
-  txt('ARROWS + ENTER', AX(65), AY(166), 8, '#7d88a8', { ow: 0.6 });
+  txt('ARROWS OR W/S + ENTER', AX(65), AY(166), 8, '#7d88a8', { ow: 0.6 });
   // two short lines: the whole mix on one line runs off the screen
   // (and each shrinks to fit the 190px beside the menu: DOUBLES - ROME COLOSSEUM - BASKETBALL is wider than that)
   const cap1 = [G.doubles ? 'DOUBLES' : 'SINGLES', G.map.name, G.B.name].join(' - '), cap2 = [G.spinMode.name, G.env.id === 'normal' ? '' : G.env.name].filter(Boolean).join(' - ');
