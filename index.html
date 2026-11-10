@@ -310,7 +310,7 @@ function go(i) {
   const href = GAMES[i].href + (GAMES[i].wip ? '#dev' : '');
   going = { t: 0, href };
   try { localStorage.setItem('floppy-last-game', GAMES[i].id); } catch (e) { /* storage unavailable */ }
-  setTimeout(() => { if (inArtifact) openFrame(href); else location.href = href; }, 350);
+  setTimeout(() => { if (inArtifact || window.FLOPPY_VAULT) openFrame(href); else location.href = href; }, 350);
 }
 // Inside the Claude artifact the games run in a frame over this page; anywhere else they're plain pages.
 const inArtifact = !!window.claude;
@@ -320,11 +320,24 @@ function openFrame(href) {
   // a game that sends itself back to the picker lands here instead of nesting a second picker
   frame.addEventListener('load', () => {
     let home = false;
-    try { home = !!frame.contentDocument.getElementById('pick'); } catch (e) { /* not ours to read */ }
+    try { const d = frame.contentDocument; home = !!(d.getElementById('pick') || d.getElementById('lock')); } catch (e) { /* not ours to read */ }
     if (home) closeFrame(); else try { frame.contentWindow.focus(); } catch (e) { /* fine */ }
   });
-  frame.src = href;
-  document.body.appendChild(frame);
+  const V = window.FLOPPY_VAULT;
+  if (!V) { frame.src = href; document.body.appendChild(frame); return; }
+  // the locked artifact keeps every game sealed; it hands us the unlocked page and we write it into the frame
+  const f = frame;
+  document.body.appendChild(f);
+  V.page(href.split('#')[0]).then(html => {
+    if (frame !== f) return;
+    const w = f.contentWindow, d = f.contentDocument;
+    d.open();
+    try { w.history.replaceState(null, '', href); } catch (e) { /* the page still runs */ }
+    d.write(html); d.close();
+    // a game heading home navigates its frame away: that means back to the picker
+    w.addEventListener('pagehide', () => { if (frame === f) closeFrame(); });
+    try { w.focus(); } catch (e) { /* fine */ }
+  }).catch(() => { if (frame === f) closeFrame(); });
 }
 function closeFrame() {
   if (!frame) return;
