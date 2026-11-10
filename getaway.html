@@ -580,6 +580,16 @@ class Sfx {
   spin(dir) { this.tone('sine', dir > 0 ? 500 : 900, dir > 0 ? 900 : 500, 0.12, 0.08); this.hiss(0.14, 0.1, 'bandpass', 4000, 2500, 1.5); }
   grunt() { const f = rand(140, 230); this.tone('sawtooth', f, f * 0.7, 0.09, 0.05); this.hiss(0.07, 0.07, 'bandpass', rand(500, 800), 0, 2.5); }
   oof() { const f = rand(110, 170); this.tone('sawtooth', f * 1.3, f * 0.6, 0.22, 0.07); this.hiss(0.18, 0.08, 'bandpass', 600, 300, 2); }
+  slap() { this.tone('sine', 320, 140, 0.06, 0.5); this.hiss(0.08, 0.6, 'bandpass', 1400, 900, 1.5); this.tone('triangle', 900, 1400, 0.12, 0.08, 0.05); }
+  zap() { this.tone('square', 1500, 180, 0.2, 0.07); this.tone('sawtooth', 2400, 400, 0.12, 0.04, 0.03); this.hiss(0.22, 0.25, 'highpass', 3000, 6000, 1); }
+  freeze() { this.tone('sine', 2200, 600, 0.3, 0.12); this.tone('triangle', 3300, 3100, 0.25, 0.04, 0.05); this.hiss(0.3, 0.15, 'highpass', 5000, 9000, 2); }
+  splat() { this.tone('sine', 200, 60, 0.15, 0.4); this.hiss(0.25, 0.4, 'lowpass', 1600, 300, 1); }
+  snap() { this.tone('square', 900, 120, 0.05, 0.15); this.hiss(0.06, 0.4, 'highpass', 2000, 4000, 1); this.tone('sine', 160, 70, 0.12, 0.3, 0.02); }
+  pop() { this.hiss(0.08, 0.5, 'highpass', 1500, 5000, 1); this.tone('sine', 700, 200, 0.05, 0.2); }
+  slip() { this.tone('sine', 400, 1400, 0.22, 0.12); this.tone('sine', 1400, 300, 0.3, 0.1, 0.22); }
+  buzz(k = 1) { this.tone('sawtooth', 210, 230, 0.35, 0.025 * k); this.tone('sawtooth', 236, 222, 0.35, 0.02 * k, 0.05); }
+  yank() { this.tone('square', 260, 900, 0.12, 0.06); this.hiss(0.15, 0.2, 'bandpass', 2000, 800, 1); }
+  roll() { this.tone('sine', 90, 70, 0.4, 0.2); this.hiss(0.4, 0.12, 'lowpass', 500, 300, 1); }
   click() { this.tone('square', 660, 660, 0.03, 0.03); }
 }
 
@@ -661,7 +671,25 @@ const ITEMS = [
   { id: 'shield', name: 'SHIELD', ammo: 1, dur: 5, w: 1.5 },
   { id: 'medkit', name: 'MEDKIT', ammo: 1, w: 1 },
   { id: 'swap', name: 'SWAP', ammo: 1, w: 1.2 },   // trade places with the racer just ahead of you
+  { id: 'blower', name: 'LEAF BLOWER', ammo: 70, cd: 0.03, range: 7, auto: true, w: 1.2 },   // no damage: a cone of wind that blows racers off ledges
+  { id: 'bowling', name: 'BOWLING BALL', ammo: 1, dmg: 35, kb: 11, cd: 0.4, proj: 'ball', w: 1.2 },   // rolls along floors, bowls over everyone in its path
+  { id: 'zap', name: 'CHAIN ZAP', ammo: 2, dmg: 30, kb: 4, cd: 0.7, range: 14, w: 1 },   // lightning that jumps between racers close together
+  { id: 'freeze', name: 'FREEZE RAY', ammo: 2, dmg: 5, kb: 1, cd: 0.6, range: 22, w: 1 },   // an ice block for 1.8 s: no hopping, slides
+  { id: 'fish', name: 'FISH SLAP', ammo: 3, dmg: 20, kb: 15, cd: 0.45, range: 1.9, melee: true, w: 1.2 },
+  { id: 'grapple', name: 'GRAPPLE GUN', ammo: 1, cd: 0.4, range: 22, w: 1 },   // hooks the racer ahead and yanks you to them
+  { id: 'banana', name: 'BANANA PEEL', ammo: 2, cd: 0.3, trap: true, w: 1.2 },   // traps: dropped at your feet
+  { id: 'glue', name: 'GLUE PUDDLE', ammo: 1, cd: 0.3, trap: true, w: 1 },
+  { id: 'beartrap', name: 'BEAR TRAP', ammo: 1, cd: 0.3, trap: true, w: 1 },
+  { id: 'balloon', name: 'BALLOON', ammo: 1, dur: 3, w: 1 },   // float up and forward over gaps (a shot pops it)
+  { id: 'springs', name: 'SPRING BOOTS', ammo: 1, w: 1 },   // the next three hops are super hops
+  { id: 'extinguisher', name: 'EXTINGUISHER', ammo: 60, cd: 0.035, range: 4, auto: true, w: 1 },   // a jetpack you spray backwards
+  { id: 'paint', name: 'PAINT BOMB', ammo: 1, cd: 0.4, splash: 3.4, proj: 'paint', w: 1 },   // splats the screens of whoever it hits
+  { id: 'decoy', name: 'DECOY', ammo: 1, w: 0.8 },   // a floppy dummy of you that soaks up shots
+  { id: 'bees', name: 'BEE SWARM', ammo: 1, cd: 0.4, w: 0.8 },   // chases the leader and stings
 ];
+const NEW_ITEMS = ['blower', 'bowling', 'zap', 'freeze', 'fish', 'grapple', 'banana', 'glue', 'beartrap', 'balloon', 'springs', 'extinguisher', 'paint', 'decoy', 'bees'];
+// items that aren't held out in the hand (drawn centred on a pickup spot)
+const NOHOLD = new Set(['bomb', 'shield', 'medkit', 'swap', 'bowling', 'banana', 'glue', 'beartrap', 'balloon', 'springs', 'paint', 'decoy', 'bees']);
 const ITEM = Object.fromEntries(ITEMS.map(d => [d.id, d]));
 
 // ---------------------------------------------------------------- levels
@@ -793,6 +821,7 @@ function loadSettings() {
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { s = {}; }
   const out = { ...DEFAULTS, ...s, pools: { ...DEFAULTS.pools, ...(s.pools || {}) } };
   if (!s.v2) { if (s.pools && s.pools.items && !s.pools.items.includes('swap')) out.pools.items = [...s.pools.items, 'swap']; out.v2 = 1; }
+  if (!s.v3) { if (s.pools && s.pools.items) out.pools.items = [...new Set([...out.pools.items, ...NEW_ITEMS])]; out.v3 = 1; }
   for (const k of Object.keys(POOLS)) {
     out.pools[k] = (out.pools[k] || []).filter(id => POOLS[k].some(q => q.id === id));
     if (!out.pools[k].length) out.pools[k] = [POOLS[k][0].id];
@@ -837,6 +866,11 @@ function segDist(p0x, p0y, p1x, p1y, q0x, q0y, q1x, q1y) {
   const dx = wx + s * ux - t * vx, dy = wy + s * uy - t * vy;
   return { d: Math.hypot(dx, dy), s };
 }
+// distance from point (x,y) to segment p0-p1
+function ptSeg(x, y, p0x, p0y, p1x, p1y) {
+  const ux = p1x - p0x, uy = p1y - p0y, L = ux * ux + uy * uy, s = L < 1e-9 ? 0 : clamp(((x - p0x) * ux + (y - p0y) * uy) / L, 0, 1);
+  return Math.hypot(p0x + ux * s - x, p0y + uy * s - y);
+}
 // where a ray from (ox,oy) along unit (dx,dy) first enters box s, or Infinity
 function rayBox(ox, oy, dx, dy, s) {
   let t0 = 0, t1 = Infinity;
@@ -874,7 +908,7 @@ class Dude {
     Object.assign(this, { x, y, px: x, py: y, vx: 0, vy: 0, a: 0, av: 0, airA: 0, grounded: true, ground: null,
       holdDir: 0, holdT: 0, crouch: 0, launchH: 0, launchDir: 1, tgt: null,
       alive: true, deadT: 0, how: '', imm: 0, hp: 100, item: null, ammo: 0, cd: 0, trig: false, shield: 0,
-      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0, zipX: 0, zipO: null, inT: 0 });
+      facing: 1, flail: 0, squash: 0, hurt: 0, gone: false, cp: 0, best: x, idle: 0, swing: 0, chute: 0, spin: 0, heal: 0, pack: false, zip: null, zipV: 0, zipCool: 0, zipX: 0, zipO: null, inT: 0, frozen: 0, frozenA: 0, trapped: 0, trapX: null, glued: 0, balloon: 0, springs: 0, paint: 0, paintSeed: 0, paintCol: '#ff3fa4', stung: 0 });
   }
   get canAct() { return this.alive && !this.gone && !this.zip; }
   get sens() { return this.human ? SET.turn : 1; }   // (bots always lean at the measured rate)
@@ -882,12 +916,12 @@ class Dude {
   mid() { return { x: this.x + Math.sin(this.a) * BH * 0.5, y: this.y + Math.cos(this.a) * BH * 0.5 }; }
   shoulder() { const k = SHOULDER_H; return { x: this.x + Math.sin(this.a) * k, y: this.y + Math.cos(this.a) * k }; }
   gk(G) { return (G.M.g || 1) * (this.pack ? PACK_G : 1); }
-  hopV() { return HOP_V * (this.pack ? PACK_V : 1); }
+  hopV() { return HOP_V * (this.pack ? PACK_V : 1) * (this.springs > 0 ? 1.38 : 1) * (this.glued > 0 ? 0.45 : 1); }
   // weapons point at the closest other racer in reach (set each step); with nobody near, straight out the way you face
   nearest(G) {
     const d = this.item && ITEM[this.item], s = this.shoulder();
     let best = null, bd = Math.max(10, (d && d.range || 20) + 1);
-    for (const q of G.P) { if (q === this || !q.alive || q.gone || q.chute || q.imm > 0) continue; const m = q.mid(), dist = Math.hypot(m.x - s.x, m.y - s.y); if (dist < bd) { best = q; bd = dist; } }
+    for (const q of G.decoys.length ? G.P.concat(G.decoys) : G.P) { if (q === this || q.owner === this || !q.alive || q.gone || q.chute || q.imm > 0) continue; const m = q.mid(), dist = Math.hypot(m.x - s.x, m.y - s.y); if (dist < bd) { best = q; bd = dist; } }
     return best;
   }
   aimAng() {
@@ -902,7 +936,7 @@ class Dude {
     if (down) { if (!this.holdDir) { this.holdDir = dir; this.holdT = 0; } return; }
     if (dir !== this.holdDir) return;
     const H = this.holdT; this.holdDir = 0; this.holdT = 0;
-    if (G.state !== 'run' || !this.grounded || !this.canAct || this.crouch > 0) return;
+    if (G.state !== 'run' || !this.grounded || !this.canAct || this.crouch > 0 || this.frozen > 0 || this.trapped > 0) return;
     this.crouch = CROUCH_T; this.launchH = H; this.launchDir = dir; this.squash = 0.6;
   }
   launch(G) {
@@ -910,6 +944,7 @@ class Dude {
     const Hs = this.launchH * this.sens, th = hopAngle(Hs), own = LEAN_AT[clamp(Math.round(Hs * 100), 0, 50)] * this.launchDir;
     const phi = clamp(this.launchDir * th + LEAN_CARRY * (this.a - own), -PHI_MAX, PHI_MAX), s = this.ground;
     const V = this.hopV();
+    if (this.springs > 0) { this.springs--; G.sfx.boing(); G.dust(this.x, this.y, 6, 0.9); }
     this.vx = V * Math.sin(phi) + (s && s.vx ? s.vx : 0) + (s && s.belt ? s.belt : 0);
     this.vy = V * Math.cos(phi) + (s && s.vy > 0 ? s.vy : 0);
     this.airA = phi * AIR_PITCH; this.grounded = false; this.ground = null; this.y += 0.01;
@@ -924,6 +959,8 @@ class Dude {
     if (this.hurt > 0) this.hurt -= dt;
     if (this.scorePop > 0) this.scorePop = Math.max(0, this.scorePop - dt * 2.5);
     if (this.heal > 0) this.heal -= dt;
+    if (this.frozen > 0) this.frozen -= dt; if (this.trapped > 0) this.trapped -= dt; if (this.glued > 0) this.glued -= dt; if (this.paint > 0) this.paint -= dt; if (this.stung > 0) this.stung -= dt;
+    if (this.balloon > 0 && (this.balloon -= dt) <= 0) { this.balloon = 0; G.sfx.pop(); G.spark(this.x, this.y + BH + 0.9, '#ff4a6a', 6); }
     if (this.swing > 0) this.swing -= dt * 4;
     this.flail = Math.max(0, this.flail - dt * 1.4); this.squash = Math.max(0, this.squash - dt * 5);
     if (this.gone) return;
@@ -938,6 +975,7 @@ class Dude {
     if (this.tgt && this.grounded && !this.holdDir && this.crouch <= 0 && !this.zip) this.facing = this.tgt.x < this.x ? -1 : 1;   // (standing still, you turn to face them)
     if (this.zipCool > 0) this.zipCool -= dt;
     if (this.zip) this.zipStep(G, dt); else if (this.grounded) this.groundStep(G, dt); else this.airStep(G, dt);
+    if (this.frozen > 0) { this.a = this.frozenA; this.av = 0; } else if (this.trapped > 0 && this.grounded && this.trapX != null) { this.vx = 0; this.x = this.trapX; }
     if (this.alive && !this.zip) this.unbury(G, dt);
     if (this.x < G.M.x0) { this.x = G.M.x0; this.vx = Math.abs(this.vx) * 0.2; }
     { const xr = G.M.stop ?? G.M.x1; if (this.x > xr) { this.x = xr; this.vx = -Math.abs(this.vx) * 0.2; } }   // (the far wall of the ride: you can't overshoot it)
@@ -962,7 +1000,7 @@ class Dude {
     // shoved along the floor: slide and stop
     if (this.vx) {
       this.moveX(G, this.vx * dt); if (s && !s.dude) s = this.ground;
-      const f = 9 * dt; this.vx = Math.abs(this.vx) <= f ? 0 : this.vx - Math.sign(this.vx) * f;
+      const f = (this.frozen > 0 ? 1.2 : 9) * dt; this.vx = Math.abs(this.vx) <= f ? 0 : this.vx - Math.sign(this.vx) * f;
     }
     if (s && !s.dude && !inX(s, this.x, STAND_PAD)) {
       // off the end of this floor: carry straight on if the next one is level with it, else fall
@@ -1066,6 +1104,10 @@ class Dude {
   airStep(G, dt) {
     if (this.tryZip(G)) return;
     const g = GRAV * this.gk(G);
+    if (this.balloon > 0) {   // floating: drifts up, then gently down, always forward
+      this.vy += ((this.balloon > 1.5 ? 1.4 : -1.1) - this.vy) * Math.min(1, dt * 2.5) + g * dt;
+      this.vx += (this.facing * 5 - this.vx) * Math.min(1, dt * 1.5); this.av *= 0.92;
+    }
     this.vy -= g * dt;
     this.av += (-AIR_K * (this.a - this.airA) - AIR_D * this.av) * dt; this.a += this.av * dt;
     this.holdT = 0;
@@ -1101,6 +1143,7 @@ class Dude {
   }
   land(G, s, top) {
     const impact = -this.vy;
+    if (this.balloon > 0) { this.balloon = 0; G.sfx.pop(); }
     if (s.bounce && impact > 3) {
       this.y = top + 0.01; this.vy = Math.max(impact * 0.95, 9); this.vx *= 0.85; this.airA = this.a * 0.3;
       G.sfx.boing(); G.dust(this.x, top, 5, 0.8); s.squish = 1; return;
@@ -1116,13 +1159,14 @@ class Dude {
   hit(G, from, dmg, kx, ky) {
     if (!this.alive || this.gone || this.imm > 0) return false;
     if (this.shield > 0) { dmg = 0; kx *= 0.35; ky *= 0.35; G.spark(this.mid().x, this.mid().y, '#7fd7ff', 8); G.sfx.tick(1); }
+    if (this.balloon > 0 && dmg > 0) { this.balloon = 0; G.sfx.pop(); G.popup('POP!', this.x, this.y + BH + 1, '#ff4a6a', 0.8, 0.6); }
     this.hp -= dmg; this.flail = 1; this.hurt = 0.6; this.holdDir = 0; this.crouch = 0;
     if (dmg > 0) G.stopT = Math.max(G.stopT, dmg >= 40 ? 0.06 : 0.025);
     if (this.zip && (dmg > 0 || Math.abs(kx) > 3)) this.unzip(G);   // (a shot knocks you off the cable)
     this.vx += kx; this.av += kx * 0.9 + (Math.random() - 0.5);
     if (this.grounded && (Math.abs(kx) > 3.5 || ky > 2.5)) { this.grounded = false; this.ground = null; this.vy = Math.max(this.vy, ky, 2 + Math.abs(kx) * 0.25); this.airA = this.a + Math.sign(kx) * 0.7; this.y += 0.02; }
     else if (!this.grounded) this.vy += ky;
-    if (this.hp <= 0) this.die(G, 'shot', kx, ky, from);
+    if (this.hp <= 0) { if (this.decoy) { this.alive = false; this.gone = true; G.decoyPoof(this, from); return true; } this.die(G, 'shot', kx, ky, from); }
     return true;
   }
   die(G, how, kx = 0, ky = 0, from = null) {
@@ -1291,18 +1335,29 @@ class Bot {
     p.trig = false;
     if (!p.item || !p.canAct || G.state !== 'run' || p.cd > 0) return;
     const d = ITEM[p.item];
+    if (this.lastItem !== p.item) { this.lastItem = p.item; this.itemT = 0; } this.itemT += dt;
+    if (p.paint > 0 && Math.random() < 0.8) return;   // (paint in the eyes: slow on the trigger)
     if (d.id === 'medkit') { if (p.hp < 60) G.useItem(p); return; }
     // (bots only pick fights with racers ahead of them or right on their heels: turning round to snipe stragglers stalls the race)
-    const foes = G.P.filter(o => o !== p && o.alive && !o.gone && o.imm <= 0 && (o.x - p.x > -2 || Math.abs(o.x - p.x) < 5));
+    const foes = G.P.concat(G.decoys).filter(o => o !== p && o.owner !== p && o.alive && !o.gone && o.imm <= 0 && (o.x - p.x > -2 || Math.abs(o.x - p.x) < 5));
     if (d.id === 'swap') { if (G.P.some(o => o !== p && o.alive && !o.gone && o.x - p.x > 6)) G.useItem(p); return; }
     if (d.id === 'shield') { if (foes.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 14)) G.useItem(p); return; }
+    const ahead = G.P.filter(o => o !== p && o.alive && !o.gone && o.x > p.x);
+    if (d.trap) { if (p.grounded && (G.P.some(o => o !== p && o.alive && !o.gone && p.x - o.x > 1 && p.x - o.x < 10 && Math.abs(o.y - p.y) < 3) || this.itemT > 10)) G.useItem(p); return; }
+    if (d.id === 'balloon' || d.id === 'springs') { if (p.grounded && this.itemT > 0.8) G.useItem(p); return; }
+    if (d.id === 'decoy') { if (foes.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 12) || this.itemT > 8) G.useItem(p); return; }
+    if (d.id === 'bees') { if (ahead.length || this.itemT > 6) G.useItem(p); return; }
+    if (d.id === 'grapple') { if ((p.grounded && ahead.some(o => o.x - p.x > 4 && o.x - p.x < 18 && Math.abs(o.y - p.y) < 4 && o.grounded)) || this.itemT > 12) G.useItem(p); return; }
+    if (d.id === 'extinguisher') { if ((p.grounded && this.itemT > 0.8) || p.ammo < d.ammo) { G.useItem(p); p.trig = true; } return; }
+    if (d.id === 'blower') { if (foes.some(o => (o.x - p.x) * p.facing > 0 && Math.abs(o.x - p.x) < 6 && Math.abs(o.y - p.y) < 2.5)) { G.useItem(p); p.trig = true; } return; }
     const g = p.aimAng(), h = p.hand();
     let want = false;
     if (p.tgt && !foes.includes(p.tgt)) return;   // (the gun's pointing at someone behind: hold fire)
     for (const o of foes) {
       const m = o.mid(), dx = m.x - h.x, dy = m.y - h.y, dist = Math.hypot(dx, dy);
       if (d.melee) { if (dist < d.range + 0.4 && dx * p.facing > -0.3) want = true; continue; }
-      if (d.proj === 'bomb') { if (dist < 9 && dx * p.facing > 1) want = true; continue; }
+      if (d.proj === 'bomb' || d.proj === 'paint') { if (dist < 9 && dx * p.facing > 1) want = true; continue; }
+      if (d.proj === 'ball') { if (dist < 14 && Math.abs(dy) < 1.6 && dx * p.facing > 1) want = true; continue; }
       // bots pick fights on their own floor (or point blank): shooting up and down every level stalls the race
       const range = Math.min(d.range || 30, d.id === 'sniper' ? 40 : 16), off = Math.abs(wrap(Math.atan2(dy, dx) - g));
       if (dist < range && (Math.abs(dy) < 3.5 || dist < 5) && off < L.cone + (d.splash ? 6 * D2R : 0) + (d.pellets ? 4 * D2R : 0)) want = true;
@@ -1316,7 +1371,7 @@ class Bot {
 class Game {
   constructor() {
     this.sfx = new Sfx(); this.screen = 'title'; this.state = 'ready'; this.stateT = 0; this.t = 0; this.rt = 0; this.dt = STEP;
-    this.P = []; this.S = []; this.spots = []; this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
+    this.P = []; this.S = []; this.spots = []; this.proj = []; this.traps = []; this.swarms = []; this.decoys = []; this.ropes = []; this.tracers = []; this.parts = []; this.pops = [];
     this.shake = 0; this.timeScale = 1; this.slowT = 0; this.stopT = 0; this.mode = 'cvc'; this.demo = true; this.paused = false; this.round = 0;
     this.cams = []; this.M = MAPS[0]; this.winner = null; this.champ = null; this.rideT = 0;
   }
@@ -1352,7 +1407,7 @@ class Game {
     this.rt = 0; this.moveSolids(0);
     this.cpY = M.cps.map(c => { const s = this.cpFloor(c); return s ? topAt(s, c) : 0; });
     this.state = 'ready'; this.stateT = 0; this.winner = null; this.boarded = []; this.winners = []; this.departT = 0; this.rideT = 0; this.timeScale = 1; this.slowT = 0; this.stopT = 0;
-    this.proj = []; this.tracers = []; this.parts = []; this.pops = [];
+    this.proj = []; this.traps = []; this.swarms = []; this.decoys = []; this.ropes = []; this.tracers = []; this.parts = []; this.pops = [];
     // item spots: one every ~12 m on solid ground
     this.spots = [];
     if (SET.itemRate > 0 && this.mode !== 'tt') {
@@ -1474,6 +1529,7 @@ class Game {
     this.crowd(sdt);
     this.stepItems(sdt);
     this.stepProj(sdt);
+    this.stepTraps(sdt); this.stepSwarms(sdt); this.stepDecoys(sdt);
     this.stepFoes(sdt);
     for (const t of this.tracers) t.t -= sdt;
     this.tracers = this.tracers.filter(t => t.t > 0);
@@ -1587,6 +1643,7 @@ class Game {
     const d = ITEM[p.item];
     p.cd = d.cd || 0.4;
     const g = p.aimAng() + (p.bot && p.tgt ? gauss() * p.bot.L.err : 0), h = p.hand(), dx = Math.cos(g), dy = Math.sin(g);   // (bots wobble their aim a little, more on easy)
+    if (this.useNew(p, d, g, h, dx, dy)) { if (--p.ammo <= 0) { p.item = null; p.trig = false; } return; }
     if (d.id === 'medkit') { p.hp = 100; p.heal = 1; this.spark(p.mid().x, p.mid().y, '#ff7a7a', 10); this.sfx.grab(); }
     else if (d.id === 'shield') { p.shield = d.dur; this.sfx.spin(1); }
     else if (d.id === 'swap') {   // trade places with the closest racer ahead (or behind, if you're leading)
@@ -1606,15 +1663,15 @@ class Game {
     else if (d.melee) {
       p.swing = 1; this.sfx.swish();
       let best = null, bd = 1e9;
-      for (const o of this.P) {
+      for (const o of this.hitList) {
         if (o === p || !o.alive || o.gone) continue;
         const m = o.mid(), ddx = m.x - h.x, ddy = m.y - h.y, dist = Math.hypot(ddx, ddy);
         if (dist < d.range + 0.3 && dist < bd) { best = o; bd = dist; }
       }
-      if (best && best.hit(this, p, d.dmg, (Math.sign(best.x - p.x) || p.facing) * d.kb, 2.5)) { this.sfx.smash(); this.spark(best.mid().x, best.mid().y, '#ff4a4a', 8); this.addShake(1.2); }
+      if (best && best.hit(this, p, d.dmg, (Math.sign(best.x - p.x) || p.facing) * d.kb, 2.5)) { if (d.id === 'fish') { this.sfx.slap(); this.popup('SLAP!', best.x, best.y + BH + 0.5, CREAM, 0.9, 0.6); } else this.sfx.smash(); this.spark(best.mid().x, best.mid().y, d.id === 'fish' ? '#9fd8ff' : '#ff4a4a', 8); this.addShake(1.2); }
     } else if (d.proj) {
-      const sp = d.proj === 'rocket' ? 20 : 9.5;
-      this.proj.push({ kind: d.proj, x: h.x + dx * 0.3, y: h.y + dy * 0.3, vx: dx * sp + (d.proj === 'bomb' ? p.vx * 0.5 : 0), vy: dy * sp + (d.proj === 'bomb' ? 4 : 0),
+      const sp = d.proj === 'rocket' ? 20 : d.proj === 'paint' ? 8 : 9.5;
+      this.proj.push({ kind: d.proj, x: h.x + dx * 0.3, y: h.y + dy * 0.3, vx: dx * sp + (d.proj !== 'rocket' ? p.vx * 0.5 : 0), vy: dy * sp + (d.proj === 'paint' ? 2.2 : d.proj !== 'rocket' ? 4 : 0),
         t: d.proj === 'rocket' ? 3 : 1.6, owner: p, d, a: g, spin: 0 });
       this.sfx.shot(); if (d.proj === 'rocket') this.sfx.hiss(0.5, 0.15, 'bandpass', 1200, 400, 1);
       p.av -= dx * 1.5;
@@ -1628,7 +1685,7 @@ class Game {
         for (const s of this.S) if (!s.oneway) { const tt = rayBox(ox, oy, rx, ry, s); if (tt < end) end = tt; }
         const prop = this.rayProps(ox, oy, rx, ry, end); if (prop) end = prop.at;
         const hits = [];
-        for (const o of this.P) {
+        for (const o of this.hitList) {
           if (o === p || !o.alive || o.gone) continue;
           const hd = o.head(), r = segDist(ox, oy, ox + rx * end, oy + ry * end, o.x, o.y + 0.15, hd.x, hd.y);
           if (r.d < 0.34) hits.push({ o, at: r.s * end });
@@ -1653,16 +1710,278 @@ class Game {
     }
     if (--p.ammo <= 0) { p.item = null; p.trig = false; }
   }
+  // ---------------------------------------------------------------- the new items
+  get hitList() { return this.decoys.length ? this.P.concat(this.decoys) : this.P; }
+  // the highest walkable top at x that's not above y
+  groundBelow(x, y) {
+    let best = null, bt = -1e9;
+    for (const s of this.S) { if (s.ceil || s.nofloor || !inX(s, x)) continue; const t = topAt(s, x); if (t <= y + 0.05 && t > bt) { best = s; bt = t; } }
+    return best ? { s: best, y: bt } : null;
+  }
+  // a jagged lightning bolt out of tracers
+  bolt(x0, y0, x1, y1, col = '#bfe9ff') {
+    const n = 5, L = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / L, ny = (x1 - x0) / L;
+    let px = x0, py = y0;
+    for (let k = 1; k <= n; k++) {
+      const f = k / n, j = k === n ? 0 : rand(-0.45, 0.45), qx = x0 + (x1 - x0) * f + nx * j, qy = y0 + (y1 - y0) * f + ny * j;
+      this.tracers.push({ x0: px, y0: py, x1: qx, y1: qy, t: 0.2, T: 0.2, w: 2, col });
+      this.tracers.push({ x0: px, y0: py, x1: qx, y1: qy, t: 0.12, T: 0.12, w: 1, col: '#ffffff' });
+      px = qx; py = qy;
+    }
+  }
+  // first racer along a ray (walls stop it)
+  rayHit(p, ox, oy, rx, ry, range) {
+    let end = range;
+    for (const s of this.S) if (!s.oneway) { const tt = rayBox(ox, oy, rx, ry, s); if (tt < end) end = tt; }
+    let best = null, ba = end;
+    for (const o of this.hitList) {
+      if (o === p || !o.alive || o.gone) continue;
+      const hd = o.head(), r = segDist(ox, oy, ox + rx * end, oy + ry * end, o.x, o.y + 0.15, hd.x, hd.y);
+      if (r.d < 0.4 && r.s * end < ba) { best = o; ba = r.s * end; }
+    }
+    return { o: best, at: ba };
+  }
+  useNew(p, d, g, h, dx, dy) {
+    const id = d.id;
+    if (id === 'blower' || id === 'extinguisher') {
+      const blow = id === 'blower', ex = blow ? dx : -p.facing * 0.6, ey = blow ? dy : -0.8, ea = Math.atan2(ey, ex);
+      const nz = blow ? h : { x: p.mid().x, y: p.mid().y - 0.2 };
+      for (let k = 0; k < 2; k++) {
+        const a = ea + rand(-0.35, 0.35), sp = rand(7, 11);
+        this.parts.push({ x: nz.x, y: nz.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0.35, T: 0.35, col: blow ? pick(['#d9f2c0', '#9bd36b', '#c98a3a', '#f4f1ea']) : pick(['#ffffff', '#e8f4ff', '#d0e4f4']), s: blow ? 2 : 3, g: 0 });
+      }
+      if (p.ammo % 6 === 0 && this.heard(p.x)) this.sfx.hiss(0.2, blow ? 0.07 : 0.1, 'bandpass', blow ? 600 : 1800, blow ? 900 : 2600, 0.7);
+      const cone = blow ? 0.55 : 0.7, push = blow ? 0.95 : 0.6;
+      for (const o of this.hitList) {
+        if (o === p || !o.alive || o.gone || o.chute) continue;
+        const m = o.mid(), ox = m.x - nz.x, oy = m.y - nz.y, dist = Math.hypot(ox, oy);
+        if (dist > d.range || dist < 0.01 || Math.abs(wrap(Math.atan2(oy, ox) - ea)) > cone) continue;
+        let k = push * (1 - dist / d.range * 0.5) * (o.shield > 0 ? 0.3 : 1) * (o.balloon > 0 ? 2 : 1);
+        o.vx += Math.cos(ea) * k; o.av += Math.cos(ea) * k * 0.7; o.flail = Math.max(o.flail, 0.5); o.holdDir = 0;
+        if (!o.grounded) o.vy += Math.sin(ea) * k * 0.5;
+        else if (Math.abs(o.vx) > 6) { o.grounded = false; o.ground = null; o.vy = Math.max(o.vy, 1.5); o.airA = o.a + Math.sign(o.vx) * 0.6; o.y += 0.02; }
+      }
+      if (blow) p.vx -= dx * 0.04;
+      else {   // the jetpack: spraying back and down shoves you up and forward
+        if (p.grounded) { p.grounded = false; p.ground = null; p.y += 0.03; p.vy = Math.max(p.vy, 2); }
+        if (p.vy < 5) p.vy += 0.48;
+        p.vx += (p.facing * 7.5 - p.vx) * 0.07; p.airA = p.facing * 0.25;
+      }
+      return true;
+    }
+    if (id === 'bowling') {
+      const sg = Math.sign(dx) || p.facing;
+      this.proj.push({ kind: 'ball', x: h.x, y: Math.max(h.y, p.y + 0.4), vx: sg * 11 + p.vx * 0.3, vy: 1, t: 7, owner: p, d, r: 0.33, spin: 0, hits: new Set(), still: 0, rolled: false });
+      this.sfx.swish(); p.av -= sg * 1.2;
+      return true;
+    }
+    if (id === 'zap') {
+      let first = p.tgt && p.tgt.alive ? p.tgt : null;
+      if (!first) { const r = this.rayHit(p, h.x, h.y, dx, dy, d.range); first = r.o; if (!first) { this.bolt(h.x, h.y, h.x + dx * r.at, h.y + dy * r.at); this.sfx.zap(); return true; } }
+      const chain = [first];
+      while (chain.length < 5) {
+        const last = chain[chain.length - 1], lm = last.mid();
+        let nx = null, nd = 6.5;
+        for (const o of this.hitList) { if (o === p || !o.alive || o.gone || chain.includes(o)) continue; const m = o.mid(), dd = Math.hypot(m.x - lm.x, m.y - lm.y); if (dd < nd) { nx = o; nd = dd; } }
+        if (!nx) break; chain.push(nx);
+      }
+      let fx = h.x, fy = h.y;
+      chain.forEach((o, k) => {
+        const m = o.mid(); this.bolt(fx, fy, m.x, m.y); fx = m.x; fy = m.y;
+        o.hit(this, p, Math.round(d.dmg * Math.pow(0.85, k)), (Math.sign(o.x - p.x) || p.facing) * d.kb, 2); o.flail = 1;
+        this.spark(m.x, m.y, '#bfe9ff', 6);
+      });
+      this.sfx.zap(); this.addShake(0.8 + chain.length * 0.3);
+      if (chain.length > 1) this.popup(`ZAP x${chain.length}!`, first.x, first.y + BH + 0.7, '#bfe9ff', 0.9, 0.8);
+      return true;
+    }
+    if (id === 'freeze') {
+      const r = this.rayHit(p, h.x, h.y, dx, dy, d.range);
+      this.tracers.push({ x0: h.x, y0: h.y, x1: h.x + dx * r.at, y1: h.y + dy * r.at, t: 0.25, T: 0.25, w: 3, col: '#9fe8ff' });
+      this.tracers.push({ x0: h.x, y0: h.y, x1: h.x + dx * r.at, y1: h.y + dy * r.at, t: 0.15, T: 0.15, w: 1, col: '#ffffff' });
+      this.sfx.freeze();
+      const o = r.o;
+      if (o) {
+        o.hit(this, p, d.dmg, dx * d.kb, 0.5);
+        if (o.alive && o.shield <= 0) { o.frozen = 1.8; o.frozenA = o.a; o.holdDir = 0; o.crouch = 0; this.popup('FROZEN!', o.x, o.y + BH + 0.7, '#9fe8ff', 0.9, 0.8); }
+        this.spark(o.mid().x, o.mid().y, '#d6f6ff', 10);
+      }
+      return true;
+    }
+    if (id === 'grapple') {
+      let best = null, bd = d.range;
+      for (const o of this.P) {
+        if (o === p || !o.alive || o.gone || o.chute) continue;
+        const m = o.mid(), ox = m.x - h.x, oy = m.y - h.y, dist = Math.hypot(ox, oy);
+        if (ox * p.facing < 1 || dist > bd) continue;
+        const r = this.rayHit(p, h.x, h.y, ox / dist, oy / dist, dist + 0.5); if (r.o !== o && r.at < dist - 0.5) continue;   // (a wall in the way)
+        best = o; bd = dist;
+      }
+      this.sfx.yank();
+      if (!best) { this.tracers.push({ x0: h.x, y0: h.y, x1: h.x + p.facing * 6, y1: h.y, t: 0.25, T: 0.25, w: 1, col: '#c9ced6' }); this.popup('MISS', p.x, p.y + BH + 0.7, CREAM, 0.7, 0.5); return true; }
+      const ox = best.x - p.x, oy = best.y - p.y, gg = GRAV * p.gk(this), T = clamp(Math.hypot(ox, oy) / 13, 0.35, 1.1);
+      p.vx = clamp(ox / T, -17, 17); p.vy = clamp(oy / T + 0.5 * gg * T, -4, 14);
+      if (p.grounded) { p.grounded = false; p.ground = null; p.y += 0.03; }
+      p.airA = Math.sign(ox) * 0.3; p.holdDir = 0; p.crouch = 0;
+      best.hit(this, p, 0, -Math.sign(ox) * 4, 1.5);
+      this.ropes.push({ a: p, b: best, t: 0.45 });
+      this.popup('YOINK!', best.x, best.y + BH + 0.7, '#c9ced6', 0.8, 0.6);
+      return true;
+    }
+    if (d.trap) {
+      const gb = p.grounded && p.ground ? { s: p.ground, y: topAt(p.ground, p.x) } : this.groundBelow(p.x, p.y);
+      if (!gb) return true;   // (dropped into the void)
+      const x = p.x - p.facing * 0.5;
+      this.traps.push({ kind: id, x, y: gb.y, s: gb.s, off: x - gb.s.x0, owner: p, t: id === 'glue' ? 14 : 25, age: 0, shut: 0 });
+      this.sfx.thud(0.4); this.dust(x, gb.y, 3, 0.4);
+      return true;
+    }
+    if (id === 'balloon') {
+      p.balloon = d.dur;
+      if (p.grounded) { p.grounded = false; p.ground = null; p.y += 0.03; p.vy = 2.5; }
+      this.sfx.boing(); this.popup('UP UP AWAY!', p.x, p.y + BH + 1.3, '#ff6a7a', 0.8, 0.8);
+      return true;
+    }
+    if (id === 'springs') { p.springs = 3; this.sfx.boing(); this.popup('SPRING BOOTS x3', p.x, p.y + BH + 0.9, '#c9ced6', 0.8, 0.8); return true; }
+    if (id === 'decoy') {
+      const dc = new Dude(p.i, p.look, false);
+      dc.reset(p.x - p.facing * 0.8, p.y + 0.3); dc.decoy = true; dc.owner = p; dc.hp = 60; dc.imm = 0; dc.life = 10; dc.facing = p.facing; dc.spr = p.spr;
+      dc.grounded = false; dc.vx = -p.facing * 1.5; dc.vy = 2;
+      this.decoys.push(dc);
+      this.spark(dc.x, dc.y + 1, CREAM, 8); this.sfx.pop(); this.popup('DECOY!', dc.x, dc.y + BH + 1, CREAM, 0.8, 0.7);
+      return true;
+    }
+    if (id === 'bees') {
+      const m = p.mid();
+      this.swarms.push({ x: m.x, y: m.y + 0.6, owner: p, tgt: this.beeTarget(p), t: 9, sting: 0, stingT: 0, on: 0, buzz: 0, seed: Math.random() * 10 });
+      this.sfx.buzz(1.5); this.popup('BEES!', p.x, p.y + BH + 1, '#f2c33a', 0.9, 0.8);
+      return true;
+    }
+    return false;
+  }
+  beeTarget(owner) {
+    let lead = null;
+    for (const o of this.P) if (o !== owner && o.alive && !o.gone && !o.chute && (!lead || o.x > lead.x)) lead = o;
+    return lead;
+  }
+  decoyPoof(dc, from) {
+    const m = dc.mid(); this.spark(m.x, m.y, CREAM, 14); this.sfx.pop();
+    this.popup(from && from !== dc.owner ? `${from.C.name} SHOT A DECOY!` : 'POOF!', dc.x, dc.y + BH + 0.8, CREAM, 0.8, 0.9);
+  }
+  paintSplat(x, y, owner, d) {
+    this.sfx.splat(); this.addShake(0.8);
+    const cols = ['#ff3fa4', '#3fd0ff', '#ffd23a', '#7dff5a', '#b06aff'];
+    for (let k = 0; k < 26; k++) { const a = rand(0, Math.PI * 2), sp = rand(2, 8); this.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 2, t: 0.7, T: 0.7, col: pick(cols), s: rand(2, 4), g: 1 }); }
+    let n = 0;
+    for (const o of this.P) {
+      if (o === owner || !o.alive || o.gone || o.chute) continue;
+      const m = o.mid(); if (Math.hypot(m.x - x, m.y - y) > d.splash) continue;
+      if (o.shield > 0) { this.spark(m.x, m.y, '#7fd7ff', 6); continue; }
+      o.paint = 2.4; o.paintSeed = Math.floor(Math.random() * 233280); o.paintCol = pick(cols); n++;
+      o.hit(this, owner, 0, (Math.sign(m.x - x) || 1) * 2.5, 1.2);
+    }
+    this.popup(n ? 'SPLAT!' : 'SPLOSH', x, y + 1.6, '#ff3fa4', 0.9, 0.7);
+  }
+  stepBall(q, dt) {
+    const g = GRAV * (this.M.g || 1);
+    q.t -= dt; q.vy -= g * dt;
+    let nx = q.x + q.vx * dt, ny = q.y + q.vy * dt, floor = null;
+    for (const s of this.S) {
+      if (s.ceil || nx < s.x0 - q.r || nx > s.x1 + q.r) continue;
+      const st = topAt(s, clamp(nx, s.x0, s.x1));
+      if (inX(s, nx) && q.y - q.r >= st - 0.08 && ny - q.r <= st && !s.nofloor) {   // rolling on (or landing on) a top
+        ny = st + q.r; floor = s;
+        if (q.vy < -3) { this.sfx.thud(0.5); q.vy = -q.vy * 0.25; if (!q.rolled) { q.rolled = true; if (this.heard(q.x)) this.sfx.roll(); } } else q.vy = 0;
+        continue;
+      }
+      if (s.oneway || ny + q.r < s.bot || ny - q.r > st - 0.1) continue;
+      if ((q.x <= s.x0 - q.r + 0.01 && nx > s.x0 - q.r) || (q.x >= s.x1 + q.r - 0.01 && nx < s.x1 + q.r)) { nx = q.x; q.vx = -q.vx * 0.55; this.sfx.thud(0.4); }
+    }
+    if (floor) {   // follows the slope, slowly rolls to a stop
+      const k = floor.k || 0;
+      q.vx -= k / Math.sqrt(1 + k * k) * g * 0.6 * dt; q.vx *= 1 - 0.12 * dt;
+      if (floor.vx) nx += floor.vx * dt;
+    }
+    q.spin += q.vx * dt / q.r; q.x = nx; q.y = ny;
+    for (const o of this.hitList) {
+      if (o === q.owner || !o.alive || o.gone || q.hits.has(o)) continue;
+      const hd = o.head();
+      if (ptSeg(q.x, q.y, o.x, o.y + 0.1, hd.x, hd.y) > q.r + 0.3) continue;
+      q.hits.add(o);
+      if (o.hit(this, q.owner, q.d.dmg, (Math.sign(q.vx) || 1) * q.d.kb, 4)) { this.sfx.smash(); this.spark(q.x, q.y + 0.3, CREAM, 8); this.addShake(1.2); }
+      q.vx *= 0.85;
+      if (q.hits.size >= 2) this.popup(q.hits.size >= 3 ? 'STRIKE!' : 'SPARE!', o.x, o.y + BH + 0.9, '#ffd23a', 1, 0.8);
+    }
+    q.still = floor && Math.abs(q.vx) < 0.6 ? q.still + dt : 0;
+    if (q.t <= 0 || q.still > 0.8 || q.y < this.M.killY - 10) { q.dead = true; this.spark(q.x, q.y, '#6a7ad8', 6); }
+  }
+  stepTraps(dt) {
+    for (const tr of this.traps) {
+      tr.t -= dt; tr.age += dt;
+      if (tr.s && tr.s.mv) { tr.x = tr.s.x0 + tr.off; tr.y = topAt(tr.s, tr.x); }
+      if (tr.shut > 0) { if ((tr.shut -= dt) <= 0) tr.t = 0; continue; }
+      for (const o of this.P) {
+        if (!o.alive || o.gone || !o.grounded || o.chute || Math.abs(o.x - tr.x) > (tr.kind === 'glue' ? 0.8 : 0.45) || Math.abs(o.y - tr.y) > 0.35) continue;
+        if (tr.age < (o === tr.owner ? 2.5 : 0.25)) continue;
+        if (o.shield > 0) { if (tr.kind !== 'glue') { tr.t = 0; this.spark(tr.x, tr.y + 0.3, '#7fd7ff', 6); } continue; }
+        if (tr.kind === 'banana') {
+          const sg = Math.sign(o.vx) || o.facing;
+          o.grounded = false; o.ground = null; o.y += 0.03; o.vy = 4; o.vx = sg * 3.5; o.av = sg * 12; o.airA = sg * 1.5; o.flail = 1; o.hurt = 0.4; o.holdDir = 0; o.crouch = 0;
+          this.sfx.slip(); this.popup('SLIP!', o.x, o.y + BH + 0.6, '#f2d33a', 0.9, 0.7); tr.t = 0;
+        } else if (tr.kind === 'glue') {
+          if (o.glued <= 0) this.popup('STUCK!', o.x, o.y + BH + 0.6, '#c8f0a0', 0.8, 0.6);
+          o.glued = Math.max(o.glued, 1.2); o.vx *= 0.3;
+        } else {
+          o.trapped = 1.5; o.trapX = tr.x; o.x = tr.x; o.vx = 0; o.holdDir = 0; o.crouch = 0;
+          o.hit(this, tr.owner, 15, 0, 0); o.vx = 0;
+          this.sfx.snap(); this.addShake(1); this.popup('SNAP!', o.x, o.y + BH + 0.6, '#c9ced6', 0.9, 0.7); tr.shut = 1.5;
+        }
+        break;
+      }
+    }
+    this.traps = this.traps.filter(tr => tr.t > 0);
+  }
+  stepSwarms(dt) {
+    for (const w of this.swarms) {
+      w.t -= dt; w.buzz -= dt;
+      if (!w.tgt || !w.tgt.alive || w.tgt.gone || w.tgt.chute) w.tgt = this.beeTarget(w.owner);
+      if (!w.tgt) { w.t = Math.min(w.t, 0.5); w.y += dt * 2; continue; }
+      const m = w.tgt.head(), ox = m.x - w.x, oy = m.y + 0.2 - w.y, dist = Math.hypot(ox, oy) || 1, sp = dist > 2 ? 10.5 : 6;
+      w.x += ox / dist * Math.min(dist, sp * dt); w.y += oy / dist * Math.min(dist, sp * dt);
+      if (w.buzz <= 0) { w.buzz = 0.4; if (this.heard(w.x)) this.sfx.buzz(dist < 2 ? 1.4 : 0.8); }
+      if (dist < 1.2) {
+        w.on += dt; w.stingT -= dt; w.tgt.stung = 0.5;
+        if (w.stingT <= 0) {
+          w.stingT = 0.45;
+          w.tgt.hit(this, w.owner, 6, rand(-1.8, 1.8), 0.6); w.tgt.av += rand(-4, 4);
+          if (w.on < 0.5) this.popup('OUCH!', w.tgt.x, w.tgt.y + BH + 0.8, '#f2c33a', 0.8, 0.5);
+        }
+        if (w.on > 4.5) w.t = 0;
+      }
+    }
+    this.swarms = this.swarms.filter(w => w.t > 0);
+    for (const r of this.ropes) r.t -= dt;
+    this.ropes = this.ropes.filter(r => r.t > 0 && r.a.alive && r.b.alive);
+  }
+  stepDecoys(dt) {
+    for (const dc of this.decoys) {
+      dc.life -= dt;
+      if (dc.alive && !dc.gone) dc.step(this, dt);
+      if (dc.alive && dc.life <= 0) { dc.alive = false; this.decoyPoof(dc, null); }
+    }
+    this.decoys = this.decoys.filter(dc => dc.alive && !dc.gone);
+  }
   stepProj(dt) {
     for (const q of this.proj) {
       q.t -= dt;
-      if (q.kind === 'bomb') { q.vy -= GRAV * (this.M.g || 1) * 0.55 * dt; q.spin += q.vx * dt * 3; }
+      if (q.kind === 'ball') { this.stepBall(q, dt); continue; }
+      if (q.kind === 'bomb' || q.kind === 'paint') { q.vy -= GRAV * (this.M.g || 1) * 0.55 * dt; q.spin += q.vx * dt * 3; }
       let nx = q.x + q.vx * dt, ny = q.y + q.vy * dt, boom = q.t <= 0;
       for (const s of this.S) {
         if (s.oneway || nx < s.x0 || nx > s.x1) continue;
         const st = topAt(s, nx);
         if (ny > st || ny < s.bot) continue;
-        if (q.kind === 'rocket') { boom = true; break; }
+        if (q.kind === 'rocket' || q.kind === 'paint') { boom = true; break; }
         // a bomb: bounces on a top, drops off an underside, comes back off a wall (it never ends up inside)
         const inside = q.x >= s.x0 && q.x <= s.x1;
         if (q.y >= st - 0.05 || (inside && q.y > s.bot)) { ny = st + 0.001; if (q.vy < -1.5) this.sfx.thud(0.3); q.vy = Math.abs(q.vy) * 0.45; q.vx *= 0.7; }
@@ -1670,8 +1989,9 @@ class Game {
         else { nx = q.x; q.vx = -q.vx * 0.5; }
         break;
       }
+      if (q.kind === 'paint') for (const o of this.hitList) if (o !== q.owner && o.alive && !o.gone) { const hd = o.head(); if (ptSeg(nx, ny, o.x, o.y + 0.1, hd.x, hd.y) < 0.6) boom = true; }
       if (q.kind === 'rocket') {
-        for (const o of this.P) if (o !== q.owner && o.alive && !o.gone) { const m = o.mid(); if (Math.hypot(m.x - nx, m.y - ny) < 0.7) boom = true; }
+        for (const o of this.hitList) if (o !== q.owner && o.alive && !o.gone) { const m = o.mid(); if (Math.hypot(m.x - nx, m.y - ny) < 0.7) boom = true; }
         if (Math.random() < 0.7) this.parts.push({ x: q.x, y: q.y, vx: -q.vx * 0.1 + rand(-0.5, 0.5), vy: rand(-0.3, 0.6), t: 0.5, T: 0.5, col: '#bdb6ad', s: 2, g: -1 });
       }
       q.x = nx; q.y = ny;
@@ -1684,13 +2004,14 @@ class Game {
     for (const p of this.P) if (p.muzzle > 0) p.muzzle -= dt;
   }
   explode(x, y, d, owner) {
+    if (d.id === 'paint') return this.paintSplat(x, y, owner, d);
     this.sfx.boom(); this.addShake(3.5);
     for (let k = 0; k < 26; k++) { const a = rand(0, Math.PI * 2), v = rand(2, 9); this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: rand(0.3, 0.8), T: 0.8, col: pick(['#ffdd55', '#ff8a2a', '#ff4a2a', '#fff6e0']), s: 3, g: 4 }); }
     for (let k = 0; k < 10; k++) this.parts.push({ x: x + rand(-1, 1), y: y + rand(-0.5, 1), vx: rand(-1, 1), vy: rand(0.5, 2), t: rand(0.8, 1.4), T: 1.4, col: '#6a6470', s: 5, g: -0.5 });
     this.boomFx = { x, y, r: d.splash, t: 0.3 };
     for (const c of this.caps || []) if (!c.dead && Math.hypot(c.x - x, c.y + 0.7 - y) < d.splash + 0.6) { c.dead = true; this.explode(c.x, c.y + 0.7, CAP_BOOM, owner); }
     for (const f of this.foes || []) if (Math.hypot(f.x - x, f.y + 1 - y) < d.splash + 0.4) this.stunFoe(f, Math.sign(f.x - x) || 1);
-    for (const o of this.P) {
+    for (const o of this.hitList) {
       if (!o.alive || o.gone) continue;
       const m = o.mid(), dx = m.x - x, dy = m.y - y + 0.4, dist = Math.hypot(dx, dy);
       if (dist > d.splash) continue;
@@ -1867,11 +2188,26 @@ function itemSprite(id) {
     bomb: [7, 8, R => { R(1, 2, 5, 5, '#2a2d35'); R(0, 3, 7, 3, '#2a2d35'); R(2, 3, 1, 1, '#6a7080'); R(3, 1, 1, 1, '#8a6a40'); R(4, 0, 1, 1, '#ffb43a'); }],
     shield: [8, 9, R => { R(1, 0, 6, 7, '#3f8fe0'); R(0, 1, 8, 4, '#3f8fe0'); R(2, 7, 4, 1, '#3f8fe0'); R(3, 8, 2, 1, '#3f8fe0'); R(3, 1, 2, 6, '#bfe6ff'); R(1, 3, 6, 2, '#bfe6ff'); }],
     swap: [9, 8, R => { R(0, 1, 6, 2, '#c58bff'); R(5, 0, 1, 4, '#c58bff'); R(6, 1, 1, 2, '#c58bff'); R(3, 5, 6, 2, '#ffd23a'); R(3, 4, 1, 4, '#ffd23a'); R(2, 5, 1, 2, '#ffd23a'); }],
+    blower: [14, 7, R => { R(0, 2, 6, 4, '#e8742a'); R(0, 2, 6, 1, '#ffa060'); R(1, 0, 4, 2, '#2a2d35'); R(6, 3, 6, 2, '#8a9099'); R(6, 3, 6, 1, '#b8bec8'); R(12, 2, 2, 4, '#5d6470'); }],
+    bowling: [8, 8, R => { R(2, 0, 4, 8, '#2b3a8a'); R(0, 2, 8, 4, '#2b3a8a'); R(1, 1, 6, 6, '#2b3a8a'); R(2, 1, 2, 1, '#6a7ad8'); R(4, 2, 1, 1, '#0c1030'); R(5, 3, 1, 1, '#0c1030'); R(3, 3, 1, 1, '#0c1030'); }],
+    zap: [12, 7, R => { R(0, 2, 8, 3, '#3b3f4a'); R(2, 3, 4, 1, '#7fd7ff'); R(1, 5, 2, 2, '#2a2d35'); R(8, 1, 1, 5, '#e8c33a'); R(10, 1, 1, 5, '#e8c33a'); R(9, 3, 3, 1, '#bfe9ff'); }],
+    freeze: [13, 7, R => { R(0, 2, 9, 3, '#d8e8f4'); R(0, 2, 9, 1, '#ffffff'); R(3, 0, 3, 2, '#3f8fe0'); R(2, 5, 2, 2, '#5d6470'); R(9, 1, 3, 5, '#7fd7ff'); R(12, 2, 1, 3, '#bff4ff'); }],
+    fish: [13, 6, R => { R(0, 0, 2, 6, '#5d8fa8'); R(2, 1, 9, 4, '#7fb0c8'); R(1, 2, 11, 2, '#7fb0c8'); R(12, 2, 1, 2, '#7fb0c8'); R(3, 4, 7, 1, '#d8e8ee'); R(5, 0, 3, 1, '#5d8fa8'); R(9, 2, 1, 1, '#141019'); }],
+    grapple: [13, 6, R => { R(0, 2, 8, 3, '#4a4f5a'); R(0, 2, 8, 1, '#6d7480'); R(1, 5, 2, 1, '#2a2d35'); R(8, 2, 3, 2, '#c9ced6'); R(10, 0, 1, 6, '#c9ced6'); R(11, 0, 2, 1, '#c9ced6'); R(11, 5, 2, 1, '#c9ced6'); }],
+    banana: [9, 6, R => { R(1, 3, 7, 2, '#f2d33a'); R(0, 1, 2, 3, '#f2d33a'); R(7, 1, 2, 3, '#f2d33a'); R(2, 5, 5, 1, '#c9a420'); R(0, 0, 1, 1, '#5b4030'); R(8, 0, 1, 1, '#5b4030'); }],
+    glue: [8, 9, R => { R(1, 3, 6, 6, '#f4f1ea'); R(1, 5, 6, 2, '#e8742a'); R(3, 1, 2, 2, '#f4f1ea'); R(3, 0, 2, 1, '#e8423a'); }],
+    beartrap: [11, 5, R => { R(0, 3, 11, 2, '#6d7480'); for (let i = 0; i < 11; i += 2) R(i, 1, 1, 2, '#9aa1ad'); R(4, 3, 3, 1, '#c9a420'); }],
+    balloon: [7, 11, R => { R(1, 0, 5, 7, '#e8423a'); R(0, 1, 7, 5, '#e8423a'); R(2, 1, 1, 2, '#ff9a90'); R(3, 7, 1, 1, '#b02a24'); R(3, 8, 1, 3, '#f4f1ea'); }],
+    springs: [8, 8, R => { R(0, 0, 5, 4, '#8a5a30'); R(0, 3, 7, 2, '#8a5a30'); R(0, 0, 5, 1, '#b07a48'); R(1, 5, 5, 1, '#c9ced6'); R(2, 6, 3, 1, '#8a9099'); R(1, 7, 5, 1, '#c9ced6'); }],
+    extinguisher: [12, 8, R => { R(0, 2, 8, 5, '#d8322a'); R(0, 2, 8, 1, '#ff6a5a'); R(2, 4, 3, 2, '#f4f1ea'); R(8, 1, 2, 3, '#2a2d35'); R(10, 2, 2, 1, '#2a2d35'); }],
+    paint: [8, 9, R => { R(1, 2, 6, 7, '#c9ced6'); R(1, 2, 6, 2, '#ff3fa4'); R(2, 4, 1, 2, '#ff3fa4'); R(1, 6, 6, 1, '#3f8fe0'); R(4, 0, 1, 2, '#8a6a40'); R(5, 0, 1, 1, '#ffb43a'); }],
+    decoy: [7, 10, R => { R(2, 0, 3, 3, '#e8c9a0'); R(1, 3, 5, 4, '#c9a420'); R(3, 4, 1, 2, '#e8423a'); R(1, 7, 2, 3, '#6b4422'); R(4, 7, 2, 3, '#6b4422'); }],
+    bees: [10, 8, R => { R(1, 1, 8, 7, '#f2b33a'); R(0, 3, 10, 4, '#f2b33a'); R(0, 3, 10, 1, '#c98a20'); R(0, 5, 10, 1, '#c98a20'); R(4, 6, 2, 2, '#3a2410'); R(8, 0, 2, 1, '#141019'); }],
     medkit: [9, 7, R => { R(0, 1, 9, 6, '#f4f1ea'); R(3, 0, 3, 1, '#c9c2b6'); R(3, 2, 3, 4, '#e8423a'); R(2, 3, 5, 2, '#e8423a'); }],
   }[id];
   const [w, h, f] = D, [c, g] = mk(w, h);
   f((x, y, ww, hh, col) => { g.fillStyle = col; g.fillRect(x, y, ww, hh); });
-  return (ITEM_SPR[id] = { c: outline(c), ox: id === 'bomb' || id === 'shield' || id === 'medkit' || id === 'swap' ? Math.floor(w / 2) + 1 : 2, oy: Math.floor(h / 2) + 1 });
+  return (ITEM_SPR[id] = { c: outline(c), ox: NOHOLD.has(id) ? Math.floor(w / 2) + 1 : 2, oy: Math.floor(h / 2) + 1 });
 }
 const FLASH_SPR = new WeakMap();
 function flashSpr(s) {   // a solid cream copy of a sprite, for the brief white flash when you're hit
@@ -2934,13 +3270,31 @@ function drawDude(G, p) {
     let g = p.aimAng(); if (p.swing > 0) g += d * (p.swing - 0.5) * -2.4;
     const hd = { x: sh.x + Math.cos(g) * BODY.armLen, y: sh.y + Math.sin(g) * BODY.armLen };
     limb(sp.arm, AX(sh.x), AY(sh.y), AX(hd.x), AY(hd.y));
-    const spr = itemSprite(p.item), held = !['bomb', 'shield', 'medkit', 'swap'].includes(p.item);
+    const spr = itemSprite(p.item), held = !NOHOLD.has(p.item);
     drawSpr(spr, AX(hd.x), AY(hd.y), held ? -g : 0, false, held && Math.cos(g) < 0);
     if (p.muzzle > 0) { const m = { x: hd.x + Math.cos(g) * 0.75, y: hd.y + Math.sin(g) * 0.75 }; rr(AX(m.x) - 3, AY(m.y) - 3, 6, 6, '#fff6c0'); rr(AX(m.x) - 2, AY(m.y) - 2, 4, 4, '#ffd23a'); }
   } else {
     const fw = -Math.PI / 2 - p.av * 0.1 + fl * Math.sin(t * 17 + 1) * 1.2 + (air ? -d * 0.8 + Math.sin(t * 8 + 2) * 0.3 : 0) + (p.holdDir ? p.holdDir * 0.5 : 0) + (p.chute ? -Math.PI * 0.95 : 0);
     const fh = { x: sh.x + Math.cos(fw) * BODY.armLen, y: sh.y + Math.sin(fw) * BODY.armLen };
     limb(sp.arm, AX(sh.x), AY(sh.y), AX(fh.x), AY(fh.y));
+  }
+  if (p.glued > 0) { rr(fx - 6, fy - 1, 12, 2, '#b8e890'); rr(fx - 4, fy - 2, 3, 1, '#d8f8b8'); rr(fx + 2, fy - 2, 2, 1, '#d8f8b8'); }
+  if (p.springs > 0 && p.alive) for (let i = 0; i < 3; i++) rr(fx - 4 + (i % 2), fy - 1 - i * 2, 8, 1, i < p.springs ? '#c9ced6' : '#6d7480');
+  if (p.paint > 0) { const m = p.mid(); rr(AX(m.x) - 3, AY(m.y) - 2, 6, 4, p.paintCol); rr(AX(m.x) + 2, AY(m.y) + 1, 2, 4, p.paintCol); }
+  if (p.frozen > 0) {   // an ice block
+    const m = p.mid(), blink = p.frozen < 0.5 && Math.floor(t * 12) % 2, w = 0.62 * PPM, hh = (BH * 0.5 + 0.25) * PPM;
+    ctx.save(); ctx.translate(AX(m.x), AY(m.y)); ctx.rotate(p.a);
+    ctx.fillStyle = blink ? 'rgba(190,240,255,0.25)' : 'rgba(170,230,255,0.5)'; ctx.fillRect(-w, -hh, w * 2, hh * 2);
+    ctx.strokeStyle = 'rgba(235,252,255,0.9)'; ctx.lineWidth = 1; ctx.strokeRect(-w + 0.5, -hh + 0.5, w * 2 - 1, hh * 2 - 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillRect(-w + 2, -hh + 2, 2, hh * 0.8); ctx.fillRect(-w + 5, -hh + 2, 1, hh * 0.4);
+    ctx.restore();
+  }
+  if (p.balloon > 0) {
+    const s = p.shoulder(), hd = p.head(), bx = Math.round(AX(hd.x + 0.15 * Math.sin(t * 3))), by = Math.round(AY(hd.y + 1.8)), low = p.balloon < 0.8 && Math.floor(t * 10) % 2;
+    ctx.strokeStyle = '#f4f1ea'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(AX(s.x), AY(s.y)); ctx.lineTo(bx, by + 9); ctx.stroke();
+    ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(bx, by, 8, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = low ? '#ff9a90' : '#e8423a'; ctx.beginPath(); ctx.ellipse(bx, by, 7, 9, 0, 0, Math.PI * 2); ctx.fill();
+    rr(bx - 4, by - 5, 2, 4, '#ff9a90'); rr(bx - 1, by + 9, 2, 1, '#b02a24');
   }
   if (p.shield > 0) {
     const m = p.mid(), low = p.shield < 1.2, k = low ? (Math.floor(t * 10) % 2 ? 0.25 : 0.6) : 0.5, cx = AX(m.x), cy = AY(m.y), R = (1.3 + Math.sin(t * 6) * 0.04) * PPM;
@@ -2963,13 +3317,56 @@ function drawDude(G, p) {
 }
 
 // ---- items, shots, bits
+// the new items' world bits: traps on the floor, bees, grapple ropes, the bowling ball, paint on the screen
+function drawTraps(G) {
+  for (const tr of G.traps) {
+    if (tr.t < 1 && Math.floor(G.t * 10) % 2) continue;
+    const x = Math.round(AX(tr.x)), y = Math.round(AY(tr.y));
+    if (tr.kind === 'banana') drawSpr(itemSprite('banana'), x, y - 3);
+    else if (tr.kind === 'glue') { rr(x - 10, y - 2, 20, 2, '#9ad870'); rr(x - 8, y - 3, 16, 1, '#c8f0a0'); rr(x - 5, y - 3, 3, 1, '#ffffff'); rr(x + 4, y - 2, 2, 1, '#e8ffd8'); }
+    else if (tr.shut > 0) { rr(x - 5, y - 7, 10, 7, INK); rr(x - 4, y - 6, 8, 5, '#6d7480'); for (let i = 0; i < 4; i++) rr(x - 4 + i * 2, y - 4 + (i % 2), 1, 2, '#c9ced6'); }
+    else { rr(x - 7, y - 2, 14, 2, INK); rr(x - 6, y - 2, 12, 1, '#6d7480'); for (let i = 0; i < 4; i++) { rr(x - 7 + i, y - 4 - i, 1, 2, '#9aa1ad'); rr(x + 6 - i, y - 4 - i, 1, 2, '#9aa1ad'); } rr(x - 1, y - 3, 3, 1, '#c9a420'); }
+  }
+}
+function drawCritters(G) {
+  for (const r of G.ropes) {
+    const a = r.a.hand(), b = r.b.mid();
+    ctx.strokeStyle = '#c9ced6'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(AX(a.x), AY(a.y)); ctx.lineTo(AX(b.x), AY(b.y)); ctx.stroke();
+    rr(AX(b.x) - 1, AY(b.y) - 1, 3, 3, '#8a9099');
+  }
+  for (const w of G.swarms) for (let k = 0; k < 8; k++) {
+    const a = G.t * (5 + k) + k * 2.1 + w.seed, x = Math.round(AX(w.x + Math.cos(a) * (0.35 + 0.12 * (k % 3)))), y = Math.round(AY(w.y + Math.sin(a * 1.3) * 0.32));
+    rr(x - 1, y - 1, 3, 2, '#f2c33a'); rr(x, y - 1, 1, 2, INK); if ((Math.floor(G.t * 24) + k) % 2) rr(x - 1, y - 2, 2, 1, 'rgba(255,255,255,0.85)');
+  }
+}
+function drawBowl(q) {
+  const x = AX(q.x), y = AY(q.y), R = q.r * PPM;
+  ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(x, y, R + 1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2b3a8a'; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+  for (let k = 0; k < 3; k++) { const a = q.spin + k * 0.55; rr(x + Math.cos(a) * R * 0.5 - 1, y + Math.sin(a) * R * 0.5 - 1, 2, 2, '#0c1030'); }
+  rr(x - R * 0.55, y - R * 0.65, 2, 1, '#6a7ad8');
+}
+function drawPaint(p, vp) {
+  if (!p || !(p.paint > 0)) return;
+  let s = Math.floor(p.paintSeed) % 233280; const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  const U = Math.min(vp.w, vp.h), age = 1 - p.paint / 2.4;
+  ctx.save(); ctx.beginPath(); ctx.rect(vp.x, vp.y, vp.w, vp.h); ctx.clip();
+  ctx.globalAlpha = 0.93 * clamp(p.paint / 0.6, 0, 1); ctx.fillStyle = p.paintCol;
+  for (let i = 0; i < 6; i++) {
+    const cx = vp.x + vp.w * (0.12 + rnd() * 0.76), cy = vp.y + vp.h * (0.1 + rnd() * 0.7), R = U * (0.1 + rnd() * 0.12);
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    for (let j = 0; j < 5; j++) { const a = rnd() * Math.PI * 2, d = R * (0.9 + rnd() * 0.5); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, R * (0.15 + rnd() * 0.25), 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillRect(cx - R * 0.15, cy, R * 0.3, R + age * U * 0.35 * rnd());
+  }
+  ctx.restore();
+}
 function drawSpots(G) {
   for (const sp of G.spots) {
     if (!sp.item) continue;
     const b = Math.sin(G.t * 3 + sp.x) * 0.15, x = AX(sp.x), y = AY(sp.y + b), age = G.t - (sp.born || 0), k = Math.min(1, age * 3);
     ctx.fillStyle = `rgba(255,236,150,${0.22 + 0.1 * Math.sin(G.t * 5 + sp.x)})`; ctx.beginPath(); ctx.arc(x, y, 9 * k, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = `rgba(255,246,224,${0.7 * k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 8 * k, G.t * 2, G.t * 2 + 4); ctx.stroke();
-    drawSpr(itemSprite(sp.item), x - (['bomb', 'shield', 'medkit', 'swap'].includes(sp.item) ? 0 : 6), y, 0, false, false, k, k);
+    drawSpr(itemSprite(sp.item), x - (NOHOLD.has(sp.item) ? 0 : 6), y, 0, false, false, k, k);
   }
 }
 function drawFx(G) {
@@ -2978,6 +3375,7 @@ function drawFx(G) {
   for (const q of G.proj) {
     if (q.kind === 'rocket') { drawSpr(itemSprite('rocket'), AX(q.x), AY(q.y), -Math.atan2(q.vy, q.vx), false, q.vx < 0, 0.6, 0.6); rr(AX(q.x - q.vx * 0.03) - 2, AY(q.y - q.vy * 0.03) - 2, 4, 4, '#ffd23a'); }
     else {
+      if (q.kind === 'ball') { drawBowl(q); continue; } if (q.kind === 'paint') { drawSpr(itemSprite('paint'), AX(q.x), AY(q.y), q.spin); continue; }
       drawSpr(itemSprite('bomb'), AX(q.x), AY(q.y), q.spin); if (Math.floor(G.t * 10) % 2) rr(AX(q.x) - 1, AY(q.y) - 6, 2, 2, '#ff4a2a');
       // about to blow: it flashes white, faster and faster
       if (q.t < 0.7 && Math.floor(G.t * (q.t < 0.3 ? 24 : 12)) % 2) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(AX(q.x), AY(q.y), 5, 0, Math.PI * 2); ctx.fill(); }
@@ -2996,7 +3394,7 @@ function drawAimMarks(G) {
   if (G.state !== 'run') return;
   for (const p of G.P) {
     if (!p.human || !p.alive || p.gone || !p.item) continue;
-    const d = ITEM[p.item]; if (!d.dmg || d.melee || d.proj === 'bomb') continue;
+    const d = ITEM[p.item]; if (!d.dmg || d.melee || d.proj === 'bomb' || d.proj === 'ball') continue;
     const o = p.tgt; if (!o || !o.alive || o.gone) continue;
     const m = o.mid(), x = AX(m.x), y = AY(m.y), r = 12 + Math.sin(G.t * 9) * 1.5;
     ctx.save(); ctx.strokeStyle = p.C.col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85; ctx.setLineDash([3, 3]); ctx.lineDashOffset = -G.t * 24;
@@ -3022,15 +3420,16 @@ function drawView(G, cam, vp, zoom) {
   drawProps(G);
   drawShadows(G);
   drawGoalMark(G);
-  drawSpots(G);
+  drawSpots(G); drawTraps(G);
   if (G.ghost && !G.ghost.d.done && G.state !== 'ready') { ctx.globalAlpha = 0.35; drawDude(G, G.ghost.d); ctx.globalAlpha = 1; }
   const order = G.P.slice().sort((a, b) => (a.human ? 1 : 0) - (b.human ? 1 : 0));
   for (const p of order) drawDude(G, p);
+  for (const dc of G.decoys) drawDude(G, dc);
   drawAimMarks(G);
   drawRide(G, true);
   drawWater(G);
   for (const s of G.S) if (s.ceil) drawSolid(G, s);
-  drawFx(G);
+  drawFx(G); drawCritters(G);
   drawFore(G);
   ctx.restore();
 }
@@ -3378,7 +3777,7 @@ function render(G) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, cv.width, cv.height);
   ctx.setTransform(S, 0, 0, S, OX, OY); ctx.imageSmoothingEnabled = false;
-  for (const c of G.cams) { const vp = c.vp || CAM_LAYOUT[1].vp[0], z = (c.zb || 1) * (c.z || 1); drawView(G, c, vp, z); drawHurt(c.p, vp); drawGoalArrow(G, c, vp, z); }
+  for (const c of G.cams) { const vp = c.vp || CAM_LAYOUT[1].vp[0], z = (c.zb || 1) * (c.z || 1); drawView(G, c, vp, z); drawHurt(c.p, vp); drawPaint(c.p, vp); drawGoalArrow(G, c, vp, z); }
   if (G.cams.length > 1) rr(ART_W / 2 - 1, 0, 2, ART_H, INK);
   if (G.cams.length > 2) rr(0, ART_H / 2 - 1, ART_W, 2, INK);
   ctx.setTransform(S, 0, 0, S, OX, OY);
