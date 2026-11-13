@@ -20,8 +20,8 @@
 </style>
 </head>
 <body>
-<canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley, Boxing or Getaway. Floppy Snipers is under construction. Arrows to choose, Enter to play."></canvas>
-<nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a> <a href="getaway.html">Play Floppy Getaway</a> Floppy Snipers: under construction, coming soon.</nav>
+<canvas id="pick" tabindex="0" aria-label="Pick a game: Floppy Hoops, Pong, Soccer, Volley, Boxing, Getaway or Snipers. Arrows to choose, Enter to play."></canvas>
+<nav class="sr"><a href="hoops.html">Play Floppy Hoops</a> <a href="pong.html">Play Floppy Pong</a> <a href="soccer.html">Play Floppy Soccer</a> <a href="volley.html">Play Floppy Volley</a> <a href="boxing.html">Play Floppy Boxing</a> <a href="getaway.html">Play Floppy Getaway</a> <a href="snipers.html">Play Floppy Snipers</a></nav>
 <script>
 (() => {
 'use strict';
@@ -34,7 +34,7 @@ const GAMES = [
   { id: 'soccer', name: 'FLOPPY SOCCER', tag: 'RAGDOLL FOOTBALL', href: 'soccer.html', col: '#2f9a4a' },
   { id: 'volley', name: 'FLOPPY VOLLEY', tag: 'RAGDOLL VOLLEYBALL', href: 'volley.html', col: '#e0a32a' },
   { id: 'boxing', name: 'FLOPPY BOXING', tag: 'RAGDOLL BOXING', href: 'boxing.html', col: '#b8323a' },
-  { id: 'snipers', name: 'FLOPPY SNIPERS', tag: 'ROOFTOP SHOOTOUT', href: 'snipers.html', col: '#ff8a2a', wip: true },
+  { id: 'snipers', name: 'FLOPPY SNIPERS', tag: 'ROOFTOP SHOOTOUT', href: 'snipers.html', col: '#ff8a2a' },
   { id: 'getaway', name: 'FLOPPY GETAWAY', tag: 'HOP TO THE GETAWAY', href: 'getaway.html', col: '#43f07a' },
 ];
 // four cards on top, three below (centred)
@@ -64,7 +64,7 @@ let S = 1, OX = 0, OY = 0, DPR = 1, sel = 0, t = 0, going = null, frame = null;
 try { sel = Math.max(0, GAMES.findIndex(g => g.id === localStorage.getItem('floppy-last-game'))); } catch (e) { /* storage unavailable */ }
 // The update alert: shown once per browser the first time someone opens the picker after a new game comes out.
 // (If storage is off it shows once per visit.) Enter plays the new game, Esc or LATER closes it.
-const NEWS_KEY = 'floppy-news-getaway-v1', NEWS_GAME = GAMES.findIndex(g => g.id === 'getaway');
+const NEWS_KEY = 'floppy-news-snipers-v1', NEWS_GAME = GAMES.findIndex(g => g.id === 'snipers');
 const NEWS_PLAY = { x: 168, y: 198, w: 114, h: 24 }, NEWS_LATER = { x: 298, y: 198, w: 114, h: 24 };
 let news = null;
 try { if (localStorage.getItem(NEWS_KEY) !== '1') { news = { t: 0 }; localStorage.setItem(NEWS_KEY, '1'); } } catch (e) { news = { t: 0 }; }
@@ -78,10 +78,10 @@ function drawNews() {
   R(x - 3, y - 3, w + 6, h + 6, INK); R(x - 2, y - 2, w + 4, h + 4, ORANGE); R(x, y, w, h, '#1b2031'); R(x, y + h - 4, w, 4, '#12151f');
   R(x + 8, y + 8, 72, 16, '#ffd23a'); R(x + 9, y + 9, 70, 14, '#2a2410');
   txt('NEW UPDATE', x + 44, y + 16, 7, '#ffd23a', true);
-  txt('FLOPPY GETAWAY IS OUT!', ART_W / 2, y + 36, 14, '#43f07a', true);
-  R(226, y + 46, 128, 68, INK); getawayScene(230, y + 50, 1.4);
-  txt('HOP, FLOP AND SHOOT YOUR WAY TO THE GETAWAY RIDE', ART_W / 2, y + 126, 7, CREAM);
-  txt('PICK YOUR MEME  -  UP TO 4 PLAYERS  -  GAMEPADS WORK', ART_W / 2, y + 140, 7, '#9fb0d8');
+  txt('FLOPPY SNIPERS IS OUT!', ART_W / 2, y + 36, 14, '#43f07a', true);
+  R(226, y + 46, 128, 68, INK); snipersScene(230, y + 50, 1.4);
+  txt('HOP, AIM AND BONK THEM OFF THE ROOF', ART_W / 2, y + 126, 7, CREAM);
+  txt('5 ROOFS  -  5 GUNS  -  TWISTS  -  1 OR 2 PLAYERS', ART_W / 2, y + 140, 7, '#9fb0d8');
   const btn = (b, label, col, edge, on) => {
     const by = b.y + pop + (on ? Math.round(Math.sin(t * 6)) : 0);
     R(b.x - 2, by - 2, b.w + 4, b.h + 4, INK); R(b.x, by, b.w, b.h, col); R(b.x, by + b.h - 3, b.w, 3, edge);

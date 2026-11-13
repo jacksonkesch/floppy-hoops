@@ -82,20 +82,10 @@
     <div class="foot"><button id="done">DONE</button><span class="hint">ESC TO CLOSE</span></div>
   </div>
 </div>
-<div id="wip" style="position:fixed;inset:0;display:none;place-items:center;background:#0b0d14;font:14px Silkscreen,'Courier New',monospace;color:#fff6e0;text-align:center"><div><p style="color:#ffd23a;font-size:22px;margin:0 0 12px">FLOPPY SNIPERS</p><p style="margin:0 0 6px">UNDER CONSTRUCTION</p><p style="margin:0 0 18px;color:#7d88a8">NOT PLAYABLE YET - COMING SOON</p><a href="index.html" style="color:#ff8a2a">BACK TO ALL GAMES</a></div></div>
-<script>
-// Still being built: only the developer gets in (a browser unlocked from the picker, or the picker's own frame).
-window.FLOPPY_LOCKED = (() => {
-  try { if (localStorage.getItem('floppy-dev') === '1') return false; } catch (e) { /* storage unavailable */ }
-  return !(window.parent !== window && location.hash === '#dev');
-})();
-if (window.FLOPPY_LOCKED) { document.getElementById('game').hidden = true; document.getElementById('wip').style.display = 'grid'; }
-</script>
 <script src="clips.js"></script>
 <script>
 (() => {
 'use strict';
-if (window.FLOPPY_LOCKED) return;
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 const errBox = document.getElementById('err');
