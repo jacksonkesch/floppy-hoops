@@ -1591,8 +1591,9 @@ function drawHUD(G) {
   });
   txt('-', 160, 13, 8, CREAM);
   const mp = G.P.some(p => p.score === n - 1);
-  if (G.state !== 'over') txt('ROUND ' + G.round + '  /  ' + (mp ? 'MATCH POINT' : 'FIRST TO ' + n), ART_W / 2, 41, 7, mp ? GREEN : CREAM, { ow: 0.7 });
-  if (G.knockK > 1) txt('SUDDEN DEATH', ART_W / 2, 49, 7, Math.sin(G.t * 8) > 0 ? '#ff5050' : CREAM);
+  // sudden death takes over the round line (blinking red) instead of stacking a second line on the announcer
+  const sd = G.knockK > 1, tag = sd ? 'SUDDEN DEATH' : mp ? 'MATCH POINT' : 'FIRST TO ' + n;
+  if (G.state !== 'over') txt('ROUND ' + G.round + '  /  ' + tag, ART_W / 2, 41, 7, sd ? (Math.sin(G.t * 8) > 0 ? '#ff5050' : CREAM) : mp ? GREEN : CREAM, { ow: 0.7 });
   if (G.banner) {
     const t = G.banner.t, k = Math.min(t < 0.25 ? smooth(t / 0.25) : 1, G.state === 'ready' ? smooth(clamp((READY_T - G.stateT) / 0.3, 0, 1)) : 0);
     ctx.globalAlpha = k;
