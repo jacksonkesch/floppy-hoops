@@ -1037,7 +1037,7 @@ class Game {
     p.vx += jx; p.vy += jy;
     if (p.grounded && jy > 3.2) { p.ground = null; p.air = 0; }
     const lev = clamp(h / BODY_H, 0.2, 1);
-    p.av += jx * (self ? 0.35 : 0.75) * lev;
+    p.av += jx * (self ? 0.16 : 0.34) * lev;   // x0.45: the Hoops rocking spring is softer, so the same lean takes a smaller kick
     if (!self) p.rock(clamp(Math.abs(jx) / 6, 0.5, 1), false, this.t);
     p.bv += jx * (self ? 1.5 : 3.2) * lev;
   }
