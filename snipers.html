@@ -27,9 +27,9 @@
   #menu button[aria-pressed="true"], #tourpanel button[aria-pressed="true"], #soundpanel button[aria-pressed="true"] { background: #ff8a2a; color: #141019; }
   #menu button:focus-visible, #tourpanel button:focus-visible, #soundpanel button:focus-visible, #tourpanel input:focus-visible { outline: 3px solid #43f07a; outline-offset: 2px; }
   #menu button:active, #tourpanel button:active, #soundpanel button:active { transform: translateY(2px); box-shadow: 0 1px 0 #141019; }
-  .modes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; padding-top: 14px; border-top: 2px solid #2b3350; }
+  .modes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; padding-top: 10px; border-top: 2px solid #2b3350; }
   .note { margin: 6px 0 4px; font-size: 11px; color: #7d88a8; }
-  .group { margin-top: 10px; }
+  .group { margin-top: 7px; }
   .group h3 { margin: 0 0 6px; font-size: 11px; font-weight: 400; color: #7d88a8; letter-spacing: 0.1em; }
   .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
   .modes-head.first { margin-top: 0; padding-top: 0; border-top: 0; }
@@ -637,15 +637,16 @@ const HIP_H = BODY.legLen, SHOULDER_H = BODY.legLen + BODY.torsoH - 0.1 * PSCALE
 const HEAD_C = BODY.legLen + BODY.torsoH + NECK + BODY.headR, BODY_H = HEAD_C + BODY.headR;   // ~2.06 m tall
 const HIT_R = 0.29;
 // a hop peaks at ~0.95 of a body height, ~0.45 s up and ~0.45 s down
-const GRAV = 2 * 0.95 * BODY_H / (0.45 * 0.45), JUMP_V = GRAV * 0.45;
+const GRAV = 2 * 0.99 * BODY_H / (0.45 * 0.45), JUMP_V = GRAV * 0.45;
 // the shooting arm, relative to the body (0 = straight ahead, +90 = straight up): it rests pointing at the floor, waits a
 // beat, swings up fast to a bit above level, then keeps going slowly up and over the head, so it can fire behind you too
-const AIM_REST = -85 * D2R, AIM_DELAY = 0.1, AIM_FAST = 260 * D2R, AIM_KNEE = 40 * D2R, AIM_SLOW = 90 * D2R, AIM_MAX = 235 * D2R;
+const AIM_REST = -85 * D2R, AIM_DELAY = 0.1, AIM_FAST = 340 * D2R, AIM_KNEE = 40 * D2R, AIM_SLOW = 90 * D2R, AIM_MAX = 235 * D2R;
 const ARM_DROP = 700 * D2R, REARM = -60 * D2R;
 // a hit shoves ~3.5 body heights/s along the bullet (it slides ~1 body height), the shooter is kicked back 0.7 of that
-const KNOCK = 4.2 * BODY_H, RECOIL = 0.3, AIR_HIT = 0.5, AIR_DRAG = 1, FRICTION = 5, LIFT = 0.12;
+const KNOCK = 4.6 * BODY_H, RECOIL = 0.7, AIR_HIT = 0.5, AIR_DRAG = 1, FRICTION = 5, LIFT = 0.12;
+const RECOIL_SLIDE = 0.62 * BODY_H;   // how far one plain shot kicks you back on a dry roof (sn.js feel measures it)
 const UPRIGHT_K = 70, UPRIGHT_D = 9, TILT_MAX = 1.45, FOOT = 0.2;
-const OUT_Y = -9, START_X = 4, SUDDEN_T = 25, READY_T = 1.7, POINT_T = 2.4, OVER_HOLD = 0.5;
+const OUT_Y = -9, START_X = 4, SUDDEN_T = 22, READY_T = 2.0, POINT_T = 2.2, OVER_HOLD = 1.0;
 
 const WEAPONS = [
   { id: 'rifle', name: 'POP RIFLE', kind: 'ray', k: 1, rk: 1, cd: 0.3, col: '#fff1a8' },
@@ -686,8 +687,8 @@ const MAPS = [
       solid({ kind: 'barge', x0: 1.5, x1: 7.5, top: 0, bottom: -0.7, mv: t => ({ dx: 0.5 * Math.sin(t * 0.7 + 2.2), dy: 0.35 * Math.sin(t * 1.1 + 2.2) }) })] },
   { id: 'lifts', name: 'LIFT SHAFT', sky: ['#18263a', '#6b8796'], sun: '#ffcf8a', far: '#2e4256', near: '#22313f', win: '#ffd27a',
     wall: '#6d6f73', wallD: '#55575b', ledge: '#b3b6bb', winOff: '#2a2f36',
-    build: () => [solid({ kind: 'lift', x0: -6.3, x1: -1.7, top: 0, bottom: -0.4, mv: t => ({ dx: 0, dy: 1.5 * Math.sin(t * 0.9) }) }),
-      solid({ kind: 'lift', x0: 1.7, x1: 6.3, top: 0, bottom: -0.4, mv: t => ({ dx: 0, dy: 1.5 * Math.sin(t * 0.9 + Math.PI) }) })] },
+    build: () => [solid({ kind: 'lift', x0: -7.0, x1: -1.3, top: 0, bottom: -0.4, mv: t => ({ dx: 0, dy: 1.5 * Math.sin(t * 0.9) }) }),
+      solid({ kind: 'lift', x0: 1.3, x1: 7.0, top: 0, bottom: -0.4, mv: t => ({ dx: 0, dy: 1.5 * Math.sin(t * 0.9 + Math.PI) }) })] },
 ];
 const POOLS = { maps: MAPS, weapons: WEAPONS, mods: MODS };
 
@@ -697,7 +698,7 @@ const DEFAULTS = { target: 5, level: 'normal', memes: 'on', finish: 1, sudden: 1
   pools: { maps: MAPS.map(m => m.id), weapons: WEAPONS.map(w => w.id), mods: MODS.map(m => m.id) } };
 const CPU_LEVELS = {
   easy: { err: 15 * D2R, think: [0.6, 1.3], dodge: 0.15, react: 0.32, scoot: 0.3, hop: 0.04 },
-  normal: { err: 8.5 * D2R, think: [0.3, 0.8], dodge: 0.4, react: 0.22, scoot: 0.65, hop: 0.07 },
+  normal: { err: 8.5 * D2R, think: [0.45, 1.05], dodge: 0.4, react: 0.22, scoot: 0.65, hop: 0.07 },
   hard: { err: 4 * D2R, think: [0.12, 0.45], dodge: 0.62, react: 0.15, scoot: 0.9, hop: 0.09 },
 };
 function loadSettings() {
@@ -784,7 +785,7 @@ class Sniper {
 // and fires backwards to scoot away from the edge when it gets pushed too close.
 class CPU {
   constructor(p, level) { this.p = p; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal; this.reset(); }
-  reset() { this.think = rand(0.5, 1.0); this.want = null; this.react = -1; this.err = 0; this.mode = 'shoot'; }
+  reset() { this.think = rand(0.5, 1.0); this.wait = 0; this.want = null; this.react = -1; this.err = 0; this.mode = 'shoot'; this.arc = null; this.arcT = 0; }
   update(G, dt) {
     const p = this.p, o = G.other(p), L = this.L;
     if (G.state !== 'play' || p.out) { G.setHold(p, false); return; }
@@ -794,30 +795,47 @@ class CPU {
       if (diff < 0.45 && o.holdT > AIM_DELAY) this.react = Math.random() < L.dodge ? L.react * rand(0.7, 1.3) : 99;
     }
     if (!o.aiming) this.react = this.react === 99 || this.react < 0 ? -1 : this.react;
-    if (this.react >= 0 && this.react < 99) { this.react -= dt; if (this.react <= 0) { G.jump(p); this.react = 99; } }
+    // a hop keeps my slide going (no friction in the air): only hop if the slide won't carry me past my own edge
+    const slideBack = Math.max(0, -p.vx * p.dir) * 0.95, hopSafe = G.edgeRoom(p) - slideBack > 0.5;
+    if (this.react >= 0 && this.react < 99) { this.react -= dt; if (this.react <= 0) { if (hopSafe) G.jump(p); this.react = 99; } }
     if (p.grounded && Math.abs(p.vx) < 0.6 && G.edgeRoom(p) > 1.2 && Math.random() < L.hop * dt) G.jump(p);
     // aiming
     if (!p.hold) {
       this.think -= dt;
       if (this.think > 0 || p.cd > 0 || p.aim > REARM) return;
-      if (!p.grounded && G.edgeRoom(p) < 2.5) return;   // a shot in the air near the edge would kick me off
-      const edge = G.edgeRoom(p);
-      if (edge < 1.9 && p.grounded && G.frontRoom(p) > 2.2 && (edge < 0.9 || Math.random() < L.scoot)) { this.mode = 'scoot'; this.want = rand(170, 200) * D2R; }
-      else { this.mode = 'shoot'; this.want = null; this.err = gauss() * L.err; }
-      G.setHold(p, true);
+      // every shot kicks me back about this far: never fire forward if that would put me over my own edge
+      const kick = RECOIL_SLIDE * G.W.rk * G.knockK * FRICTION / G.fric, creep = p.ground?.slope && G.mod?.id === 'rain' ? 0.7 : 0, edge = G.edgeRoom(p), spare = edge - kick - slideBack - creep;
+      if (!p.grounded && spare < 1.5) return;   // a shot in the air near the edge would kick me off
+      const canScoot = p.grounded && G.frontRoom(p) > kick + 1.2;
+      if (canScoot && (spare < 0.6 || (spare < 1.6 && Math.random() < L.scoot))) { this.mode = 'scoot'; this.want = rand(170, 200) * D2R; }
+      // stuck at the edge with nowhere to scoot: hold fire a moment, hop and hope -- then take the shot anyway
+      else if (spare < 0.3 && (this.wait = (this.wait || 0) + 0.25) < 2) { this.think = 0.25; return; }
+      else { this.wait = 0; this.mode = 'shoot'; this.want = null; this.err = gauss() * L.err / G.knockK; }   // sudden death: they steady their aim
+      this.arc = null; G.setHold(p, true);
       return;
     }
     let want = this.want;
     if (this.mode === 'shoot') {
       const m = p.muzzle(G.W), lead = G.W.kind === 'ray' ? 0.05 : 0.35, cx = o.x + o.vx * lead, c = o.at(1.15), cy = c.y + o.vy * lead;
       let ang = Math.atan2(cy - m.y, (cx + (c.x - o.x)) - m.x);
-      if (G.W.kind === 'lob') ang += 0.25 * p.dir * Math.sign(Math.cos(ang)) * (p.dir > 0 ? 1 : -1);
-      if (G.W.kind === 'rocket' && o.grounded) ang = Math.atan2(o.y + 0.3 - m.y, o.x - m.x);   // splash at their feet
+      if (G.W.kind !== 'ray') {
+        // hatchets arc and rockets sag: fly a fan of throws and keep the one that lands (re-solved a few times a second)
+        this.arcT -= dt;
+        if (this.arcT <= 0 || this.arc == null) {
+          // a rocket that bursts on the roof at their feet still counts, so it pays no penalty for hitting a roof
+          const lob = G.W.kind === 'lob', gk = lob ? 0.55 : 0.04, pen = lob ? 1.5 : 0, feet = !lob && o.grounded;
+          const tx = cx + (c.x - o.x), ty = feet ? o.y + 0.3 : cy;
+          this.arc = G.solveArc(p, G.W.speed, gk, tx, ty, pen); this.arcMiss = G.arcMiss;
+          if (feet && this.arcMiss > 1) { this.arc = G.solveArc(p, G.W.speed, gk, tx, cy, pen); this.arcMiss = G.arcMiss; }
+          this.arcT = 0.12;
+        }
+        ang = this.arc;
+      }
       // world angle back into the arm's own frame
       const rel = p.dir > 0 ? ang + (p.a + p.b) : Math.PI - ang - (p.a + p.b);
       want = wrap(rel) + this.err;
-      // a wall in the way: aim over it
-      if (G.blocked(p, m, ang)) want += 0.25;
+      // a wall in the way of a straight shot: aim over it
+      if (G.W.kind === 'ray' && G.blocked(p, m, ang)) want += 0.25;
     }
     const lim = clamp(want, AIM_REST + 0.05, AIM_MAX - 0.02);
     if (p.aim >= lim || p.aim >= AIM_MAX - 0.01) {
@@ -842,7 +860,8 @@ class Game {
     this.mode = mode; this.demo = demo; this.round = 0; this.winner = -1; this.finishUsed = false;
     const used = new Set(), memes = SET.memes === 'on' && !demo;
     const looks = [0, 1].map(() => memes && Math.random() < 0.5 ? memeLook(used) : makeLook(used));
-    this.P.forEach((p, i) => { p.look = looks[i]; p.spr = null; p.score = 0; p.name = looks[i].name ? shortName(looks[i].name) : TEAM[i].name; });
+    this.ann = null; this.sdRounds = 0; this.overSub = '';
+    this.P.forEach((p, i) => { p.look = looks[i]; p.spr = null; p.score = 0; p.scorePop = 0; p.stats = { shots: 0, hits: 0, bonks: 0 }; p.shotN = 0; p.hitShot = 0; p.name = looks[i].name ? shortName(looks[i].name) : TEAM[i].name; });
     if (mode === '2p' || mode === 'cvc' || demo) this.P.forEach((p, i) => { if (!looks[i].name) p.name = mode === '2p' ? 'P' + (i + 1) : 'CPU ' + TEAM[i].name; });
     if (mode === 'cpu' && !looks[0].name) this.P[0].name = 'YOU';
     if (mode === 'cpu' && !looks[1].name) this.P[1].name = 'CPU';
@@ -862,9 +881,9 @@ class Game {
     this.mod = Math.random() < (this.demo ? 0.35 : SET.modChance) ? pick(this.pickPool('mods')) : null;
     this.solids = this.M.build(); this.rt = 0;
     this.grav = GRAV * (this.mod?.id === 'moon' ? 0.45 : 1); this.jumpV = JUMP_V * (this.mod?.id === 'moon' ? 0.8 : 1);
-    this.fric = FRICTION * (this.mod?.id === 'rain' ? 0.3 : 1);
+    this.fric = FRICTION * (this.mod?.id === 'rain' ? 0.65 : 1);
     this.wind = 0; this.windT = rand(0, 10); this.junkT = rand(1.5, 3);
-    this.shots = []; this.junk = []; this.fx = []; this.pops = [];
+    this.shots = []; this.junk = []; this.fx = []; this.pops = []; this.ann = null;
     this.updateSolids(0);
     this.P.forEach((p, i) => {
       const x = (i === 0 ? -1 : 1) * START_X, s = this.supportAt(x, 50);
@@ -906,6 +925,33 @@ class Game {
     if (!s) return 0;
     return p.dir > 0 ? s.x1 - p.x : p.x - s.x0;
   }
+  // fly a hatchet or rocket forward from m at world angle ang: how near does it pass (tx, ty) before a roof stops it?
+  flyMiss(m, ang, sp, gk, tx, ty, pen = 1.5) {
+    let x = m.x, y = m.y, vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp, best = 99;
+    const g = this.grav * gk, h = 1 / 30;
+    for (let i = 0; i < 75; i++) {
+      vy -= g * h; const nx = x + vx * h, ny = y + vy * h, d = Math.hypot(nx - x, ny - y), ux = (nx - x) / (d || 1), uy = (ny - y) / (d || 1);
+      for (const s of this.solids) { const t = rayPoly(x, y, ux, uy, polyOf(s), d); if (t >= 0) return Math.min(best, Math.hypot(x + ux * t - tx, y + uy * t - ty) + pen); }
+      const k = clamp(((tx - x) * ux + (ty - y) * uy), 0, d);   // nearest point on this bit of the flight
+      best = Math.min(best, Math.hypot(x + ux * k - tx, y + uy * k - ty)); x = nx; y = ny;
+      if (y < ty - 4) break;
+    }
+    return best;
+  }
+  // the best launch angle for a curving shot at (tx, ty): try a fan of angles, keep the one that passes closest
+  // (the muzzle swings with the arm, so each try starts from where the muzzle would be at that angle)
+  solveArc(p, sp, gk, tx, ty, pen = 1.5) {
+    const sh = p.shoulder(), reach = BODY.armLen + (this.W.kind === 'lob' ? 0.1 : 0.55);
+    const base = Math.atan2(ty - sh.y, tx - sh.x), toward = Math.cos(base) >= 0 ? 1 : -1;
+    let best = base, bestMiss = 99;
+    for (let i = -6; i <= 30; i++) {
+      const ang = toward > 0 ? base + i * 0.05 : base - i * 0.05, m = { x: sh.x + Math.cos(ang) * reach, y: sh.y + Math.sin(ang) * reach };
+      const miss = this.flyMiss(m, ang, sp, gk, tx, ty, pen);
+      if (miss < bestMiss - 0.02) { bestMiss = miss; best = ang; }
+    }
+    this.arcMiss = bestMiss;
+    return best;
+  }
   blocked(p, m, ang) {
     const dx = Math.cos(ang), dy = Math.sin(ang), o = this.other(p);
     const tgt = Math.hypot(o.x - m.x, o.y + HIP_H - m.y);
@@ -931,7 +977,7 @@ class Game {
   // ---- shooting
   fire(p) {
     const W = this.W, g = p.gunAng(), m = p.muzzle(W), dx = Math.cos(g), dy = Math.sin(g);
-    p.aiming = false; p.wantShoot = false; p.cd = W.cd; p.armV = 0;
+    p.aiming = false; p.wantShoot = false; p.cd = W.cd; p.armV = 0; p.shotN++; if (!this.demo) p.stats.shots++;
     // the kick back on the shooter
     const kick = KNOCK * RECOIL * W.rk * this.knockK * (p.grounded ? 1 : AIR_HIT);
     this.push(p, -dx * kick, -dy * kick * 0.9, SHOULDER_H, true);
@@ -976,6 +1022,7 @@ class Game {
     this.spark(x, y, '#ff5a4a', 9); this.addShake(3);
     this.sfx.oof(); this.sfx.thud(1.2);
     if (head) this.popup('BONK!', x, y + 0.5, ORANGE);
+    this.tally(by, head);
     this.maybeFinish(o);
   }
   // shove a body: the feet take the push, the upper body flops with it
@@ -995,10 +1042,12 @@ class Game {
       if (p.out) continue;
       const c = p.at(1.0), ddx = c.x - x, ddy = c.y - y, d = Math.hypot(ddx, ddy);
       if (d > W.blast) continue;
-      const f = Math.min(1.05, (1 - d / W.blast) ** 0.7 * W.k) * (p.side === by ? 0.55 : 1) * (p.grounded ? 1 : AIR_HIT), J = KNOCK * f * this.knockK, ux = ddx / (d || 1), uy = ddy / (d || 1);
+      const f = Math.min(1.05, (1 - d / W.blast) ** 0.7 * W.k) * (p.side === by ? 0.55 : 1) * (p.grounded ? 1 : AIR_HIT), J = KNOCK * f * this.knockK, uy = ddy / (d || 1);
+      // a blast always shoves you away sideways, even one right under your feet
+      const ux = (ddx < 0 ? -1 : 1) * Math.max(Math.abs(ddx / (d || 1)), 0.7);
       this.push(p, ux * J, uy * J * 0.35 + J * 0.12, 1.0, false); this.hits = (this.hits || 0) + (p.side !== by ? 1 : 0);
       p.hurt = 0.35; p.flail = 1; p.lastHit = by;
-      if (p.side !== by) this.maybeFinish(p);
+      if (p.side !== by) { this.tally(this.P[by]); this.maybeFinish(p); }
     }
     for (const j of this.junk) { const d = Math.hypot(j.x - x, j.y - y); if (d < W.blast) { j.vx += (j.x - x) / (d || 1) * 8; j.vy += 6; } }
   }
@@ -1010,12 +1059,19 @@ class Game {
     const room = this.edgeRoom(o) * (o.dir > 0 ? 1 : 1), flying = Math.abs(o.vx) > 3 || !o.grounded;
     if (!(room < 2.4 || flying)) return;
     this.finishUsed = true; this.slow = 0.25; this.slowT = 1.3; w.cd = 0; w.aim = Math.min(w.aim, REARM - 0.05);
-    this.popup('FINISH HIM!', 0, 4.4, '#ff4040', 1.6, 1.4);
+    this.say('FINISH HIM!', '#ff4040', 1.6, 1.4);
     if (SET.memes === 'on') { const ids = SOUND_REEL.filter(e => this.sfx.has(e.id)).map(e => e.id); if (ids.length) this.sfx.cue(pick(ids)); else this.sfx.fanfare(); }
   }
   // ---- effects
   spark(x, y, col, n) { for (let i = 0; i < n; i++) this.fx.push({ k: 'bit', x, y, vx: rand(-4, 4), vy: rand(-1, 5), t: 0, life: rand(0.2, 0.45), col }); }
   popup(text, x, y, col = CREAM, life = 0.9, size = 1) { this.pops.push({ text, x, y, col, t: 0, life, size }); }
+  // big calls (SHOOT!, +1, FINISH HIM...) live in one fixed slot under the score, never in the world where the camera moves them
+  say(text, col = CREAM, life = 0.9, size = 1) { this.ann = { text, col, t: 0, life, size }; }
+  tally(by, head) {
+    if (!by || this.demo) return;
+    if (by.hitShot !== by.shotN) { by.hitShot = by.shotN; by.stats.hits++; }
+    if (head) by.stats.bonks++;
+  }
   addShake(v) { if (!REDUCED) this.shake = Math.min(8, this.shake + v); }
 
   // ---- the step
@@ -1026,8 +1082,10 @@ class Game {
     const sdt = dt * this.slow;
     this.stateT += dt;
     this.shake = Math.max(0, this.shake - dt * 18); this.flash = Math.max(0, this.flash - dt);
-    if (this.banner) { this.banner.t += dt; if (this.banner.t > 2.6) this.banner = null; }
-    if (this.state === 'ready' && this.stateT > READY_T) { this.state = 'play'; this.stateT = 0; this.sfx.whistle(); this.popup('SHOOT!', 0, 4.8, GREEN, 0.7, 1.4); }
+    if (this.banner) { this.banner.t += dt; if (this.state !== 'ready') this.banner = null; }
+    if (this.ann) { this.ann.t += dt; if (this.ann.t > this.ann.life) this.ann = null; }
+    for (const p of this.P) if (p.scorePop > 0) p.scorePop = Math.max(0, p.scorePop - dt * 2);
+    if (this.state === 'ready' && this.stateT > READY_T) { this.state = 'play'; this.stateT = 0; this.sfx.whistle(); this.say('SHOOT!', GREEN, 0.7, 1.4); }
     if (this.state === 'play' || this.state === 'point' || this.state === 'ready') this.sim(sdt);
     if (this.state === 'point' && this.stateT > POINT_T) {
       if (this.winner >= 0) { this.state = 'over'; this.stateT = 0; this.sfx.fanfare(); if (this.demo) { this.newMatch('cvc', true); } }
@@ -1044,8 +1102,8 @@ class Game {
     this.rt += dt;
     this.updateSolids(this.rt);
     if (this.state === 'play' && SET.sudden && this.rt > SUDDEN_T) {
-      if (this.knockK === 1) { this.popup('SUDDEN DEATH!', 0, 4.6, '#ff5050', 1.4, 1.2); this.sfx.buzzer(); }
-      this.knockK = 1 + (this.rt - SUDDEN_T) * 0.05;
+      if (this.knockK === 1) { this.say('SUDDEN DEATH!', '#ff5050', 1.4, 1.2); this.sdRounds++; this.sfx.buzzer(); }
+      this.knockK = 1 + (this.rt - SUDDEN_T) * 0.09;
     }
     if (this.mod?.id === 'wind') { this.windT += dt; this.wind = Math.sin(this.windT * 0.6) * 2.2 + Math.sin(this.windT * 1.7) * 0.8; }
     if (this.mod?.id === 'junk' && this.state === 'play') { this.junkT -= dt; if (this.junkT <= 0) { this.dropJunk(); this.junkT = rand(1.8, 3.4); } }
@@ -1071,7 +1129,7 @@ class Game {
       const s = p.ground;
       if (s.mv) { p.x += s.dx; }
       // slide, with friction (the drizzle makes it slick); a gable roof slowly slides you downhill
-      if (s.slope) { const down = Math.sign(p.x - (s.x0 + s.x1) / 2); p.vx += down * this.grav * s.slope * (this.mod?.id === 'rain' ? 0.32 : 0) * dt; }
+      if (s.slope) { const down = Math.sign(p.x - (s.x0 + s.x1) / 2); p.vx += down * this.grav * s.slope * (this.mod?.id === 'rain' ? 0.22 : 0) * dt; }
       p.vx += this.wind * 0.12 * dt;
       const before = p.vx;
       p.vx *= Math.exp(-this.fric * dt);
@@ -1128,6 +1186,7 @@ class Game {
     // land at a big lean and you stumble the rest of the way back up
     if (Math.abs(p.a) > TILT_MAX) { p.a = Math.sign(p.a) * TILT_MAX * 0.9; p.av *= -0.3; }
     p.av += p.vx * 0.15;
+    p.bv += p.vx * 1.6 - p.dir * clamp(v / 8, 0, 1) * 1.2;   // the upper body keeps going for a beat, then springs back
     this.sfx.thud(clamp(v / 6, 0.2, 1.2));
     if (v > 6) this.addShake(1.2);
   }
@@ -1201,12 +1260,20 @@ class Game {
     const alive = this.P.filter(p => !p.out);
     if (alive.length !== 1) { this.decideTie(); return; }
     const w = alive[0]; w.score++; w.scorePop = 1; this.pointWin = w.side;
-    this.popup(w.name + ' +1', 0, 4.6, w.T.light, POINT_T, 1.2);
+    this.say(w.name + ' +1', w.T.light, POINT_T, 1.2);
     this.sfx.jingle(w.side);
-    if (w.score >= SET.target) { this.winner = w.side; this.overT = 0; }
+    if (w.score >= SET.target) { this.winner = w.side; this.overT = 0; this.overSub = this.subtitle(w); }
     this.slow = 1; this.slowT = 0;
   }
-  decideTie() { this.pops = this.pops.filter(q => !/\+1$/.test(q.text)); this.popup('BOTH OUT - REPLAY', 0, 4.6, CREAM, POINT_T, 1.1); this.winner = -1; this.pointWin = -1; }
+  decideTie() { this.say('BOTH OUT - REPLAY', CREAM, POINT_T, 1.1); this.winner = -1; this.pointWin = -1; }
+  subtitle(w) {
+    const l = this.other(w);
+    if (l.score === 0) return 'TOO EASY';
+    if (w.score - l.score === 1) return 'WHAT A MATCH!';
+    if (w.stats.bonks >= 3) return 'BONK CITY';
+    if (this.sdRounds >= 2) return 'WHAT A SLOG';
+    return pick(['AMAZING!', 'DESTRUCTION', 'NICE SHOOTING']);
+  }
   camOff() { return this.screen === 'title' ? -3.1 : 0; }   // the title menu covers the left side, so the demo sits right of it
   camera(dt) {
     const live = this.P.filter(p => !p.out || p.outT < 0.6);
@@ -1439,7 +1506,7 @@ function drawBarge(G, s, i) {
 function drawLift(G, s) {
   const x0 = AX(s.x0), x1 = AX(s.x1), top = AY(s.top), bot = AY(s.bottom), w = x1 - x0;
   ctx.strokeStyle = INK; ctx.lineWidth = 1;
-  for (const k of [0.2, 0.8]) { ctx.beginPath(); ctx.moveTo(x0 + w * k + 0.5, top); ctx.lineTo(x0 + w * k + 0.5, -40); ctx.stroke(); }
+  for (const k of [0.2, 0.8]) { ctx.beginPath(); ctx.moveTo(x0 + w * k + 0.5, top); ctx.lineTo(x0 + w * k + 0.5, -320); ctx.stroke(); }
   rr(x0 + w * 0.2 - 3, top - 6, w * 0.6 + 6, 2, '#9aa0a8');
   rr(x0 - 1, top - 1, w + 2, bot - top + 3, INK); rr(x0, top, w, bot - top + 1, '#8f949c');
   for (let x = x0 + 2; x < x1 - 1; x += 3) rr(x, top + 1, 1, bot - top - 1, '#5e636b');
@@ -1449,11 +1516,11 @@ function drawShaft(G) {
   // the lift shaft: steel girders on both sides and a far wall behind
   const M = G.M;
   for (const side of [-1, 1]) {
-    const xa = AX(side * 1.7), xb = AX(side * 7.6), l = Math.min(xa, xb), r = Math.max(xa, xb);
-    for (let y = -40; y < ART_H + 40; y += 16) { const yy = y + ((CAMY * PPM) % 16); rr(l, yy, r - l, 1, M.near); }
-    for (const x of [l, r - 2]) rr(x, -10, 2, ART_H + 20, M.near);
+    const xa = AX(side * 1.3), xb = AX(side * 8.2), l = Math.min(xa, xb), r = Math.max(xa, xb);
+    for (let y = -320; y < ART_H + 320; y += 16) { const yy = y + ((CAMY * PPM) % 16); rr(l, yy, r - l, 1, M.near); }
+    for (const x of [l, r - 2]) rr(x, -320, 2, ART_H + 640, M.near);
   }
-  rr(AX(-1.0), -10, 2, ART_H + 20, M.near); rr(AX(1.0) - 2, -10, 2, ART_H + 20, M.near);
+  rr(AX(-0.7), -320, 2, ART_H + 640, M.near); rr(AX(0.7) - 2, -320, 2, ART_H + 640, M.near);
 }
 function drawSolids(G) {
   if (G.M.id === 'lifts') drawShaft(G);
@@ -1515,34 +1582,40 @@ function drawWeather(G) {
 function drawHUD(G) {
   const [a, b] = G.P, n = SET.target;
   [a, b].forEach((p, k) => {
-    const w = 22, x = k ? 163 : 135, pop = p.scorePop > 0 ? p.scorePop : 0;
-    rr(x - 1, 3, w + 2, 17, INK); rr(x, 4, w, 15, p.T.jersey); rr(x, 17, w, 2, p.T.dark);
-    txt(String(p.score), x + w / 2, 11.5 - pop * 2, 12 + pop * 4, '#ffffff', { bold: true });
-    txt(p.name, k ? x + w + 1 : x - 1, 25, Math.min(6, fitSize(p.name, 6, 40)), p.T.light, { ow: 0.8, align: k ? 'right' : 'left' });
+    const w = 26, x = k ? 165 : 129, pop = p.scorePop > 0 ? p.scorePop : 0;
+    rr(x - 1, 3, w + 2, 21, INK); rr(x, 4, w, 19, p.T.jersey); rr(x, 21, w, 2, p.T.dark);
+    txt(String(p.score), x + w / 2, 13.5 - pop * 2, 16 + pop * 6, '#ffffff', { bold: true });
+    // long names (CPU RED, meme names) grow outward from the middle instead of colliding, like Hoops
+    const long = p.name.length > 5;
+    txt(p.name, long ? (k ? x : x + w) : x + w / 2, 30, Math.min(8, fitSize(p.name, 8, 90)), p.T.light, { ow: 0.8, align: long ? (k ? 'left' : 'right') : 'center' });
   });
-  rr(158, 11, 4, 2, CREAM);
-  if (G.state !== 'over') txt('ROUND ' + G.round + '  /  FIRST TO ' + n, ART_W / 2, 36, 7, CREAM, { ow: 0.7 });
-  if (G.knockK > 1) txt('SUDDEN DEATH', ART_W / 2, 45, 7, Math.sin(G.t * 8) > 0 ? '#ff5050' : CREAM);
+  txt('-', 160, 13, 8, CREAM);
+  const mp = G.P.some(p => p.score === n - 1);
+  if (G.state !== 'over') txt('ROUND ' + G.round + '  /  ' + (mp ? 'MATCH POINT' : 'FIRST TO ' + n), ART_W / 2, 41, 7, mp ? GREEN : CREAM, { ow: 0.7 });
+  if (G.knockK > 1) txt('SUDDEN DEATH', ART_W / 2, 49, 7, Math.sin(G.t * 8) > 0 ? '#ff5050' : CREAM);
   if (G.banner) {
-    const t = G.banner.t, k = t < 0.25 ? smooth(t / 0.25) : t > 2.2 ? 1 - smooth((t - 2.2) / 0.4) : 1;
+    const t = G.banner.t, k = Math.min(t < 0.25 ? smooth(t / 0.25) : 1, G.state === 'ready' ? smooth(clamp((READY_T - G.stateT) / 0.3, 0, 1)) : 0);
     ctx.globalAlpha = k;
     const sz = fitSize(G.banner.lines[0], 16, 280);
-    wobblyWord(G.banner.lines[0], ART_W / 2, 44 - (1 - k) * 10, sz, CREAM, ORANGE, G.t);
-    txt(G.banner.lines[1], ART_W / 2, 60, fitSize(G.banner.lines[1], 7, 300), '#ffd27a');
-    if (G.mod) txt(G.mod.sub, ART_W / 2, 70, 5, CREAM);
+    wobblyWord(G.banner.lines[0], ART_W / 2, 60 - (1 - k) * 8, sz, CREAM, ORANGE, G.t);
+    txt(G.banner.lines[1], ART_W / 2, 76, fitSize(G.banner.lines[1], 7, 300), '#ffd27a', { ow: 0.8 });
+    if (G.mod) txt(G.mod.sub, ART_W / 2, 85, 5, CREAM, { ow: 0.6 });
     ctx.globalAlpha = 1;
   }
-  if (G.state === 'ready' && G.stateT > 0.3) txt('READY...', ART_W / 2, 84, 9, CREAM);
-  for (const p of G.P) if (p.scorePop > 0) p.scorePop = Math.max(0, p.scorePop - 1 / 30);
+  if (G.state === 'ready' && G.stateT > 0.3 && G.stateT < READY_T - 0.15) txt('READY...', ART_W / 2, 98, 8, CREAM);
+  if (G.ann) {
+    const q = G.ann, k = q.t / q.life, a = k > 0.8 ? 1 - (k - 0.8) / 0.2 : 1, pop = 1 + Math.max(0, 0.25 - q.t) * 2.4;
+    ctx.globalAlpha = a; txt(q.text, ART_W / 2, 60, Math.round(fitSize(q.text, 9 * q.size, 300) * pop), q.col, { ow: 1 }); ctx.globalAlpha = 1;
+  }
   for (const q of G.pops) {
     const k = q.t / q.life, a = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1, pop = 1 + Math.max(0, 0.4 - q.t * 2);
-    ctx.globalAlpha = a; txt(q.text, AX(q.x), AY(q.y), Math.round(8 * q.size * pop), q.col); ctx.globalAlpha = 1;
+    ctx.globalAlpha = a; txt(q.text, AX(q.x), Math.max(54, AY(q.y)), Math.round(8 * q.size * pop), q.col); ctx.globalAlpha = 1;
   }
 }
 function drawTouchHints(G) {
   if (!document.body.classList.contains('touch') || G.screen !== 'play' || G.state === 'over') return;
   ctx.globalAlpha = 0.5;
-  const zs = G.mode === '2p' ? [['JUMP', 40], ['SHOOT', 120], ['SHOOT', 200], ['JUMP', 280]] : [['JUMP', 80], ['HOLD TO SHOOT', 240]];
+  const zs = G.mode === '2p' ? [['HOP', 40], ['SHOOT', 120], ['SHOOT', 200], ['HOP', 280]] : [['TAP TO HOP', 80], ['HOLD TO SHOOT', 240]];
   for (const [t, x] of zs) txt(t, x, ART_H - 8, 6, CREAM);
   ctx.globalAlpha = 1;
 }
@@ -1572,7 +1645,7 @@ function panel(x, y, w, h, a = 0.86) { ctx.fillStyle = `rgba(12,14,24,${a})`; ct
 function drawTitle(G) {
   if (G.menuOpen) { ctx.fillStyle = 'rgba(8,10,18,0.5)'; ctx.fillRect(-10, -10, ART_W + 20, ART_H + 20); return; }
   const t = G.t;
-  panel(6, 6, 118, 168);
+  panel(6, 6, 118, 168, 0.93);
   wobblyWord('FLOPPY', 65, 22, 16, ORANGE, '#7a2d0c', t);
   wobblyWord('SNIPERS', 65, 41, 14, CREAM, '#6b5f49', t);
   MENU_ITEMS.forEach((m, i) => {
@@ -1588,30 +1661,37 @@ function drawTitle(G) {
   txt('RED: W HOP  E SHOOT', 65, 136, 6, '#ff8173', { ow: 0.7 });
   txt('BLUE: I HOP  O SHOOT', 65, 145, 6, '#86b2ff', { ow: 0.7 });
   txt('HOLD SHOOT TO AIM', 65, 154, 6, '#b9c3dd', { ow: 0.7 });
-  txt('ARROWS OR W/S + ENTER', 65, 166, fitSize('ARROWS OR W/S + ENTER', 8, 108), '#7d88a8', { ow: 0.6 });
+  const pickHint = document.body.classList.contains('touch') ? 'TAP TO PICK' : 'ARROWS OR W/S + ENTER';
+  txt(pickHint, 65, 166, fitSize(pickHint, 8, 108), '#7d88a8', { ow: 0.6 });
   txt('NOW PLAYING', 222, 163, 8, CREAM, { ow: 0.8 }); txt(G.M.name, 222, 172, 8, ORANGE, { ow: 0.8 });
 }
 const HELP = [
   ['KNOCK THE OTHER SNIPER', CREAM], ['OFF THE ROOF.', CREAM], ['', 0],
   ['HOLD SHOOT: YOUR ARM SWINGS UP.', '#ffd27a'], ['LET GO TO FIRE WHERE IT POINTS.', '#ffd27a'], ['KEEP HOLDING TO AIM UP AND BEHIND.', '#ffd27a'], ['', 0],
   ['EVERY SHOT KICKS YOU BACK TOO.', CREAM], ['SHOOT BEHIND YOU TO SCOOT FORWARD.', CREAM], ['HOP TO DODGE.', CREAM], ['', 0],
-  ['RED: W JUMP, E SHOOT', '#ff8173'], ['BLUE: I JUMP, O SHOOT', '#86b2ff'], ['TOUCH: LEFT SIDE JUMP, RIGHT SIDE SHOOT', '#9a90aa'],
+  ['RED: W HOP, E SHOOT', '#ff8173'], ['BLUE: I HOP, O SHOOT', '#86b2ff'], ['TOUCH: LEFT SIDE HOP, RIGHT SIDE SHOOT', '#9a90aa'],
   ['P PAUSE   M MUTE', '#9a90aa'],
 ];
 function drawHelp(G) {
   panel(40, 8, 240, 164, 0.9);
   txt('HOW TO PLAY', 160, 20, 10, ORANGE);
-  HELP.forEach(([l, c], i) => { if (l) txt(l, 160, 36 + i * 8.6, 6, c, { outline: false }); });
-  txt('PRESS ANY KEY', 160, 164, 5, Math.sin(G.t * 4) > 0 ? CREAM : '#9a90aa', { outline: false });
+  HELP.forEach(([l, c], i) => { if (l) txt(l, 160, 34 + i * 8.2, 6, c, { outline: false }); });
+  txt(document.body.classList.contains('touch') ? 'TAP TO GO BACK' : 'PRESS ANY KEY', 160, 163, 6, Math.sin(G.t * 4) > 0 ? CREAM : '#9a90aa', { outline: false });
 }
 const OVER_BTN = [{ id: 'again', label: 'REMATCH', x: 92 }, { id: 'menu', label: 'MENU', x: 172 }];
 function drawOver(G) {
   const w = G.P[G.winner], k = clamp(G.overT / 0.6, 0, 1), pop = 1 + Math.max(0, 0.4 - G.overT) * 1.5;
   ctx.fillStyle = `rgba(8,10,18,${0.62 * k})`; ctx.fillRect(-10, -10, ART_W + 20, ART_H + 20);
-  const title = w.name === 'YOU' ? 'YOU WIN!' : `${w.name} WINS!`;
-  txt(title, 160, 52, fitSize(title, 24, 290) * pop, w.T.light, { ow: 1.4 });
-  txt(`${G.P[0].score}  -  ${G.P[1].score}`, 160, 80, 16, CREAM);
-  txt(G.P[0].name, 112, 80, fitSize(G.P[0].name, 8, 60), G.P[0].T.light, { ow: 0.8 }); txt(G.P[1].name, 208, 80, fitSize(G.P[1].name, 8, 60), G.P[1].T.light, { ow: 0.8 });
+  const title = w.name === 'YOU' ? 'YOU WIN!' : `${w.name} WINS!`, [a, b] = G.P;
+  txt(title, 160, 34, fitSize(title, 24, 290) * pop, w.T.light, { ow: 1.4 });
+  if (G.overSub) txt(G.overSub, 160, 53, 8, '#ffd27a', { ow: 0.8 });
+  txt(`${a.score}  -  ${b.score}`, 160, 71, 16, CREAM);
+  txt(a.name, 112, 87, fitSize(a.name, 8, 70), a.T.light, { ow: 0.8 }); txt(b.name, 208, 87, fitSize(b.name, 8, 70), b.T.light, { ow: 0.8 });
+  if (G.overT > 0.35 && a.stats) [['SHOTS', 'shots'], ['HITS', 'hits'], ['BONKS', 'bonks']].forEach(([lbl, key], i) => {
+    const y = 101 + i * 10;
+    txt(lbl, 160, y, 6, '#b9c3dd', { ow: 0.7 });
+    txt(String(a.stats[key]), 112, y, 7, CREAM, { ow: 0.7 }); txt(String(b.stats[key]), 208, y, 7, CREAM, { ow: 0.7 });
+  });
   if (G.overT > OVER_HOLD) OVER_BTN.forEach((b, i) => {
     const on = G.overSel === i;
     rr(b.x - 1, 139, 58, 22, INK); rr(b.x, 140, 56, 20, on ? ORANGE : '#262b3d'); if (on) rr(b.x, 158, 56, 2, '#c4621a');
@@ -1632,13 +1712,15 @@ function render(G) {
   if (G.screen === 'title') drawTitle(G);
   else if (G.screen === 'how') drawHelp(G);
   else {
-    drawHUD(G); drawTouchHints(G);
-    if (G.state === 'over' && G.winner >= 0) drawOver(G);
+    const over = G.state === 'over' && G.winner >= 0;
+    if (!over) { drawHUD(G); drawTouchHints(G); }
+    else drawOver(G);
     if (G.paused) drawPause();
   }
-  const sy = G.screen === 'title' ? 8 : 172;
-  if (G.sfx.muted) txt('SOUND OFF  (M)', 316, sy, 8, '#7d88a8', { align: 'right', ow: 0.6 });
-  else if (!G.sfx.running && Math.sin(performance.now() / 250) > -0.4) txt('CLICK FOR SOUND', 316, sy, 8, ORANGE, { align: 'right', ow: 0.6 });
+  // on phones the bottom row belongs to the touch hints, so the sound nudge moves up top
+  const touch = document.body.classList.contains('touch'), sy = G.screen === 'title' || touch ? 8 : 172;
+  if (G.sfx.muted) txt(touch ? 'SOUND OFF' : 'SOUND OFF  (M)', 316, sy, 8, '#7d88a8', { align: 'right', ow: 0.6 });
+  else if (!G.sfx.running && Math.sin(performance.now() / 250) > -0.4) txt(touch ? 'TAP FOR SOUND' : 'CLICK FOR SOUND', 316, sy, 8, ORANGE, { align: 'right', ow: 0.6 });
 }
 
 // ---------------------------------------------------------------- input + screens
@@ -1824,6 +1906,8 @@ let last = performance.now(), acc = 0, broken = false;
 function frame(dt) { if (G.screen === 'title' || G.screen === 'how') { G.menuDemo = true; } }
 function loop(now) {
   if (broken) return;
+  // a harness can freeze the page's own clock and step G by hand
+  if (G.freeze) { last = now; acc = 0; requestAnimationFrame(loop); return; }
   try {
     const rdt = Math.min(0.05, (now - last) / 1000); last = now; acc += rdt;
     let n = 0;
@@ -1841,7 +1925,8 @@ addEventListener('resize', () => render(G));
 requestAnimationFrame(loop);
 if (/[?&]debug\b/.test(location.search)) {
   window.floppy = G; window.floppySET = SET;
-  window.floppyFn = { startMode, goTitle, hold, keyFor, openMenu, closeMenu };
+  window.floppyFn = { startMode, goTitle, hold, keyFor, openMenu, closeMenu, menuPick, overPick, render, letGo };
+  window.floppyK = { BODY_H, START_X, READY_T, POINT_T, SUDDEN_T, HIP_H, SHOULDER_H, PPM, MAPS: MAPS.map(m => m.id), WEAPONS: WEAPONS.map(w => w.id), MODS: MODS.map(m => m.id) };
   window.floppyStep = n => { for (let i = 0; i < n; i++) { frame(STEP); if (!G.paused) G.step(STEP); } render(G); };
 }
 cv.focus({ preventScroll: true });
