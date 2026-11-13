@@ -69,7 +69,7 @@
     <h2>CUSTOMIZE</h2>
     <div class="modes-head first"><span class="lbl">MATCH</span></div>
     <div class="row"><span class="lbl">FIRST TO</span><div class="seg" data-key="target"><button data-v="3">3</button><button data-v="5">5</button><button data-v="7">7</button></div></div>
-    <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button></div></div>
+    <div class="row"><span class="lbl">CPU</span><div class="seg" data-key="level"><button data-v="easy">EASY</button><button data-v="normal">NORMAL</button><button data-v="hard">HARD</button><button data-v="impossible">IMPOSSIBLE</button></div></div>
     <div class="row"><span class="lbl">MEME CHARACTERS</span><div class="seg" data-key="memes"><button data-v="off">OFF</button><button data-v="on">ON</button></div></div>
     <div class="row"><span class="lbl">ITEMS</span><div class="seg" data-key="itemRate"><button data-v="0">NONE</button><button data-v="1">SOME</button><button data-v="2">LOTS</button></div></div>
     <div class="row"><span class="lbl">TURN SPEED</span><div class="seg" data-key="turn"><button data-v="0.6">SLOW</button><button data-v="1">NORMAL</button><button data-v="1.4">FAST</button></div></div>
@@ -884,10 +884,13 @@ const SETTINGS_KEY = 'floppy-getaway-settings-v1';
 const DEFAULTS = { target: 3, level: 'normal', memes: 'on', chars: ['random', 'random', 'random', 'random'], itemRate: 1, turn: 1, muted: 0,
   pools: { maps: MAPS.map(m => m.id), items: ITEMS.map(w => w.id) } };
 // noise: how far off a bot's lean time is; settle: how wobbly it'll hop from; react: seconds to notice a shot
+const IMP = { pace: 4.5, n: 28, top: 12, edge: 0.2, ms: 3 };   // IMPOSSIBLE: the pace it holds itself to (m/s), longest hold tried (frames), landings it looks past, edge room it wants
 const CPU_LEVELS = {
   easy: { noise: 0.35, settle: 6 * D2R, react: 0.45, cone: 14 * D2R, err: 12 * D2R, wait: [0.25, 0.7], dumb: 0.25 },
   normal: { noise: 0.2, settle: 14 * D2R, react: 0.2, cone: 9 * D2R, err: 6 * D2R, wait: [0.05, 0.2], dumb: 0.08 },
   hard: { noise: 0.08, settle: 18 * D2R, react: 0.1, cone: 5 * D2R, err: 2.5 * D2R, wait: [0, 0.08], dumb: 0 },
+  // exact: it never waits to settle or guesses. It works every hop out from the wobble it's standing in (see Bot.thinkX)
+  impossible: { noise: 0, settle: 9, react: 0, cone: 3 * D2R, err: 0, wait: [0, 0], dumb: 0, exact: true },
 };
 function loadSettings() {
   let s = {};
@@ -1292,14 +1295,15 @@ class Bot {
   constructor(p, level) { this.p = p; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal; this.plan = null; this.wait = rand(0.3, 0.9); this.seen = 0; this.stuck = 0; this.lastBest = -1e9; this.aimT = 0; }
   // fly a hop of hold time H toward dir from where p stands now (or from o = { x, y, s, t }); returns where it lands.
   // It plays by the racer's own rules: walls stop you, a ledge's lip catches your toes, ceilings knock your head.
-  sim(G, H, dir, o) {
-    const p = this.p, th = hopAngle(H), phi = dir * th;   // (bots hop from standing, so no extra lean carries in)
-    const g = GRAV * p.gk(G), dt = 1 / 30, s0 = o ? o.s : p.ground, V = p.hopV(), head = BH * 0.85, hg = head * Math.max(0.4, Math.cos(phi));
+  sim(G, H, dir, o, X) {
+    const p = this.p, th = hopAngle(H), phi = X ? X.phi : dir * th;   // (bots hop from standing, so no extra lean carries in; IMPOSSIBLE hands in the real angle)
+    const g = GRAV * p.gk(G), dt = X ? X.dt || 1 / 60 : 1 / 30, s0 = o ? o.s : p.ground, V = p.hopV(), head = BH * 0.85, hg = head * Math.max(0.4, Math.cos(phi));
     let x = o ? o.x : p.x, y = (o ? o.y : p.y) + 0.01, vx = V * Math.sin(phi) + (s0 && s0.vx ? s0.vx : 0) + (s0 && s0.belt ? s0.belt : 0), vy = V * Math.cos(phi) + (s0 && s0.vy > 0 ? s0.vy : 0);
     const t0 = (o ? o.t : G.rt) + CROUCH_T + H, goal = G.M.goal, reach = 7 / p.gk(G) + 3, x00 = x;
-    const near = G.S.filter(s => s.mv || (s.x1b > x00 - reach && s.x0b < x00 + reach));
+    const near = X && X.near || G.S.filter(s => s.mv || (s.x1b > x00 - reach && s.x0b < x00 + reach));
     const hx = Math.sin(phi) * BH * 0.92, hy = Math.cos(phi) * BH * 0.92;
     for (let t = 0; t < 6; t += dt) {
+      if (X) { X.av += (-AIR_K * (X.a - phi * AIR_PITCH) - AIR_D * X.av) * dt; X.a += X.av * dt; }   // (the lean it will land with)
       vy -= g * dt; let nx = x + vx * dt;
       if (nx > goal.x0 && nx < goal.x1 && y + BH * 0.5 > goal.y0 && y < goal.y1) return { x: nx, y, goal: true, t };
       if (G.zips && !o) for (const z of G.zips) {   // a cable in reach: it carries you to its far end
@@ -1322,9 +1326,9 @@ class Bot {
           const m = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (m ? m.dx : 0), x1 = s.x1b + (m ? m.dx : 0);
           if (x < x0 - LAND_PAD || x > x1 + LAND_PAD) continue;
           const top = s.topb + (m ? m.dy : 0) + (s.k ? clamp(x - x0, 0, x1 - x0) * s.k : 0);
-          if (y >= top - 0.05 && ny <= top && top > lt) { land = s; lt = top; e = Math.min(x - x0, x1 - x); }
+          if (y >= top - (X && !m ? 0.02 : 0.05) && ny <= top && top > lt) { land = s; lt = top; e = Math.min(x - x0, x1 - x); }   // (IMPOSSIBLE uses the real lip: a toe 0.02 under it clips the corner and drops through)
         }
-        if (land) return { x, y: lt, s: land, t, edge: e, th };
+        if (land) { if (X) X.av += vx * TIP_K; return { x, y: lt, s: land, t, edge: e, th }; }
       } else for (const s of near) {
         if (s.oneway) continue;
         const m = s.mv ? s.mv(t0 + t) : null, x0 = s.x0b + (m ? m.dx : 0), x1 = s.x1b + (m ? m.dx : 0), bot = s.botb + (m ? m.dy : 0);
@@ -1360,9 +1364,10 @@ class Bot {
     if (G.state !== 'run' || !p.grounded || !p.canAct || p.crouch > 0) { if (G.state !== 'run' || !p.grounded) this.plan = null; return; }
     if (this.plan) {   // leaning: let go when the planned time is up
       if (!p.holdDir) { this.plan = null; this.wait = L.react; return; }   // (a hit knocked the lean out of it: start the hop again instead of waiting forever)
-      if (p.holdT >= this.plan.H) { p.press(G, this.plan.dir, false); this.plan = null; this.wait = rand(L.wait[0], L.wait[1]) + L.react; }
+      if (p.holdT >= this.plan.H) { p.press(G, this.plan.dir, false); this.plan = null; this.wait = rand(L.wait[0], L.wait[1]) + L.react; if (L.back && !this.queue) this.L = CPU_LEVELS.impossible; }
       return;
     }
+    if (L.exact) return this.thinkX(G, dt);
     const settled = Math.abs(p.a) < L.settle && Math.abs(p.av) < 1.6;
     if (!settled) return;
     if ((this.wait -= dt) > 0) return;
@@ -1403,6 +1408,66 @@ class Bot {
     best.H = clamp(best.H * (1 + gauss() * L.noise * 0.5), 0.0, 0.46);
     this.plan = best; p.press(G, best.dir, true);
   }
+  // ---- IMPOSSIBLE ----
+  // the lean a hold of n frames ends up with, starting from lean a turning at av (the racer's own springs, step for step),
+  // and so the angle the hop really leaves at. A lean carried out of a landing flattens the next hop: that's the speed-jump.
+  hopFrom(n, dir, a, av) {
+    const dt = 1 / 60, H = n * dt;
+    for (let i = 1; i <= n; i++) {
+      const ramp = Math.min(LEAN_MAX, LEAN_RATE * i * dt), cur = a * dir, tg = dir * (cur > ramp ? Math.min(cur, BRACE_MAX) : ramp);
+      av += (-LEAN_W * LEAN_W * (a - tg) - 2 * LEAN_Z * LEAN_W * av) * dt; a += av * dt;
+      if (Math.abs(a) > FLAT_A) { a = Math.sign(a) * FLAT_A; if (av * a > 0) av *= -0.25; }
+    }
+    for (let c = CROUCH_T - dt; c > 0; c -= dt) { av += -2 * UP_W * av * dt; a += av * dt; }
+    const own = LEAN_AT[clamp(Math.round(H * 100), 0, 50)] * dir;
+    return { phi: clamp(dir * hopAngle(H) + LEAN_CARRY * (a - own), -PHI_MAX, PHI_MAX), a, av };
+  }
+  // No settling, no guessing: the moment it lands it flies every hold both ways from exactly how it's wobbling, then a
+  // second hop on from the best landings, and takes the pair that covers the most ground for the time it costs.
+  thinkX(G, dt) {
+    const p = this.p;
+    if (G.timeScale < 1) return;   // (slow motion: its sums are for full-speed frames)
+    if ((this.wait -= dt) > 0) return;
+    const reach = 7 / p.gk(G) + 3, near = G.S.filter(s => s.mv || (s.x1b > p.x - reach * 2 && s.x0b < p.x + reach * 2));
+    const goal = G.M.goal, sgn = Math.sign((goal.x0 + goal.x1) / 2 - p.x || 1), PACE = IMP.pace, N = IMP.n;
+    const pot = r => r.goal ? 1000 : r.x * sgn + 1.5 * Math.min(r.y - G.ry(r.x), 0) - (r.edge < IMP.edge ? 1.5 : 0), p0 = p.x * sgn + 1.5 * Math.min(p.y - G.ry(p.x), 0);
+    const c1 = [];
+    for (const dir of [1, -1]) for (let n = 1; n <= N; n++) {
+      const X = this.hopFrom(n, dir, p.a, p.av); X.near = near; const r = this.sim(G, n / 60, dir, null, X);
+      if (r.dead) continue;
+      const T = n / 60 + CROUCH_T + r.t, v = pot(r);
+      c1.push({ n, dir, r, X, T, v, sc: v - p0 - PACE * T });
+    }
+    c1.sort((a, b) => b.sc - a.sc);
+    const second = c => {
+      const r = c.r;
+      if (r.goal || r.zip || !r.s) return 0;
+      let m = -6;   // (nowhere to go from there: a dead end)
+      for (const dir of [1, -1]) for (let n = 1; n <= N; n += 2) {
+        const X = this.hopFrom(n, dir, c.X.a, c.X.av); X.near = near; X.dt = 1 / 30; const r2 = this.sim(G, n / 60, dir, { x: r.x, y: r.y, s: r.s, t: G.rt + c.T }, X);
+        if (r2.dead) continue;
+        const T2 = n / 60 + CROUCH_T + r2.t, sc = pot(r2) - c.v - PACE * T2;
+        if (sc > m) { m = sc; c.T2 = T2; }
+      }
+      return m;
+    };
+    let best = null;
+    const tq = performance.now();   // (best first hops are checked first, so running out of budget only drops the long shots)
+    const tryAll = list => { for (const c of list) { if (best && performance.now() - tq > IMP.ms) break; if (c.tot == null) c.tot = c.sc + second(c); if (!best || c.tot > best.tot) best = c; } };
+    tryAll(c1.slice(0, IMP.top));
+    // ground made over both hops (the pace charge put back): under 0.4 m means nothing gets anywhere from here
+    const ground = c => c.v - p0 + Math.max(0, c.tot - c.sc + PACE * (c.T2 || 0));
+    if (!best || ground(best) < 0.4) {   // wait a beat for the lift, look at everything, then hand the hop to the careful planner
+      this.stuck += 0.2; this.wait = 0.15; this.nStuck = (this.nStuck || 0) + 1;
+      if (this.stuck > 0.4 && !this.wide) { this.wide = true; tryAll(c1); }
+      if (!best || ground(best) < 0.4) {
+        if (this.stuck > 1.2) { this.stuck = 0; this.wide = false; this.nLegacy = (this.nLegacy || 0) + 1; this.L = { ...CPU_LEVELS.hard, exact: false, back: true }; this.wait = 0; }
+        return;
+      }
+    } else { this.stuck = 0; this.wide = false; }
+    this.wait = 0; this.plan = { H: best.n / 60 - 0.004, dir: best.dir }; p.press(G, best.dir, true);
+    if (window.floppyIMPlog) this.pred = { x0: p.x, y0: p.y, a: p.a, av: p.av, phi: best.X.phi, n: best.n, dir: best.dir, x: best.r.x, y: best.r.y, goal: best.r.goal, edge: best.r.edge };
+  }
   // use what it's holding when it makes sense
   items(G, dt) {
     const p = this.p, L = this.L;
@@ -1415,11 +1480,12 @@ class Bot {
     // (bots only pick fights with racers ahead of them or right on their heels: turning round to snipe stragglers stalls the race)
     const foes = G.P.concat(G.decoys).filter(o => o !== p && o.owner !== p && o.alive && !o.gone && o.imm <= 0 && (o.x - p.x > -2 || Math.abs(o.x - p.x) < 5));
     if (d.id === 'swap') { if (G.P.some(o => o !== p && o.alive && !o.gone && o.x - p.x > 6)) G.useItem(p); return; }
-    if (d.id === 'shield') { if (foes.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 14)) G.useItem(p); return; }
+    const threats = L.exact ? G.P.filter(o => o !== p && o.alive && !o.gone) : foes;   // (IMPOSSIBLE leads, so it watches the guns behind it too)
+    if (d.id === 'shield') { if (threats.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 14)) G.useItem(p); return; }
     const ahead = G.P.filter(o => o !== p && o.alive && !o.gone && o.x > p.x);
     if (d.trap) { if (p.grounded && (G.P.some(o => o !== p && o.alive && !o.gone && p.x - o.x > 1 && p.x - o.x < 10 && Math.abs(o.y - p.y) < 3) || this.itemT > 10)) G.useItem(p); return; }
     if (d.id === 'balloon' || d.id === 'springs') { if (p.grounded && this.itemT > 0.8) G.useItem(p); return; }
-    if (d.id === 'decoy') { if (foes.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 12) || this.itemT > 8) G.useItem(p); return; }
+    if (d.id === 'decoy') { if (threats.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 12) || this.itemT > 8) G.useItem(p); return; }
     if (d.id === 'bees') { if (ahead.length || this.itemT > 6) G.useItem(p); return; }
     if (d.id === 'grapple') { if ((p.grounded && ahead.some(o => o.x - p.x > 4 && o.x - p.x < 18 && Math.abs(o.y - p.y) < 4 && o.grounded)) || this.itemT > 12) G.useItem(p); return; }
     if (d.id === 'extinguisher') { if ((p.grounded && this.itemT > 0.8) || p.ammo < d.ammo) { G.useItem(p); p.trig = true; } return; }
@@ -4365,7 +4431,8 @@ function loop(now) {
 goTitle();
 if (/[?&]debug\b/.test(location.search)) {
   window.floppy = G; window.floppySET = SET;
-  window.floppyFn = { startMode, goTitle, hold, keyFor, openPick, pickKey, pickGo, padEdge, openMenu, closeMenu, overPick, overBtns, render: () => render(G) };
+  window.floppyIMP = IMP;
+  window.floppyFn = { botLevel: (i, lv) => { G.P[i].bot = new Bot(G.P[i], lv); }, startMode, goTitle, hold, keyFor, openPick, pickKey, pickGo, padEdge, openMenu, closeMenu, overPick, overBtns, render: () => render(G) };
   window.floppyStep = n => { for (let i = 0; i < n; i++) { if (G.state === 'over') G.overT += STEP; G.step(STEP); } render(G); };
 }
 requestAnimationFrame(loop);
