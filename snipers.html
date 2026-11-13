@@ -637,7 +637,7 @@ const KNOCK = 4.6 * BODY_H, RECOIL = 0.7, AIR_HIT = 0.5, AIR_DRAG = 1, FRICTION 
 const RECOIL_SLIDE = 0.62 * BODY_H;   // how far one plain shot kicks you back on a dry roof (sn.js feel measures it)
 const UPRIGHT_K = 70, UPRIGHT_D = 9, TILT_MAX = 1.45, FOOT = 0.2;
 // Floppy Hoops movement: you rock back and forth on your feet after every landing, and a hop goes the way you lean
-const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 0.8, ROCK_FADE = 0.36, ROCK_MIN = 0.3;
+const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 0.8, ROCK_FADE = 0.36, ROCK_MIN = 0;
 const OUT_Y = -9, START_X = 4, SUDDEN_T = 22, READY_T = 2.0, POINT_T = 2.2, OVER_HOLD = 1.0;
 
 const WEAPONS = [
@@ -753,7 +753,7 @@ class Sniper {
   reset(x, y, ground) {
     Object.assign(this, { x, y, vx: 0, vy: 0, a: 0, av: 0, b: 0, bv: 0, ground, hold: false, holdT: 0, aim: AIM_REST, aiming: false,
       cd: 0, out: false, outT: 0, air: 0, squash: 0, legSwing: 0, hurt: 0, flail: 0, lastHit: -1, landV: 0, jumpQ: 0, armV: 0, wantShoot: false,
-      wob: 0.8, swayW: SWAY_W * rand(0.88, 1.12), swaySign: -this.dir, swayPh: rand(0, 6.3) });
+      wob: 0.5, swayW: SWAY_W * rand(0.88, 1.12), swaySign: -this.dir, swayPh: rand(0, 6.3) });
   }
   // set the body rocking: after a landing it swings back first (away from the other guy), then forward, and it fades out
   rock(a, back, t) {
@@ -1150,7 +1150,7 @@ class Game {
       p.wob = Math.max(0, p.wob - dt * ROCK_FADE);
       // right at the edge you teeter outward
       const L = p.x - s.x0, R = s.x1 - p.x, e = Math.min(L, R);
-      if (e < 0.4) { const out = L < R ? -1 : 1, k = 1 - Math.max(0, e) / 0.4; p.av += out * 7 * k * dt; if (Math.random() < dt * 3 * k) p.flail = Math.max(p.flail, 0.5); }
+      if (e < 0.4) { const out = L < R ? -1 : 1, k = 1 - Math.max(0, e) / 0.4; p.av += out * 3 * k * dt; if (Math.random() < dt * 3 * k) p.flail = Math.max(p.flail, 0.5); }
       p.a += p.av * dt; p.a = clamp(p.a, -TILT_MAX, TILT_MAX);
       if (p.jumpQ > 0) { p.jumpQ = 0; this.jump(p); }
       if (p.ground && (p.x < s.x0 - 0.12 || p.x > s.x1 + 0.12)) { p.ground = null; p.air = 0; p.vy = Math.min(p.vy, 0); }   // over the edge
