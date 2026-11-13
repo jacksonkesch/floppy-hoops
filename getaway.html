@@ -888,10 +888,14 @@ const IMP = { pace: 4.5, n: 28, top: 12, edge: 0.2, ms: 3 };   // IMPOSSIBLE: th
 const CPU_LEVELS = {
   easy: { noise: 0.35, settle: 6 * D2R, react: 0.45, cone: 14 * D2R, err: 12 * D2R, wait: [0.25, 0.7], dumb: 0.25 },
   normal: { noise: 0.2, settle: 14 * D2R, react: 0.2, cone: 9 * D2R, err: 6 * D2R, wait: [0.05, 0.2], dumb: 0.08 },
-  hard: { noise: 0.08, settle: 18 * D2R, react: 0.1, cone: 5 * D2R, err: 2.5 * D2R, wait: [0, 0.08], dumb: 0 },
+  // hard plans like IMPOSSIBLE (every hop worked out from the wobble it's standing in) but with a person's hands:
+  // a beat to think after each landing (wait), hold times off by a couple of frames (jit), a slower pace and a wider edge margin
+  hard: { noise: 0, settle: 9, react: 0.1, cone: 5 * D2R, err: 2 * D2R, wait: [0.15, 0.4], dumb: 0, exact: true, jit: 2, pace: 3.5, edge: 0.45 },
   // exact: it never waits to settle or guesses. It works every hop out from the wobble it's standing in (see Bot.thinkX)
-  impossible: { noise: 0, settle: 9, react: 0, cone: 3 * D2R, err: 0, wait: [0, 0], dumb: 0, exact: true },
+  impossible: { noise: 0, settle: 9, react: 0, cone: 3 * D2R, err: 0, wait: [0, 0], dumb: 0, exact: true, all: true },
 };
+// the old settle-then-hop planner (HARD until Nov 13): the exact levels borrow it for one hop when they're stuck
+const CAREFUL = { noise: 0.08, settle: 18 * D2R, react: 0.1, cone: 5 * D2R, err: 2.5 * D2R, wait: [0, 0.08], dumb: 0 };
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { s = {}; }
@@ -1292,7 +1296,7 @@ class Dude {
 // It plans each hop by trying every lean time and flying it forward through the level: it picks the one that gets
 // it furthest toward the getaway without dying (it also avoids landings on moving or edge-of-platform spots).
 class Bot {
-  constructor(p, level) { this.p = p; this.L = CPU_LEVELS[level] || CPU_LEVELS.normal; this.plan = null; this.wait = rand(0.3, 0.9); this.seen = 0; this.stuck = 0; this.lastBest = -1e9; this.aimT = 0; }
+  constructor(p, level) { this.p = p; this.L = this.home = CPU_LEVELS[level] || CPU_LEVELS.normal; this.plan = null; this.wait = rand(0.3, 0.9); this.seen = 0; this.stuck = 0; this.lastBest = -1e9; this.aimT = 0; }
   // fly a hop of hold time H toward dir from where p stands now (or from o = { x, y, s, t }); returns where it lands.
   // It plays by the racer's own rules: walls stop you, a ledge's lip catches your toes, ceilings knock your head.
   sim(G, H, dir, o, X) {
@@ -1364,7 +1368,7 @@ class Bot {
     if (G.state !== 'run' || !p.grounded || !p.canAct || p.crouch > 0) { if (G.state !== 'run' || !p.grounded) this.plan = null; return; }
     if (this.plan) {   // leaning: let go when the planned time is up
       if (!p.holdDir) { this.plan = null; this.wait = L.react; return; }   // (a hit knocked the lean out of it: start the hop again instead of waiting forever)
-      if (p.holdT >= this.plan.H) { p.press(G, this.plan.dir, false); this.plan = null; this.wait = rand(L.wait[0], L.wait[1]) + L.react; if (L.back && !this.queue) this.L = CPU_LEVELS.impossible; }
+      if (p.holdT >= this.plan.H) { p.press(G, this.plan.dir, false); this.plan = null; this.wait = rand(L.wait[0], L.wait[1]) + L.react; if (L.back && !this.queue) this.L = this.home; }
       return;
     }
     if (L.exact) return this.thinkX(G, dt);
@@ -1425,12 +1429,12 @@ class Bot {
   // No settling, no guessing: the moment it lands it flies every hold both ways from exactly how it's wobbling, then a
   // second hop on from the best landings, and takes the pair that covers the most ground for the time it costs.
   thinkX(G, dt) {
-    const p = this.p;
+    const p = this.p, L = this.L;
     if (G.timeScale < 1) return;   // (slow motion: its sums are for full-speed frames)
     if ((this.wait -= dt) > 0) return;
     const reach = 7 / p.gk(G) + 3, near = G.S.filter(s => s.mv || (s.x1b > p.x - reach * 2 && s.x0b < p.x + reach * 2));
-    const goal = G.M.goal, sgn = Math.sign((goal.x0 + goal.x1) / 2 - p.x || 1), PACE = IMP.pace, N = IMP.n;
-    const pot = r => r.goal ? 1000 : r.x * sgn + 1.5 * Math.min(r.y - G.ry(r.x), 0) - (r.edge < IMP.edge ? 1.5 : 0), p0 = p.x * sgn + 1.5 * Math.min(p.y - G.ry(p.x), 0);
+    const goal = G.M.goal, sgn = Math.sign((goal.x0 + goal.x1) / 2 - p.x || 1), PACE = L.pace || IMP.pace, N = IMP.n, EDGE = L.edge || IMP.edge;
+    const pot = r => r.goal ? 1000 : r.x * sgn + 1.5 * Math.min(r.y - G.ry(r.x), 0) - (r.edge < EDGE ? 1.5 : 0), p0 = p.x * sgn + 1.5 * Math.min(p.y - G.ry(p.x), 0);
     const c1 = [];
     for (const dir of [1, -1]) for (let n = 1; n <= N; n++) {
       const X = this.hopFrom(n, dir, p.a, p.av); X.near = near; const r = this.sim(G, n / 60, dir, null, X);
@@ -1461,11 +1465,29 @@ class Bot {
       this.stuck += 0.2; this.wait = 0.15; this.nStuck = (this.nStuck || 0) + 1;
       if (this.stuck > 0.4 && !this.wide) { this.wide = true; tryAll(c1); }
       if (!best || ground(best) < 0.4) {
-        if (this.stuck > 1.2) { this.stuck = 0; this.wide = false; this.nLegacy = (this.nLegacy || 0) + 1; this.L = { ...CPU_LEVELS.hard, exact: false, back: true }; this.wait = 0; }
+        if (this.stuck > 1.2) { this.stuck = 0; this.wide = false; this.nLegacy = (this.nLegacy || 0) + 1; this.L = { ...CAREFUL, react: L.react, cone: L.cone, err: L.err, back: true }; this.wait = 0; }
         return;
       }
     } else { this.stuck = 0; this.wide = false; }
-    this.wait = 0; this.plan = { H: best.n / 60 - 0.004, dir: best.dir }; p.press(G, best.dir, true);
+    // HARD's hands let go a frame or two off the hop it worked out, so it only takes hops that still land when it fumbles them
+    let slip = 0;
+    if (L.jit) {
+      const firm = c => {
+        if (c.r.goal || c.r.zip) return true;
+        for (const k of [-L.jit, L.jit]) {
+          const n = c.n + k; if (n < 1) continue;
+          const X = this.hopFrom(n, c.dir, p.a, p.av); X.near = near; const r = this.sim(G, n / 60, c.dir, null, X);
+          if (r.dead || (!r.goal && r.y < c.r.y - 0.8)) return false;
+        }
+        return true;
+      };
+      if (!firm(best)) {
+        const alt = c1.filter(c => c.tot != null && c !== best && ground(c) >= 0.4).sort((a, b) => b.tot - a.tot).slice(0, 4).find(firm);
+        if (alt) best = alt;
+      }
+      slip = Math.round(clamp(gauss() * L.jit * 0.6, -L.jit, L.jit));
+    }
+    this.wait = 0; this.plan = { H: Math.max(1, best.n + slip) / 60 - 0.004, dir: best.dir }; p.press(G, best.dir, true);
     if (window.floppyIMPlog) this.pred = { x0: p.x, y0: p.y, a: p.a, av: p.av, phi: best.X.phi, n: best.n, dir: best.dir, x: best.r.x, y: best.r.y, goal: best.r.goal, edge: best.r.edge };
   }
   // use what it's holding when it makes sense
@@ -1480,7 +1502,7 @@ class Bot {
     // (bots only pick fights with racers ahead of them or right on their heels: turning round to snipe stragglers stalls the race)
     const foes = G.P.concat(G.decoys).filter(o => o !== p && o.owner !== p && o.alive && !o.gone && o.imm <= 0 && (o.x - p.x > -2 || Math.abs(o.x - p.x) < 5));
     if (d.id === 'swap') { if (G.P.some(o => o !== p && o.alive && !o.gone && o.x - p.x > 6)) G.useItem(p); return; }
-    const threats = L.exact ? G.P.filter(o => o !== p && o.alive && !o.gone) : foes;   // (IMPOSSIBLE leads, so it watches the guns behind it too)
+    const threats = L.all ? G.P.filter(o => o !== p && o.alive && !o.gone) : foes;   // (IMPOSSIBLE leads, so it watches the guns behind it too)
     if (d.id === 'shield') { if (threats.some(o => o.item && ITEM[o.item].dmg && Math.abs(o.x - p.x) < 14)) G.useItem(p); return; }
     const ahead = G.P.filter(o => o !== p && o.alive && !o.gone && o.x > p.x);
     if (d.trap) { if (p.grounded && (G.P.some(o => o !== p && o.alive && !o.gone && p.x - o.x > 1 && p.x - o.x < 10 && Math.abs(o.y - p.y) < 3) || this.itemT > 10)) G.useItem(p); return; }
