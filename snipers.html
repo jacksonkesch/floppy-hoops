@@ -637,7 +637,7 @@ const KNOCK = 4.6 * BODY_H, RECOIL = 0.7, AIR_HIT = 0.5, AIR_DRAG = 1, FRICTION 
 const RECOIL_SLIDE = 0.62 * BODY_H;   // how far one plain shot kicks you back on a dry roof (sn.js feel measures it)
 const UPRIGHT_K = 70, UPRIGHT_D = 9, TILT_MAX = 1.45, FOOT = 0.2;
 // Floppy Hoops movement: you rock back and forth on your feet after every landing, and a hop goes the way you lean
-const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 0.8, ROCK_FADE = 0.36, ROCK_MIN = 0;
+const BAL_KP = 30, BAL_KD = 3, SWAY_A = 0.5, SWAY_W = 3.1, JUMP_LEAN = 0.8, JUMP_KEEP = 0.2, ROCK_FADE = 0.36, ROCK_MIN = 0;   // a hop keeps 20% of your slide, like Hoops
 const OUT_Y = -9, START_X = 4, SUDDEN_T = 22, READY_T = 2.0, POINT_T = 2.2, OVER_HOLD = 1.0;
 
 const WEAPONS = [
@@ -794,7 +794,7 @@ class CPU {
       if (diff < 0.45 && o.holdT > AIM_DELAY) this.react = Math.random() < L.dodge ? L.react * rand(0.7, 1.3) : 99;
     }
     if (!o.aiming) this.react = this.react === 99 || this.react < 0 ? -1 : this.react;
-    // a hop keeps my slide going (no friction in the air): only hop if the slide won't carry me past my own edge
+    // a hop keeps a fifth of my slide (no friction in the air): only hop if it won't carry me past my own edge
     const slideBack = Math.max(0, -p.vx * p.dir) * 0.95, hopSafe = p.grounded && G.hopRoom(p) > 0.6;
     if (this.react >= 0 && this.react < 99) { this.react -= dt; if (this.react <= 0) { if (hopSafe) G.jump(p); this.react = 99; } }
     if (p.grounded && Math.abs(p.vx) < 0.6 && G.hopRoom(p) > 1.2 && Math.random() < L.hop * dt) G.jump(p);
@@ -921,7 +921,7 @@ class Game {
   }
   // where would a hop right now put me (along my facing), counting the lean, the slide I carry and the skid after landing?
   hopRoom(p) {
-    const k = this.jumpV, th = p.a, fwd = Math.sin(th) * p.dir > 0, vx = p.vx + Math.sin(th) * k * JUMP_LEAN * (fwd ? 1.15 : 1);
+    const k = this.jumpV, th = p.a, fwd = Math.sin(th) * p.dir > 0, vx = p.vx * JUMP_KEEP + Math.sin(th) * k * JUMP_LEAN * (fwd ? 1.15 : 1);
     const vy = k * (0.8 + 0.2 * Math.cos(th)), d = (vx * 2 * vy / this.grav + vx / this.fric) * p.dir;
     return d < 0 ? this.edgeRoom(p) + d : this.frontRoom(p) - d;   // metres to spare at the landing end
   }
@@ -977,7 +977,7 @@ class Game {
     const k = this.jumpV;
     const th = p.a, fwd = Math.sin(th) * p.dir > 0;
     p.vy = k * (0.8 + 0.2 * Math.cos(th)) + (p.ground.dy > 0 ? p.ground.dy / STEP * 0.6 : 0);
-    p.vx += Math.sin(th) * k * JUMP_LEAN * (fwd ? 1.15 : 1); p.av = p.av * 0.7 + th * 0.8 + rand(-0.5, 0.5);
+    p.vx = p.vx * JUMP_KEEP + Math.sin(th) * k * JUMP_LEAN * (fwd ? 1.15 : 1); p.av = p.av * 0.7 + th * 0.8 + rand(-0.5, 0.5);
     p.ground = null; p.air = 0; p.squash = 1; p.legSwing = 1;
     this.sfx.jump();
   }
